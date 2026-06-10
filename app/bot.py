@@ -37,6 +37,7 @@ class SetupGoal(StatesGroup):
 
 class PortionCorrection(StatesGroup):
     grams = State()
+    dish = State()
 
 
 CONFIDENCE_LABELS = {
@@ -97,7 +98,7 @@ async def send_food_entry(message: Message, entry: FoodEntry, is_photo: bool = F
     entries = db.get_today_entries(message.from_user.id)
     await message.answer(
         format_food_saved(entry, user, entries, is_photo=is_photo),
-        reply_markup=food_actions(entry.id),
+        reply_markup=food_actions(entry.id, can_fix_dish=entry.source == "photo"),
     )
 
 
@@ -321,7 +322,10 @@ async def food_scale(callback: CallbackQuery) -> None:
         return
     user = db.get_or_create_user(callback.from_user.id)
     entries = db.get_today_entries(callback.from_user.id)
-    await callback.message.edit_text(format_food_saved(entry, user, entries), reply_markup=food_actions(entry.id))
+    await callback.message.edit_text(
+        format_food_saved(entry, user, entries),
+        reply_markup=food_actions(entry.id, can_fix_dish=entry.source == "photo"),
+    )
     await callback.answer("Порция обновлена")
 
 
@@ -354,6 +358,19 @@ async def food_grams(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
+@router.callback_query(F.data.startswith("food:fix:"))
+async def food_fix(callback: CallbackQuery, state: FSMContext) -> None:
+    entry_id = int(callback.data.split(":")[-1])
+    entry = db.get_food_entry(entry_id, callback.from_user.id)
+    if entry is None:
+        await callback.answer("Запись не найдена", show_alert=True)
+        return
+    await state.set_state(PortionCorrection.dish)
+    await state.update_data(entry_id=entry_id)
+    await callback.message.answer("Напиши, что это за блюдо и примерную порцию. Например: плов с курицей, одна тарелка.")
+    await callback.answer()
+
+
 @router.message(PortionCorrection.grams)
 async def food_grams_apply(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
@@ -373,6 +390,25 @@ async def food_grams_apply(message: Message, state: FSMContext) -> None:
     updated = db.replace_food_entry_estimate(entry.id, message.from_user.id, estimate)
     await state.clear()
     await send_food_entry(message, updated)
+
+
+@router.message(PortionCorrection.dish)
+async def food_fix_apply(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    entry = db.get_food_entry(int(data["entry_id"]), message.from_user.id)
+    if entry is None:
+        await state.clear()
+        await message.answer("Не нашел запись. Попробуй добавить еду заново.")
+        return
+    try:
+        estimate = await food_ai.estimate_text(message.text or "")
+    except OpenAIRecognitionError:
+        await message.answer("Не смог распознать, попробуй еще раз или опиши еду текстом.")
+        return
+    updated = db.replace_food_entry_estimate(entry.id, message.from_user.id, estimate)
+    await state.clear()
+    await message.answer("Исправил блюдо и пересчитал примерные калории.")
+    await send_food_entry(message, updated, is_photo=entry.source == "photo")
 
 
 @router.message(F.photo)

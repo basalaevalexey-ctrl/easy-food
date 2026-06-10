@@ -44,17 +44,20 @@ def activity_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def food_actions(entry_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="Порция меньше", callback_data=f"food:scale:{entry_id}:0.75"),
-                InlineKeyboardButton(text="Порция больше", callback_data=f"food:scale:{entry_id}:1.25"),
-            ],
-            [InlineKeyboardButton(text="Указать граммы", callback_data=f"food:grams:{entry_id}")],
-            [
-                InlineKeyboardButton(text="Удалить", callback_data=f"food:delete:{entry_id}"),
-                InlineKeyboardButton(text="Ок", callback_data=f"food:ok:{entry_id}"),
-            ],
+def food_actions(entry_id: int, can_fix_dish: bool = False) -> InlineKeyboardMarkup:
+    keyboard = [
+        [
+            InlineKeyboardButton(text="Порция меньше", callback_data=f"food:scale:{entry_id}:0.75"),
+            InlineKeyboardButton(text="Порция больше", callback_data=f"food:scale:{entry_id}:1.25"),
+        ],
+        [InlineKeyboardButton(text="Указать граммы", callback_data=f"food:grams:{entry_id}")],
+    ]
+    if can_fix_dish:
+        keyboard.append([InlineKeyboardButton(text="Исправить блюдо", callback_data=f"food:fix:{entry_id}")])
+    keyboard.append(
+        [
+            InlineKeyboardButton(text="Удалить", callback_data=f"food:delete:{entry_id}"),
+            InlineKeyboardButton(text="Ок", callback_data=f"food:ok:{entry_id}"),
         ]
     )
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
