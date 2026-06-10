@@ -165,7 +165,10 @@ def parse_positive_float(text: str, min_value: float, max_value: float) -> float
 async def start(message: Message) -> None:
     db.get_or_create_user(message.from_user.id)
     await message.answer(
-        "Я помогу считать калории без ручного ввода. Просто отправь фото еды или напиши, что ты съел.",
+        "Привет, я Нямметр 🍽\n\n"
+        "Помогаю считать калории без весов и таблиц.\n\n"
+        "Просто отправь фото еды или напиши, что съел — я примерно посчитаю калории, белки, жиры и углеводы.\n\n"
+        "Важно: это примерная оценка, не медицинская рекомендация.",
         reply_markup=main_menu(),
     )
 
