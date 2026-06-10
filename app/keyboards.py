@@ -44,6 +44,31 @@ def activity_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def reminder_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Выбрать время", callback_data="reminder:choose")],
+            [InlineKeyboardButton(text="Не напоминать", callback_data="reminder:disable")],
+        ]
+    )
+
+
+def reminder_time_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="09:00", callback_data="reminder:time:09:00"),
+                InlineKeyboardButton(text="10:00", callback_data="reminder:time:10:00"),
+            ],
+            [
+                InlineKeyboardButton(text="12:00", callback_data="reminder:time:12:00"),
+                InlineKeyboardButton(text="20:00", callback_data="reminder:time:20:00"),
+            ],
+            [InlineKeyboardButton(text="Выбрать свое", callback_data="reminder:custom")],
+        ]
+    )
+
+
 def food_actions(entry_id: int, can_fix_dish: bool = False) -> InlineKeyboardMarkup:
     keyboard = [
         [

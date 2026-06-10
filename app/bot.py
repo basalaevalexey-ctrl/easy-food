@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import re
+from datetime import datetime
 from io import BytesIO
 
 from aiogram import Bot, Dispatcher, F, Router
@@ -12,7 +14,15 @@ from aiogram.types import CallbackQuery, Message
 from app.calorie_calculator import calculate_targets
 from app.config import load_config
 from app.database import Database
-from app.keyboards import activity_keyboard, food_actions, goal_keyboard, main_menu, sex_keyboard
+from app.keyboards import (
+    activity_keyboard,
+    food_actions,
+    goal_keyboard,
+    main_menu,
+    reminder_keyboard,
+    reminder_time_keyboard,
+    sex_keyboard,
+)
 from app.models import FoodEntry, User
 from app.openai_client import FoodRecognitionClient, OpenAIRecognitionError
 
@@ -38,6 +48,10 @@ class SetupGoal(StatesGroup):
 class PortionCorrection(StatesGroup):
     grams = State()
     dish = State()
+
+
+class ReminderSetup(StatesGroup):
+    custom_time = State()
 
 
 CONFIDENCE_LABELS = {
@@ -162,6 +176,17 @@ def parse_positive_float(text: str, min_value: float, max_value: float) -> float
     return None
 
 
+def normalize_reminder_time(text: str) -> str | None:
+    value = text.strip()
+    match = re.fullmatch(r"([01]?\d|2[0-3])[:. ]([0-5]\d)", value)
+    if not match:
+        match = re.fullmatch(r"([01]?\d|2[0-3])", value)
+        if not match:
+            return None
+        return f"{int(match.group(1)):02d}:00"
+    return f"{int(match.group(1)):02d}:{int(match.group(2)):02d}"
+
+
 @router.message(Command("start"))
 async def start(message: Message) -> None:
     db.get_or_create_user(message.from_user.id)
@@ -172,6 +197,53 @@ async def start(message: Message) -> None:
         "Важно: это примерная оценка, не медицинская рекомендация.",
         reply_markup=main_menu(),
     )
+    await message.answer(
+        "Во сколько тебе обычно напоминать про учет еды?",
+        reply_markup=reminder_keyboard(),
+    )
+
+
+@router.callback_query(F.data == "reminder:choose")
+async def reminder_choose(callback: CallbackQuery) -> None:
+    await callback.message.answer("Выбери удобное время:", reply_markup=reminder_time_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "reminder:disable")
+async def reminder_disable(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    db.set_reminder_time(callback.from_user.id, None)
+    await callback.message.answer("Хорошо, не буду напоминать.")
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("reminder:time:"))
+async def reminder_time(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    reminder_time_value = callback.data.removeprefix("reminder:time:")
+    db.set_reminder_time(callback.from_user.id, reminder_time_value)
+    await callback.message.answer(
+        f"Договорились! Буду напоминать про учет еды ежедневно в {reminder_time_value}."
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "reminder:custom")
+async def reminder_custom(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(ReminderSetup.custom_time)
+    await callback.message.answer("Напиши время в формате 08:30 или 19:00.")
+    await callback.answer()
+
+
+@router.message(ReminderSetup.custom_time)
+async def reminder_custom_apply(message: Message, state: FSMContext) -> None:
+    reminder_time_value = normalize_reminder_time(message.text or "")
+    if reminder_time_value is None:
+        await message.answer("Не понял время. Напиши, например: 08:30 или 19:00.")
+        return
+    db.set_reminder_time(message.from_user.id, reminder_time_value)
+    await state.clear()
+    await message.answer(f"Договорились! Буду напоминать про учет еды ежедневно в {reminder_time_value}.")
 
 
 @router.message(Command("help"))
@@ -454,7 +526,29 @@ async def main() -> None:
     dispatcher = Dispatcher(storage=MemoryStorage())
     dispatcher.include_router(router)
     logger.info("Bot started")
-    await dispatcher.start_polling(bot)
+    reminder_task = asyncio.create_task(reminder_loop(bot))
+    try:
+        await dispatcher.start_polling(bot)
+    finally:
+        reminder_task.cancel()
+        await bot.session.close()
+
+
+async def reminder_loop(bot: Bot) -> None:
+    while True:
+        now = datetime.now()
+        current_time = now.strftime("%H:%M")
+        today = now.date().isoformat()
+        for user in db.get_users_for_reminder(current_time, today):
+            try:
+                await bot.send_message(
+                    user.telegram_id,
+                    "Нямметр на связи 🍽\n\nСамое время записать еду за сегодня. Можно фото или просто текстом.",
+                )
+                db.mark_reminder_sent(user.telegram_id, today)
+            except Exception:
+                logger.exception("Failed to send reminder to user %s", user.telegram_id)
+        await asyncio.sleep(60)
 
 
 if __name__ == "__main__":

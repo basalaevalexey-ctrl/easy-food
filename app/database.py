@@ -36,10 +36,14 @@ class Database:
                     activity TEXT,
                     calorie_target INTEGER,
                     protein_target INTEGER,
+                    reminder_time TEXT,
+                    reminder_last_sent_date TEXT,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """
             )
+            self._ensure_column(conn, "users", "reminder_time", "TEXT")
+            self._ensure_column(conn, "users", "reminder_last_sent_date", "TEXT")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS food_entries (
@@ -59,6 +63,12 @@ class Database:
                 """
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_food_entries_user_date ON food_entries(user_id, created_at)")
+
+    @staticmethod
+    def _ensure_column(conn: sqlite3.Connection, table: str, column: str, column_type: str) -> None:
+        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if column not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
 
     def get_or_create_user(self, telegram_id: int) -> User:
         with self.connect() as conn:
@@ -86,6 +96,40 @@ class Database:
             conn.execute(f"UPDATE users SET {assignments} WHERE telegram_id = ?", (*values, telegram_id))
             row = conn.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,)).fetchone()
             return self._user_from_row(row)
+
+    def set_reminder_time(self, telegram_id: int, reminder_time: str | None) -> User:
+        self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE users
+                SET reminder_time = ?,
+                    reminder_last_sent_date = NULL
+                WHERE telegram_id = ?
+                """,
+                (reminder_time, telegram_id),
+            )
+            row = conn.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,)).fetchone()
+            return self._user_from_row(row)
+
+    def get_users_for_reminder(self, reminder_time: str, today: str) -> list[User]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM users
+                WHERE reminder_time = ?
+                  AND (reminder_last_sent_date IS NULL OR reminder_last_sent_date != ?)
+                """,
+                (reminder_time, today),
+            ).fetchall()
+            return [self._user_from_row(row) for row in rows]
+
+    def mark_reminder_sent(self, telegram_id: int, today: str) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE users SET reminder_last_sent_date = ? WHERE telegram_id = ?",
+                (today, telegram_id),
+            )
 
     def add_food_entry(self, telegram_id: int, estimate: FoodEstimate, source: str) -> FoodEntry:
         user = self.get_or_create_user(telegram_id)
@@ -221,6 +265,8 @@ class Database:
             activity=row["activity"],
             calorie_target=row["calorie_target"],
             protein_target=row["protein_target"],
+            reminder_time=row["reminder_time"],
+            reminder_last_sent_date=row["reminder_last_sent_date"],
             created_at=datetime.fromisoformat(row["created_at"]),
         )
 

@@ -14,6 +14,8 @@ class User:
     activity: str | None
     calorie_target: int | None
     protein_target: int | None
+    reminder_time: str | None
+    reminder_last_sent_date: str | None
     created_at: datetime
 
 
