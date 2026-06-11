@@ -371,6 +371,7 @@ async def admin_command(message: Message) -> None:
     if not is_admin(message.from_user.id):
         await message.answer("Команда только для админа.")
         return
+    db.get_or_create_user(message.from_user.id)
     await message.answer(format_admin_stats(), reply_markup=admin_keyboard())
 
 
