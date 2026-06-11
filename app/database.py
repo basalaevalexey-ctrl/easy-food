@@ -266,6 +266,76 @@ class Database:
             total = conn.execute("SELECT COUNT(*) FROM food_entries").fetchone()[0]
             return {"users": users, "today_entries": today, "total_entries": total}
 
+    def admin_stats(self) -> dict[str, int | float]:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT
+                    (SELECT COUNT(*) FROM users) AS users_total,
+                    (SELECT COUNT(*) FROM users WHERE calorie_target IS NOT NULL) AS users_with_goal,
+                    (SELECT COUNT(*) FROM users WHERE reminder_time IS NOT NULL) AS users_with_reminders,
+                    (SELECT COUNT(*) FROM food_entries) AS entries_total,
+                    (SELECT COUNT(*) FROM food_entries WHERE source = 'photo') AS photo_entries,
+                    (SELECT COUNT(*) FROM food_entries WHERE source = 'text') AS text_entries,
+                    (SELECT COUNT(*) FROM food_entries WHERE date(created_at, 'localtime') = date('now', 'localtime')) AS entries_today,
+                    (SELECT COUNT(DISTINCT user_id) FROM food_entries WHERE date(created_at, 'localtime') = date('now', 'localtime')) AS active_today,
+                    (SELECT COUNT(*) FROM food_entries WHERE date(created_at, 'localtime') >= date('now', 'localtime', '-6 days')) AS entries_week,
+                    (SELECT COUNT(DISTINCT user_id) FROM food_entries WHERE date(created_at, 'localtime') >= date('now', 'localtime', '-6 days')) AS active_week,
+                    (SELECT COALESCE(SUM(calories), 0) FROM food_entries WHERE date(created_at, 'localtime') = date('now', 'localtime')) AS calories_today,
+                    (SELECT COALESCE(SUM(calories), 0) FROM food_entries WHERE date(created_at, 'localtime') >= date('now', 'localtime', '-6 days')) AS calories_week
+                """
+            ).fetchone()
+            return dict(row)
+
+    def admin_today_food(self, limit: int = 10) -> list[sqlite3.Row]:
+        with self.connect() as conn:
+            return conn.execute(
+                """
+                SELECT u.telegram_id,
+                       COUNT(f.id) AS entries,
+                       SUM(f.calories) AS calories,
+                       SUM(f.protein) AS protein
+                FROM food_entries f
+                JOIN users u ON u.id = f.user_id
+                WHERE date(f.created_at, 'localtime') = date('now', 'localtime')
+                GROUP BY f.user_id
+                ORDER BY calories DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+
+    def admin_week_food(self) -> list[sqlite3.Row]:
+        with self.connect() as conn:
+            return conn.execute(
+                """
+                SELECT date(created_at, 'localtime') AS day,
+                       COUNT(*) AS entries,
+                       COUNT(DISTINCT user_id) AS users,
+                       SUM(calories) AS calories
+                FROM food_entries
+                WHERE date(created_at, 'localtime') >= date('now', 'localtime', '-6 days')
+                GROUP BY day
+                ORDER BY day DESC
+                """
+            ).fetchall()
+
+    def admin_latest_users(self, limit: int = 10) -> list[sqlite3.Row]:
+        with self.connect() as conn:
+            return conn.execute(
+                """
+                SELECT telegram_id,
+                       created_at,
+                       calorie_target,
+                       reminder_time,
+                       (SELECT COUNT(*) FROM food_entries WHERE user_id = users.id) AS entries
+                FROM users
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+
     @staticmethod
     def _user_from_row(row: sqlite3.Row) -> User:
         return User(

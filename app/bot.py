@@ -5,6 +5,7 @@ from datetime import datetime
 from io import BytesIO
 
 from aiogram import Bot, Dispatcher, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -15,6 +16,7 @@ from app.calorie_calculator import calculate_targets
 from app.config import load_config
 from app.database import Database
 from app.keyboards import (
+    admin_keyboard,
     activity_keyboard,
     food_actions,
     goal_keyboard,
@@ -187,6 +189,82 @@ def normalize_reminder_time(text: str) -> str | None:
     return f"{int(match.group(1)):02d}:{int(match.group(2)):02d}"
 
 
+def is_admin(telegram_id: int) -> bool:
+    return telegram_id in config.admin_ids
+
+
+def format_admin_stats() -> str:
+    stats = db.admin_stats()
+    users_total = int(stats["users_total"])
+    users_with_goal = int(stats["users_with_goal"])
+    users_with_reminders = int(stats["users_with_reminders"])
+    entries_total = int(stats["entries_total"])
+    entries_today = int(stats["entries_today"])
+    entries_week = int(stats["entries_week"])
+
+    average_entries = entries_total / users_total if users_total else 0
+    return (
+        "Админка Нямметра\n\n"
+        f"Пользователей всего: {users_total}\n"
+        f"С настроенной целью: {users_with_goal}\n"
+        f"С напоминаниями: {users_with_reminders}\n\n"
+        f"Записей еды всего: {entries_total}\n"
+        f"Сегодня: {entries_today}\n"
+        f"За 7 дней: {entries_week}\n"
+        f"В среднем на пользователя: {average_entries:.1f}\n\n"
+        f"Активных сегодня: {int(stats['active_today'])}\n"
+        f"Активных за 7 дней: {int(stats['active_week'])}\n\n"
+        f"Фото-записей: {int(stats['photo_entries'])}\n"
+        f"Текстовых записей: {int(stats['text_entries'])}\n\n"
+        f"Ккал сегодня: {round_num(stats['calories_today'])}\n"
+        f"Ккал за 7 дней: {round_num(stats['calories_week'])}"
+    )
+
+
+def format_admin_today() -> str:
+    rows = db.admin_today_food()
+    lines = ["Сегодня по пользователям", ""]
+    if not rows:
+        lines.append("Сегодня записей еды пока нет.")
+    else:
+        for row in rows:
+            lines.append(
+                f"{row['telegram_id']}: {row['entries']} записей, "
+                f"{round_num(row['calories'] or 0)} ккал, Б {round_num(row['protein'] or 0)} г"
+            )
+    return "\n".join(lines)
+
+
+def format_admin_week() -> str:
+    rows = db.admin_week_food()
+    lines = ["Последние 7 дней", ""]
+    if not rows:
+        lines.append("За неделю записей пока нет.")
+    else:
+        for row in rows:
+            lines.append(
+                f"{row['day']}: {row['users']} пользователей, "
+                f"{row['entries']} записей, {round_num(row['calories'] or 0)} ккал"
+            )
+    return "\n".join(lines)
+
+
+def format_admin_users() -> str:
+    rows = db.admin_latest_users()
+    lines = ["Последние пользователи", ""]
+    if not rows:
+        lines.append("Пользователей пока нет.")
+    else:
+        for row in rows:
+            goal_status = "цель есть" if row["calorie_target"] else "без цели"
+            reminder = row["reminder_time"] or "без напоминаний"
+            lines.append(
+                f"{row['telegram_id']}: {row['entries']} записей, {goal_status}, "
+                f"{reminder}, с {row['created_at']}"
+            )
+    return "\n".join(lines)
+
+
 @router.message(Command("start"))
 async def start(message: Message) -> None:
     db.get_or_create_user(message.from_user.id)
@@ -288,18 +366,41 @@ async def history_command(message: Message) -> None:
     await message.answer("\n".join(lines))
 
 
-@router.message(Command("stats"))
-async def stats_command(message: Message) -> None:
-    if message.from_user.id not in config.admin_ids:
+@router.message(Command("admin"))
+async def admin_command(message: Message) -> None:
+    if not is_admin(message.from_user.id):
         await message.answer("Команда только для админа.")
         return
-    stats = db.stats()
-    await message.answer(
-        "Статистика\n\n"
-        f"Всего пользователей: {stats['users']}\n"
-        f"Записей еды сегодня: {stats['today_entries']}\n"
-        f"Записей еды всего: {stats['total_entries']}"
-    )
+    await message.answer(format_admin_stats(), reply_markup=admin_keyboard())
+
+
+@router.message(Command("stats"))
+async def stats_command(message: Message) -> None:
+    await admin_command(message)
+
+
+@router.callback_query(F.data.startswith("admin:"))
+async def admin_callback(callback: CallbackQuery) -> None:
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Команда только для админа.", show_alert=True)
+        return
+
+    action = callback.data.split(":")[-1]
+    if action == "today":
+        text = format_admin_today()
+    elif action == "week":
+        text = format_admin_week()
+    elif action == "users":
+        text = format_admin_users()
+    else:
+        text = format_admin_stats()
+
+    try:
+        await callback.message.edit_text(text, reply_markup=admin_keyboard())
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in str(exc).lower():
+            raise
+    await callback.answer()
 
 
 @router.message(Command("setup"))

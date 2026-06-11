@@ -69,6 +69,21 @@ def reminder_time_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def admin_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="Статистика", callback_data="admin:stats"),
+                InlineKeyboardButton(text="Сегодня", callback_data="admin:today"),
+            ],
+            [
+                InlineKeyboardButton(text="7 дней", callback_data="admin:week"),
+                InlineKeyboardButton(text="Пользователи", callback_data="admin:users"),
+            ],
+        ]
+    )
+
+
 def food_actions(entry_id: int, can_fix_dish: bool = False) -> InlineKeyboardMarkup:
     keyboard = [
         [
