@@ -50,6 +50,15 @@ class Database:
             self._ensure_column(conn, "users", "reminder_last_sent_date", "TEXT")
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS app_meta (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                )
+                """
+            )
+            self._backfill_default_reminders(conn)
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS food_entries (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
@@ -77,6 +86,27 @@ class Database:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(legacy_path, self.path)
             return
+
+    @staticmethod
+    def _backfill_default_reminders(conn: sqlite3.Connection) -> None:
+        migration_key = "backfill_existing_users_reminder_09_00"
+        already_done = conn.execute(
+            "SELECT 1 FROM app_meta WHERE key = ?",
+            (migration_key,),
+        ).fetchone()
+        if already_done:
+            return
+        conn.execute(
+            """
+            UPDATE users
+            SET reminder_time = '09:00'
+            WHERE reminder_time IS NULL
+            """
+        )
+        conn.execute(
+            "INSERT INTO app_meta (key, value) VALUES (?, ?)",
+            (migration_key, datetime.now().isoformat(timespec="seconds")),
+        )
 
     @staticmethod
     def _ensure_column(conn: sqlite3.Connection, table: str, column: str, column_type: str) -> None:
