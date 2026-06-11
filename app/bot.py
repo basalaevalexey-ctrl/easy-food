@@ -26,7 +26,7 @@ from app.keyboards import (
     sex_keyboard,
 )
 from app.models import FoodEntry, User
-from app.openai_client import FoodRecognitionClient, OpenAIRecognitionError
+from app.openai_client import FoodRecognitionClient, NotFoodError, OpenAIRecognitionError
 
 
 logging.basicConfig(
@@ -107,6 +107,14 @@ def format_food_saved(entry: FoodEntry, user: User, entries: list[FoodEntry], is
         lines.append("Оценка по фото примерная.")
     lines.append(f"Точность: {CONFIDENCE_LABELS.get(entry.confidence, 'средняя')}")
     return "\n".join(lines)
+
+
+async def answer_not_food(message: Message, reason: str = "") -> None:
+    text = "Похоже, это не еда, поэтому я ничего не записал 🙂"
+    if reason:
+        text += f"\n\nПричина: {reason}"
+    text += "\n\nМожно отправить фото блюда или написать, что ты съел. Если нужно, нажми «Инструкция»."
+    await message.answer(text)
 
 
 async def send_food_entry(message: Message, entry: FoodEntry, is_photo: bool = False) -> None:
@@ -578,6 +586,9 @@ async def food_grams_apply(message: Message, state: FSMContext) -> None:
             previous_description=f"{entry.title}. {entry.description}",
             portion=message.text or "",
         )
+    except NotFoodError as exc:
+        await answer_not_food(message, exc.reason)
+        return
     except OpenAIRecognitionError:
         await message.answer("Не смог распознать, попробуй еще раз или опиши еду текстом.")
         return
@@ -596,6 +607,9 @@ async def food_fix_apply(message: Message, state: FSMContext) -> None:
         return
     try:
         estimate = await food_ai.estimate_text(message.text or "")
+    except NotFoodError as exc:
+        await answer_not_food(message, exc.reason)
+        return
     except OpenAIRecognitionError:
         await message.answer("Не смог распознать, попробуй еще раз или опиши еду текстом.")
         return
@@ -615,6 +629,9 @@ async def photo_food(message: Message, bot: Bot) -> None:
     image_bytes = buffer.getvalue()
     try:
         estimate = await food_ai.estimate_image(image_bytes)
+    except NotFoodError as exc:
+        await answer_not_food(message, exc.reason)
+        return
     except OpenAIRecognitionError:
         await message.answer("Не смог распознать, попробуй еще раз или опиши еду текстом.")
         return
@@ -630,6 +647,9 @@ async def text_food(message: Message) -> None:
     await message.answer("Считаю примерные калории...")
     try:
         estimate = await food_ai.estimate_text(text)
+    except NotFoodError as exc:
+        await answer_not_food(message, exc.reason)
+        return
     except OpenAIRecognitionError:
         await message.answer("Не смог распознать, попробуй еще раз или опиши еду текстом.")
         return

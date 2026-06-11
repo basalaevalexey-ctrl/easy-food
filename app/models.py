@@ -21,6 +21,7 @@ class User:
 
 @dataclass
 class FoodEstimate:
+    is_food: bool
     title: str
     description: str
     calories: float
@@ -29,6 +30,7 @@ class FoodEstimate:
     carbs: float
     confidence: str
     comment: str
+    not_food_reason: str
 
 
 @dataclass
