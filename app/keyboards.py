@@ -6,7 +6,7 @@ def main_menu() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text="Настроить цель")],
             [KeyboardButton(text="Сегодня"), KeyboardButton(text="Дневник")],
-            [KeyboardButton(text="Помощь")],
+            [KeyboardButton(text="Инструкция")],
         ],
         resize_keyboard=True,
         input_field_placeholder="Фото еды или что вы съели",
