@@ -31,11 +31,19 @@ def _parse_admin_ids(raw: str) -> set[int]:
     return result
 
 
+def _database_path() -> Path:
+    raw_path = os.getenv("DATABASE_PATH", "data/calories.sqlite3").strip()
+    path = Path(raw_path)
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    return path
+
+
 def load_config() -> Config:
     return Config(
         bot_token=os.getenv("BOT_TOKEN", ""),
         openai_api_key=os.getenv("OPENAI_API_KEY", ""),
         admin_ids=_parse_admin_ids(os.getenv("ADMIN_IDS", "")),
-        database_path=BASE_DIR / "calories.sqlite3",
+        database_path=_database_path(),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
     )

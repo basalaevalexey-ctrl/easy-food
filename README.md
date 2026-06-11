@@ -35,9 +35,18 @@ BOT_TOKEN=123456:telegram_bot_token
 OPENAI_API_KEY=sk-...
 ADMIN_IDS=123456789,987654321
 OPENAI_MODEL=gpt-4o-mini
+DATABASE_PATH=data/calories.sqlite3
 ```
 
 `ADMIN_IDS` можно оставить пустым, если команда `/stats` не нужна.
+
+`DATABASE_PATH` задает место хранения SQLite-базы. Для продакшн-деплоя укажите путь на постоянном диске/volume, например:
+
+```env
+DATABASE_PATH=/data/calories.sqlite3
+```
+
+И подключите persistent volume к папке `/data`. Тогда пользователи, дневник и напоминания сохранятся после редеплоя.
 
 ## Запуск
 
@@ -45,7 +54,7 @@ OPENAI_MODEL=gpt-4o-mini
 python -m app.bot
 ```
 
-При первом запуске рядом с проектом создастся файл `calories.sqlite3`.
+При первом запуске создастся файл базы по пути из `DATABASE_PATH`. По умолчанию это `data/calories.sqlite3`.
 
 ## Структура
 

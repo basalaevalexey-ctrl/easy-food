@@ -22,6 +22,7 @@ class Database:
             conn.close()
 
     def init(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as conn:
             conn.execute(
                 """
