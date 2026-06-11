@@ -1,4 +1,5 @@
 import sqlite3
+import shutil
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -8,8 +9,9 @@ from app.models import FoodEntry, FoodEstimate, User
 
 
 class Database:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, legacy_paths: tuple[Path, ...] = ()) -> None:
         self.path = path
+        self.legacy_paths = legacy_paths
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
@@ -23,6 +25,7 @@ class Database:
 
     def init(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._migrate_legacy_database()
         with self.connect() as conn:
             conn.execute(
                 """
@@ -64,6 +67,16 @@ class Database:
                 """
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_food_entries_user_date ON food_entries(user_id, created_at)")
+
+    def _migrate_legacy_database(self) -> None:
+        if self.path.exists():
+            return
+        for legacy_path in self.legacy_paths:
+            if legacy_path == self.path or not legacy_path.exists():
+                continue
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(legacy_path, self.path)
+            return
 
     @staticmethod
     def _ensure_column(conn: sqlite3.Connection, table: str, column: str, column_type: str) -> None:

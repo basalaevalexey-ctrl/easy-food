@@ -15,6 +15,7 @@ class Config:
     openai_api_key: str
     admin_ids: set[int]
     database_path: Path
+    legacy_database_paths: tuple[Path, ...]
     openai_model: str
 
 
@@ -45,5 +46,6 @@ def load_config() -> Config:
         openai_api_key=os.getenv("OPENAI_API_KEY", ""),
         admin_ids=_parse_admin_ids(os.getenv("ADMIN_IDS", "")),
         database_path=_database_path(),
+        legacy_database_paths=(BASE_DIR / "calories.sqlite3",),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
     )

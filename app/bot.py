@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 router = Router()
 config = load_config()
-db = Database(config.database_path)
+db = Database(config.database_path, legacy_paths=config.legacy_database_paths)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
 
 
