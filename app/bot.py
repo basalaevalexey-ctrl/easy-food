@@ -90,7 +90,10 @@ def today_totals(entries: list[FoodEntry]) -> dict[str, float]:
 
 def format_food_saved(entry: FoodEntry, user: User, entries: list[FoodEntry], is_photo: bool = False) -> str:
     totals = today_totals(entries)
-    lines = ["Записал 🍽", "", entry.title, "", "Примерно:"]
+    lines = ["Записал 🍽", "", entry.title]
+    if entry.description and entry.description.strip().lower() != entry.title.strip().lower():
+        lines.extend(["", entry.description])
+    lines.extend(["", "Примерно:"])
     lines.extend(
         [
             f"{round_num(entry.calories)} ккал",
