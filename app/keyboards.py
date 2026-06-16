@@ -73,7 +73,7 @@ def admin_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="Статистика", callback_data="admin:stats"),
+                InlineKeyboardButton(text="Общее", callback_data="admin:total"),
                 InlineKeyboardButton(text="Сегодня", callback_data="admin:today"),
             ],
             [

@@ -205,6 +205,40 @@ def is_admin(telegram_id: int) -> bool:
     return telegram_id in config.admin_ids
 
 
+def format_admin_period(title: str, days: int | None) -> str:
+    stats = db.admin_period_stats(days)
+    users_total = int(stats["users_total"])
+    food_entries = int(stats["food_entries"])
+    active_users = int(stats["active_users"])
+    average_entries = food_entries / active_users if active_users else 0
+
+    lines = [
+        title,
+        "",
+        f"Нажали /start: {int(stats['users_started'])}",
+        f"Новых пользователей: {int(stats['users_new'])}",
+        f"Поставили цель: {int(stats['users_goal_set'])}",
+        f"Распознаваний фото: {int(stats['photo_recognitions'])}",
+        f"Хоть раз писали текстом: {int(stats['users_wrote_text'])}",
+        "",
+        f"Записей еды: {food_entries}",
+        f"Текстовых записей: {int(stats['text_entries'])}",
+        f"Активных пользователей: {active_users}",
+        f"В среднем записей на активного: {average_entries:.1f}",
+        f"Ккал всего: {round_num(stats['calories'])}",
+    ]
+    if days is None:
+        lines.extend(
+            [
+                "",
+                f"Пользователей в базе: {users_total}",
+                f"Всего с настроенной целью: {int(stats['users_with_goal_total'])}",
+                f"Всего с напоминаниями: {int(stats['users_with_reminders_total'])}",
+            ]
+        )
+    return "\n".join(lines)
+
+
 def format_admin_stats() -> str:
     stats = db.admin_stats()
     users_total = int(stats["users_total"])
@@ -235,7 +269,7 @@ def format_admin_stats() -> str:
 
 def format_admin_today() -> str:
     rows = db.admin_today_food()
-    lines = ["Сегодня по пользователям", ""]
+    lines = [format_admin_period("Сегодня", 1), "", "По пользователям:", ""]
     if not rows:
         lines.append("Сегодня записей еды пока нет.")
     else:
@@ -249,7 +283,7 @@ def format_admin_today() -> str:
 
 def format_admin_week() -> str:
     rows = db.admin_week_food()
-    lines = ["Последние 7 дней", ""]
+    lines = [format_admin_period("За 7 дней", 7), "", "По дням:", ""]
     if not rows:
         lines.append("За неделю записей пока нет.")
     else:
@@ -279,7 +313,7 @@ def format_admin_users() -> str:
 
 @router.message(Command("start"))
 async def start(message: Message) -> None:
-    db.get_or_create_user(message.from_user.id)
+    db.record_start(message.from_user.id)
     await message.answer(
         "Привет, я Нямметр 🍽\n\n"
         "Помогаю считать калории без весов и таблиц.\n\n"
@@ -405,7 +439,7 @@ async def admin_command(message: Message) -> None:
         await message.answer("Команда только для админа.")
         return
     db.get_or_create_user(message.from_user.id)
-    await message.answer(format_admin_stats(), reply_markup=admin_keyboard())
+    await message.answer(format_admin_period("Общее", None), reply_markup=admin_keyboard())
 
 
 @router.message(Command("stats"))
@@ -426,8 +460,10 @@ async def admin_callback(callback: CallbackQuery) -> None:
         text = format_admin_week()
     elif action == "users":
         text = format_admin_users()
+    elif action == "total":
+        text = format_admin_period("Общее", None)
     else:
-        text = format_admin_stats()
+        text = format_admin_period("Общее", None)
 
     try:
         await callback.message.edit_text(text, reply_markup=admin_keyboard())
@@ -626,6 +662,7 @@ async def food_fix_apply(message: Message, state: FSMContext) -> None:
 
 @router.message(F.photo)
 async def photo_food(message: Message, bot: Bot) -> None:
+    db.record_user_event(message.from_user.id, "photo_recognition")
     await message.answer("Смотрю фото и прикидываю калории...")
     photo = message.photo[-1]
     file = await bot.get_file(photo.file_id)
@@ -649,6 +686,7 @@ async def text_food(message: Message) -> None:
     text = (message.text or "").strip()
     if not text:
         return
+    db.record_user_event(message.from_user.id, "text_input")
     await message.answer("Считаю примерные калории...")
     try:
         estimate = await food_ai.estimate_text(text)

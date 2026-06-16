@@ -40,12 +40,14 @@ class Database:
                     activity TEXT,
                     calorie_target INTEGER,
                     protein_target INTEGER,
+                    goal_set_at TEXT,
                     reminder_time TEXT,
                     reminder_last_sent_date TEXT,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """
             )
+            self._ensure_column(conn, "users", "goal_set_at", "TEXT")
             self._ensure_column(conn, "users", "reminder_time", "TEXT")
             self._ensure_column(conn, "users", "reminder_last_sent_date", "TEXT")
             conn.execute(
@@ -75,6 +77,18 @@ class Database:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    event_type TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+                """
+            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_user_events_type_date ON user_events(event_type, created_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_food_entries_user_date ON food_entries(user_id, created_at)")
 
     def _migrate_legacy_database(self) -> None:
@@ -123,7 +137,7 @@ class Database:
             return self._user_from_row(row)
 
     def update_user_goal(self, telegram_id: int, data: dict[str, Any]) -> User:
-        self.get_or_create_user(telegram_id)
+        user = self.get_or_create_user(telegram_id)
         fields = [
             "sex",
             "age",
@@ -133,13 +147,31 @@ class Database:
             "activity",
             "calorie_target",
             "protein_target",
+            "goal_set_at",
         ]
+        data["goal_set_at"] = datetime.now().isoformat(timespec="seconds")
         values = [data.get(field) for field in fields]
         assignments = ", ".join(f"{field} = ?" for field in fields)
         with self.connect() as conn:
             conn.execute(f"UPDATE users SET {assignments} WHERE telegram_id = ?", (*values, telegram_id))
+            conn.execute(
+                "INSERT INTO user_events (user_id, event_type) VALUES (?, ?)",
+                (user.id, "goal_set"),
+            )
             row = conn.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,)).fetchone()
             return self._user_from_row(row)
+
+    def record_user_event(self, telegram_id: int, event_type: str) -> User:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            conn.execute(
+                "INSERT INTO user_events (user_id, event_type) VALUES (?, ?)",
+                (user.id, event_type),
+            )
+        return user
+
+    def record_start(self, telegram_id: int) -> User:
+        return self.record_user_event(telegram_id, "start")
 
     def set_reminder_time(self, telegram_id: int, reminder_time: str | None) -> User:
         self.get_or_create_user(telegram_id)
@@ -317,6 +349,40 @@ class Database:
             ).fetchone()
             return dict(row)
 
+    def admin_period_stats(self, days: int | None = None) -> dict[str, int | float]:
+        if days is None:
+            date_filter = "1 = 1"
+            user_date_filter = "1 = 1"
+            event_date_filter = "1 = 1"
+        elif days == 1:
+            date_filter = "date(created_at, 'localtime') = date('now', 'localtime')"
+            user_date_filter = "date(created_at, 'localtime') = date('now', 'localtime')"
+            event_date_filter = "date(created_at, 'localtime') = date('now', 'localtime')"
+        else:
+            date_filter = f"date(created_at, 'localtime') >= date('now', 'localtime', '-{days - 1} days')"
+            user_date_filter = f"date(created_at, 'localtime') >= date('now', 'localtime', '-{days - 1} days')"
+            event_date_filter = f"date(created_at, 'localtime') >= date('now', 'localtime', '-{days - 1} days')"
+
+        with self.connect() as conn:
+            row = conn.execute(
+                f"""
+                SELECT
+                    (SELECT COUNT(*) FROM users) AS users_total,
+                    (SELECT COUNT(*) FROM users WHERE {user_date_filter}) AS users_new,
+                    (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'start' AND {event_date_filter}) AS users_started,
+                    (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'goal_set' AND {event_date_filter}) AS users_goal_set,
+                    (SELECT COUNT(*) FROM users WHERE calorie_target IS NOT NULL) AS users_with_goal_total,
+                    (SELECT COUNT(*) FROM users WHERE reminder_time IS NOT NULL) AS users_with_reminders_total,
+                    (SELECT COUNT(*) FROM food_entries WHERE {date_filter}) AS food_entries,
+                    (SELECT COUNT(*) FROM user_events WHERE event_type = 'photo_recognition' AND {event_date_filter}) AS photo_recognitions,
+                    (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'text_input' AND {event_date_filter}) AS users_wrote_text,
+                    (SELECT COUNT(*) FROM food_entries WHERE source = 'text' AND {date_filter}) AS text_entries,
+                    (SELECT COUNT(DISTINCT user_id) FROM food_entries WHERE {date_filter}) AS active_users,
+                    (SELECT COALESCE(SUM(calories), 0) FROM food_entries WHERE {date_filter}) AS calories
+                """
+            ).fetchone()
+            return dict(row)
+
     def admin_today_food(self, limit: int = 10) -> list[sqlite3.Row]:
         with self.connect() as conn:
             return conn.execute(
@@ -379,6 +445,7 @@ class Database:
             activity=row["activity"],
             calorie_target=row["calorie_target"],
             protein_target=row["protein_target"],
+            goal_set_at=row["goal_set_at"],
             reminder_time=row["reminder_time"],
             reminder_last_sent_date=row["reminder_last_sent_date"],
             created_at=datetime.fromisoformat(row["created_at"]),
