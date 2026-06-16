@@ -84,6 +84,14 @@ def admin_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def instruction_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Поддержка", url="https://t.me/+5wTs-r8KGN9hZjcy")],
+        ]
+    )
+
+
 def food_actions(entry_id: int, can_fix_dish: bool = False) -> InlineKeyboardMarkup:
     keyboard = [
         [

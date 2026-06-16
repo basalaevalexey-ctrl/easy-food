@@ -20,6 +20,7 @@ from app.keyboards import (
     activity_keyboard,
     food_actions,
     goal_keyboard,
+    instruction_keyboard,
     main_menu,
     reminder_keyboard,
     reminder_time_keyboard,
@@ -361,7 +362,8 @@ async def help_command(message: Message) -> None:
         "5. Цель и напоминания\n"
         "🎯 Через «Настроить цель» можно задать норму калорий и белка.\n"
         "⏰ После старта можно выбрать время ежедневного напоминания.\n\n"
-        "Важно: все оценки примерные, особенно по фото. Нямметр помогает вести учет, но не заменяет врача или нутрициолога."
+        "Важно: все оценки примерные, особенно по фото. Нямметр помогает вести учет, но не заменяет врача или нутрициолога.",
+        reply_markup=instruction_keyboard(),
     )
 
 
