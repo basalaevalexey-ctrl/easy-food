@@ -75,6 +75,22 @@ ACTIVITY_LABELS = {
     "high": "высокая",
 }
 
+ADMIN_TOTAL_BASELINE = {
+    "users_started": 15,
+    "users_new": 16,
+    "users_goal_set": 5,
+    "photo_recognitions": 17,
+    "users_wrote_text": 6,
+    "food_entries": 27,
+    "text_entries": 11,
+    "active_users": 11,
+    "calories": 7647,
+    "users_total": 16,
+    "users_with_goal_total": 5,
+    "users_with_reminders_total": 0,
+    "users_two_day_streak": 0,
+}
+
 
 def round_num(value: float) -> int:
     return round(float(value))
@@ -207,6 +223,8 @@ def is_admin(telegram_id: int) -> bool:
 
 def format_admin_period(title: str, days: int | None) -> str:
     stats = db.admin_period_stats(days)
+    if days is None:
+        stats = apply_admin_total_baseline(stats)
     users_total = int(stats["users_total"])
     food_entries = int(stats["food_entries"])
     active_users = int(stats["active_users"])
@@ -236,6 +254,7 @@ def format_admin_period(title: str, days: int | None) -> str:
                 f"Всего с настроенной целью: {int(stats['users_with_goal_total'])}",
                 f"Всего с напоминаниями: {int(stats['users_with_reminders_total'])}",
                 f"Взаимодействовали 2 дня подряд: {int(stats['users_two_day_streak'])}",
+                "Старая статистика из скрина: учтена",
                 "",
                 "База данных:",
                 f"Путь: {db_info['path']}",
@@ -244,6 +263,13 @@ def format_admin_period(title: str, days: int | None) -> str:
             ]
         )
     return "\n".join(lines)
+
+
+def apply_admin_total_baseline(stats: dict[str, int | float]) -> dict[str, int | float]:
+    result = dict(stats)
+    for key, value in ADMIN_TOTAL_BASELINE.items():
+        result[key] = result.get(key, 0) + value
+    return result
 
 
 def format_admin_stats() -> str:
