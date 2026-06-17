@@ -75,18 +75,34 @@ ACTIVITY_LABELS = {
     "high": "высокая",
 }
 
-ADMIN_TOTAL_BASELINE = {
-    "users_started": 15,
-    "users_new": 16,
-    "users_goal_set": 5,
-    "photo_recognitions": 17,
-    "users_wrote_text": 6,
-    "food_entries": 27,
-    "text_entries": 11,
-    "active_users": 11,
-    "calories": 7647,
-    "users_total": 16,
-    "users_with_goal_total": 5,
+DEFAULT_ADMIN_TOTAL_BASELINE = {
+    "users_started": 21,
+    "users_new": 24,
+    "users_goal_set": 8,
+    "photo_recognitions": 25,
+    "users_wrote_text": 8,
+    "food_entries": 37,
+    "text_entries": 13,
+    "active_users": 15,
+    "calories": 13486,
+    "users_total": 24,
+    "users_with_goal_total": 8,
+    "users_with_reminders_total": 0,
+    "users_two_day_streak": 0,
+}
+
+DEFAULT_ADMIN_TOTAL_BASELINE_OFFSET = {
+    "users_started": 6,
+    "users_new": 8,
+    "users_goal_set": 3,
+    "photo_recognitions": 8,
+    "users_wrote_text": 2,
+    "food_entries": 10,
+    "text_entries": 2,
+    "active_users": 4,
+    "calories": 5839,
+    "users_total": 8,
+    "users_with_goal_total": 3,
     "users_with_reminders_total": 0,
     "users_two_day_streak": 0,
 }
@@ -267,8 +283,12 @@ def format_admin_period(title: str, days: int | None) -> str:
 
 def apply_admin_total_baseline(stats: dict[str, int | float]) -> dict[str, int | float]:
     result = dict(stats)
-    for key, value in ADMIN_TOTAL_BASELINE.items():
-        result[key] = result.get(key, 0) + value
+    baseline = {**DEFAULT_ADMIN_TOTAL_BASELINE, **config.admin_total_baseline}
+    offset = {**DEFAULT_ADMIN_TOTAL_BASELINE_OFFSET, **config.admin_total_baseline_offset}
+    for key, value in baseline.items():
+        current_value = result.get(key, 0)
+        already_counted = offset.get(key, 0)
+        result[key] = value + max(0, current_value - already_counted)
     return result
 
 

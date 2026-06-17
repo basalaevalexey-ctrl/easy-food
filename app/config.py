@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import json
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -18,6 +19,8 @@ class Config:
     legacy_database_paths: tuple[Path, ...]
     openai_model: str
     auto_push_time: str
+    admin_total_baseline: dict[str, int]
+    admin_total_baseline_offset: dict[str, int]
 
 
 def _parse_admin_ids(raw: str) -> set[int]:
@@ -41,6 +44,24 @@ def _database_path() -> Path:
     return path
 
 
+def _parse_int_dict(raw: str) -> dict[str, int]:
+    if not raw.strip():
+        return {}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    result: dict[str, int] = {}
+    if not isinstance(data, dict):
+        return result
+    for key, value in data.items():
+        try:
+            result[str(key)] = int(value)
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
 def load_config() -> Config:
     return Config(
         bot_token=os.getenv("BOT_TOKEN", ""),
@@ -50,4 +71,6 @@ def load_config() -> Config:
         legacy_database_paths=(BASE_DIR / "calories.sqlite3",),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         auto_push_time=os.getenv("AUTO_PUSH_TIME", "19:00"),
+        admin_total_baseline=_parse_int_dict(os.getenv("ADMIN_TOTAL_BASELINE", "")),
+        admin_total_baseline_offset=_parse_int_dict(os.getenv("ADMIN_TOTAL_BASELINE_OFFSET", "")),
     )
