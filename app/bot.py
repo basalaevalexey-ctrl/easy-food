@@ -228,6 +228,7 @@ def format_admin_period(title: str, days: int | None) -> str:
         f"Ккал всего: {round_num(stats['calories'])}",
     ]
     if days is None:
+        db_info = db.database_info()
         lines.extend(
             [
                 "",
@@ -235,6 +236,11 @@ def format_admin_period(title: str, days: int | None) -> str:
                 f"Всего с настроенной целью: {int(stats['users_with_goal_total'])}",
                 f"Всего с напоминаниями: {int(stats['users_with_reminders_total'])}",
                 f"Взаимодействовали 2 дня подряд: {int(stats['users_two_day_streak'])}",
+                "",
+                "База данных:",
+                f"Путь: {db_info['path']}",
+                f"Размер: {int(db_info['size'])} байт",
+                f"users / food / events: {db_info['users']} / {db_info['entries']} / {db_info['events']}",
             ]
         )
     return "\n".join(lines)
@@ -711,7 +717,7 @@ async def main() -> None:
     bot = Bot(token=config.bot_token)
     dispatcher = Dispatcher(storage=MemoryStorage())
     dispatcher.include_router(router)
-    logger.info("Bot started")
+    logger.info("Bot started with database: %s", config.database_path)
     reminder_task = asyncio.create_task(reminder_loop(bot))
     try:
         await dispatcher.start_polling(bot)

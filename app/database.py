@@ -328,6 +328,22 @@ class Database:
             total = conn.execute("SELECT COUNT(*) FROM food_entries").fetchone()[0]
             return {"users": users, "today_entries": today, "total_entries": total}
 
+    def database_info(self) -> dict[str, int | str | bool]:
+        exists = self.path.exists()
+        size = self.path.stat().st_size if exists else 0
+        with self.connect() as conn:
+            users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            entries = conn.execute("SELECT COUNT(*) FROM food_entries").fetchone()[0]
+            events = conn.execute("SELECT COUNT(*) FROM user_events").fetchone()[0]
+        return {
+            "path": str(self.path),
+            "exists": exists,
+            "size": size,
+            "users": users,
+            "entries": entries,
+            "events": events,
+        }
+
     def admin_stats(self) -> dict[str, int | float]:
         with self.connect() as conn:
             row = conn.execute(
