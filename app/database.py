@@ -200,6 +200,47 @@ class Database:
             ).fetchall()
             return [self._user_from_row(row) for row in rows]
 
+    def get_users_for_duolingo_push(self, today: str, yesterday: str, day_before_yesterday: str) -> list[User]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                WITH active_days AS (
+                    SELECT user_id, date(created_at, 'localtime') AS day
+                    FROM user_events
+                    WHERE event_type != 'duolingo_push_sent'
+                    UNION
+                    SELECT user_id, date(created_at, 'localtime') AS day
+                    FROM food_entries
+                )
+                SELECT users.*
+                FROM users
+                WHERE users.calorie_target IS NOT NULL
+                  AND EXISTS (
+                      SELECT 1 FROM active_days
+                      WHERE active_days.user_id = users.id AND active_days.day = ?
+                  )
+                  AND EXISTS (
+                      SELECT 1 FROM active_days
+                      WHERE active_days.user_id = users.id AND active_days.day = ?
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM active_days
+                      WHERE active_days.user_id = users.id AND active_days.day = ?
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM user_events
+                      WHERE user_events.user_id = users.id
+                        AND user_events.event_type = 'duolingo_push_sent'
+                        AND date(user_events.created_at, 'localtime') = ?
+                  )
+                """,
+                (yesterday, day_before_yesterday, today, today),
+            ).fetchall()
+            return [self._user_from_row(row) for row in rows]
+
+    def mark_duolingo_push_sent(self, telegram_id: int) -> None:
+        self.record_user_event(telegram_id, "duolingo_push_sent")
+
     def mark_reminder_sent(self, telegram_id: int, today: str) -> None:
         with self.connect() as conn:
             conn.execute(

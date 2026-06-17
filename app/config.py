@@ -17,6 +17,7 @@ class Config:
     database_path: Path
     legacy_database_paths: tuple[Path, ...]
     openai_model: str
+    auto_push_time: str
 
 
 def _parse_admin_ids(raw: str) -> set[int]:
@@ -48,4 +49,5 @@ def load_config() -> Config:
         database_path=_database_path(),
         legacy_database_paths=(BASE_DIR / "calories.sqlite3",),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+        auto_push_time=os.getenv("AUTO_PUSH_TIME", "19:00"),
     )

@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
 
 from aiogram import Bot, Dispatcher, F, Router
@@ -756,7 +756,8 @@ async def reminder_loop(bot: Bot) -> None:
     while True:
         now = datetime.now()
         current_time = now.strftime("%H:%M")
-        today = now.date().isoformat()
+        today_date = now.date()
+        today = today_date.isoformat()
         for user in db.get_users_for_reminder(current_time, today):
             try:
                 await bot.send_message(
@@ -766,7 +767,27 @@ async def reminder_loop(bot: Bot) -> None:
                 db.mark_reminder_sent(user.telegram_id, today)
             except Exception:
                 logger.exception("Failed to send reminder to user %s", user.telegram_id)
+        if current_time == config.auto_push_time:
+            yesterday = (today_date - timedelta(days=1)).isoformat()
+            day_before_yesterday = (today_date - timedelta(days=2)).isoformat()
+            for user in db.get_users_for_duolingo_push(today, yesterday, day_before_yesterday):
+                try:
+                    await bot.send_message(user.telegram_id, duolingo_push_text(user.telegram_id, today))
+                    db.mark_duolingo_push_sent(user.telegram_id)
+                except Exception:
+                    logger.exception("Failed to send duolingo push to user %s", user.telegram_id)
         await asyncio.sleep(60)
+
+
+def duolingo_push_text(telegram_id: int, today: str) -> str:
+    messages = [
+        "Нямметр смотрит на пустой дневник 👀\n\nДва дня подряд ты был в ритме. Давай не терять серию: скинь фото еды или напиши, что уже ел сегодня.",
+        "Твоя цель скучает без тебя 🍽\n\nВчера и позавчера ты заходил. Остался маленький шаг: запиши еду за сегодня.",
+        "Серия почти живая 🔥\n\nНямметр верит в тебя. Одно фото или одно сообщение с едой — и день уже под контролем.",
+        "Эй, чемпион учета калорий 😄\n\nТы держался два дня подряд. Не дай дневнику сегодня остаться голодным.",
+    ]
+    index = (telegram_id + sum(ord(char) for char in today)) % len(messages)
+    return messages[index]
 
 
 if __name__ == "__main__":
