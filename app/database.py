@@ -378,7 +378,19 @@ class Database:
                     (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'text_input' AND {event_date_filter}) AS users_wrote_text,
                     (SELECT COUNT(*) FROM food_entries WHERE source = 'text' AND {date_filter}) AS text_entries,
                     (SELECT COUNT(DISTINCT user_id) FROM food_entries WHERE {date_filter}) AS active_users,
-                    (SELECT COALESCE(SUM(calories), 0) FROM food_entries WHERE {date_filter}) AS calories
+                    (SELECT COALESCE(SUM(calories), 0) FROM food_entries WHERE {date_filter}) AS calories,
+                    (
+                        WITH active_days AS (
+                            SELECT user_id, date(created_at, 'localtime') AS day FROM user_events
+                            UNION
+                            SELECT user_id, date(created_at, 'localtime') AS day FROM food_entries
+                        )
+                        SELECT COUNT(DISTINCT current_day.user_id)
+                        FROM active_days current_day
+                        JOIN active_days next_day
+                          ON next_day.user_id = current_day.user_id
+                         AND julianday(next_day.day) = julianday(current_day.day) + 1
+                    ) AS users_two_day_streak
                 """
             ).fetchone()
             return dict(row)

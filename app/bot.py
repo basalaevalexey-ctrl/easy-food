@@ -234,6 +234,7 @@ def format_admin_period(title: str, days: int | None) -> str:
                 f"Пользователей в базе: {users_total}",
                 f"Всего с настроенной целью: {int(stats['users_with_goal_total'])}",
                 f"Всего с напоминаниями: {int(stats['users_with_reminders_total'])}",
+                f"Взаимодействовали 2 дня подряд: {int(stats['users_two_day_streak'])}",
             ]
         )
     return "\n".join(lines)
