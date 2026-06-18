@@ -38,10 +38,20 @@ def _parse_admin_ids(raw: str) -> set[int]:
 
 def _database_path() -> Path:
     raw_path = os.getenv("DATABASE_PATH", "data/calories.sqlite3").strip()
+    if raw_path == "/data/calories.sqlite3" and Path("/app").exists():
+        raw_path = "/app/data/calories.sqlite3"
     path = Path(raw_path)
     if not path.is_absolute():
         path = BASE_DIR / path
     return path
+
+
+def _legacy_database_paths() -> tuple[Path, ...]:
+    return (
+        BASE_DIR / "calories.sqlite3",
+        BASE_DIR / "data" / "calories.sqlite3",
+        Path("/data/calories.sqlite3"),
+    )
 
 
 def _parse_int_dict(raw: str) -> dict[str, int]:
@@ -68,7 +78,7 @@ def load_config() -> Config:
         openai_api_key=os.getenv("OPENAI_API_KEY", ""),
         admin_ids=_parse_admin_ids(os.getenv("ADMIN_IDS", "")),
         database_path=_database_path(),
-        legacy_database_paths=(BASE_DIR / "calories.sqlite3",),
+        legacy_database_paths=_legacy_database_paths(),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         auto_push_time=os.getenv("AUTO_PUSH_TIME", "19:00"),
         admin_total_baseline=_parse_int_dict(os.getenv("ADMIN_TOTAL_BASELINE", "")),

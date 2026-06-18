@@ -38,19 +38,19 @@ BOT_TOKEN=123456:telegram_bot_token
 OPENAI_API_KEY=sk-...
 ADMIN_IDS=123456789,987654321
 OPENAI_MODEL=gpt-4o-mini
-DATABASE_PATH=data/calories.sqlite3
+DATABASE_PATH=/app/data/calories.sqlite3
 AUTO_PUSH_TIME=19:00
 ```
 
 `ADMIN_IDS` можно оставить пустым, если команда `/stats` не нужна.
 
-`DATABASE_PATH` задает место хранения SQLite-базы. Для продакшн-деплоя укажите путь на постоянном диске/volume, например:
+`DATABASE_PATH` задает место хранения SQLite-базы. Для BotHost используйте путь внутри видимой папки приложения:
 
 ```env
-DATABASE_PATH=/data/calories.sqlite3
+DATABASE_PATH=/app/data/calories.sqlite3
 ```
 
-И подключите persistent volume к папке `/data`. Тогда пользователи, дневник и напоминания сохранятся после редеплоя.
+На BotHost путь `/data/calories.sqlite3` может очищаться при редеплое. Если он указан, бот автоматически переедет на `/app/data/calories.sqlite3` и попробует скопировать старый файл из `/data`, если он еще доступен.
 
 `AUTO_PUSH_TIME` - время ежедневного мотивационного пуша для пользователей с целью, которые были активны два дня подряд, но еще не заходили сегодня.
 
