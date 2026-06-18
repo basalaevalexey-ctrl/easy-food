@@ -373,13 +373,13 @@ def format_admin_users() -> str:
 
 @router.message(Command("start"))
 async def start(message: Message) -> None:
-    db.record_start(message.from_user.id)
+    user = db.record_start(message.from_user.id)
     await message.answer(
         "Привет, я Нямметр 🍽\n\n"
         "Помогаю считать калории без весов и таблиц.\n\n"
         "Просто отправь фото еды или напиши, что съел — я примерно посчитаю калории, белки, жиры и углеводы.\n\n"
         "Важно: это примерная оценка, не медицинская рекомендация.",
-        reply_markup=main_menu(),
+        reply_markup=main_menu(has_goal=bool(user.calorie_target)),
     )
     await message.answer(
         "Укажи свои параметры, и я подберу дневную норму калорий и белка под твою цель.",
@@ -454,7 +454,7 @@ async def help_command(message: Message) -> None:
         "📊 Нажми «Сегодня» или напиши /today — покажу калории, БЖУ и список еды за день.\n"
         "📅 Нажми «Дневник» или напиши /history — покажу последние 7 дней.\n\n"
         "5. Цель и напоминания\n"
-        "🎯 Через «Настроить цель» можно задать норму калорий и белка.\n"
+        "🎯 Через «Настроить цель» или «Изменить цель/параметры» можно задать норму калорий и белка.\n"
         "⏰ После старта можно выбрать время ежедневного напоминания.\n\n"
         "Важно: все оценки примерные, особенно по фото. Нямметр помогает вести учет, но не заменяет врача или нутрициолога.",
         reply_markup=instruction_keyboard(),
@@ -535,6 +535,7 @@ async def admin_callback(callback: CallbackQuery) -> None:
 
 @router.message(Command("setup"))
 @router.message(F.text == "Настроить цель")
+@router.message(F.text == "Изменить цель/параметры")
 async def setup_goal_start(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer("Начнем с простого. Укажи пол:", reply_markup=sex_keyboard())
@@ -618,7 +619,8 @@ async def setup_activity(callback: CallbackQuery, state: FSMContext) -> None:
         f"Цель: {GOAL_LABELS[data['goal']]}\n"
         f"Активность: {ACTIVITY_LABELS[data['activity']]}\n"
         f"Дневная норма: {calorie_target} ккал\n"
-        f"Белок: {protein_target} г в день"
+        f"Белок: {protein_target} г в день",
+        reply_markup=main_menu(has_goal=True),
     )
     await callback.message.answer(
         "Во сколько тебе обычно напоминать про учет еды?",

@@ -1,10 +1,11 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
 
-def main_menu() -> ReplyKeyboardMarkup:
+def main_menu(has_goal: bool = False) -> ReplyKeyboardMarkup:
+    goal_button_text = "Изменить цель/параметры" if has_goal else "Настроить цель"
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="Настроить цель")],
+            [KeyboardButton(text=goal_button_text)],
             [KeyboardButton(text="Сегодня"), KeyboardButton(text="Дневник")],
             [KeyboardButton(text="Инструкция")],
         ],
