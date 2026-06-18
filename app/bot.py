@@ -158,6 +158,40 @@ async def answer_not_food(message: Message, reason: str = "") -> None:
     await message.answer(text)
 
 
+async def safe_delete_message(message: Message | None) -> None:
+    if message is None:
+        return
+    try:
+        await message.delete()
+    except TelegramBadRequest:
+        return
+
+
+async def cleanup_flow_messages(state: FSMContext, chat_id: int, bot: Bot) -> None:
+    data = await state.get_data()
+    message_ids = data.get("cleanup_message_ids", [])
+    for message_id in message_ids:
+        try:
+            await bot.delete_message(chat_id=chat_id, message_id=message_id)
+        except TelegramBadRequest:
+            continue
+    await state.update_data(cleanup_message_ids=[])
+
+
+async def answer_clean(message: Message, state: FSMContext, text: str, **kwargs) -> Message:
+    await cleanup_flow_messages(state, message.chat.id, message.bot)
+    sent = await message.answer(text, **kwargs)
+    await state.update_data(cleanup_message_ids=[sent.message_id])
+    return sent
+
+
+async def callback_answer_clean(callback: CallbackQuery, state: FSMContext, text: str, **kwargs) -> Message:
+    await cleanup_flow_messages(state, callback.message.chat.id, callback.bot)
+    sent = await callback.message.answer(text, **kwargs)
+    await state.update_data(cleanup_message_ids=[sent.message_id])
+    return sent
+
+
 async def send_food_entry(message: Message, entry: FoodEntry, is_photo: bool = False) -> None:
     user = db.get_or_create_user(message.from_user.id)
     entries = db.get_today_entries(message.from_user.id)
@@ -372,7 +406,9 @@ def format_admin_users() -> str:
 
 
 @router.message(Command("start"))
-async def start(message: Message) -> None:
+async def start(message: Message, state: FSMContext) -> None:
+    await cleanup_flow_messages(state, message.chat.id, message.bot)
+    await state.clear()
     user = db.record_start(message.from_user.id)
     await message.answer(
         "Привет, я Нямметр 🍽\n\n"
@@ -381,20 +417,23 @@ async def start(message: Message) -> None:
         "Важно: это примерная оценка, не медицинская рекомендация.",
         reply_markup=main_menu(has_goal=bool(user.calorie_target)),
     )
-    await message.answer(
+    await answer_clean(
+        message,
+        state,
         "Укажи свои параметры, и я подберу дневную норму калорий и белка под твою цель.",
         reply_markup=setup_goal_intro_keyboard(),
     )
 
 
 @router.callback_query(F.data == "reminder:choose")
-async def reminder_choose(callback: CallbackQuery) -> None:
-    await callback.message.answer("Выбери удобное время:", reply_markup=reminder_time_keyboard())
+async def reminder_choose(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback_answer_clean(callback, state, "Выбери удобное время:", reply_markup=reminder_time_keyboard())
     await callback.answer()
 
 
 @router.callback_query(F.data == "reminder:disable")
 async def reminder_disable(callback: CallbackQuery, state: FSMContext) -> None:
+    await cleanup_flow_messages(state, callback.message.chat.id, callback.bot)
     await state.clear()
     db.set_reminder_time(callback.from_user.id, None)
     await callback.message.answer("Хорошо, не буду напоминать.")
@@ -403,6 +442,7 @@ async def reminder_disable(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith("reminder:time:"))
 async def reminder_time(callback: CallbackQuery, state: FSMContext) -> None:
+    await cleanup_flow_messages(state, callback.message.chat.id, callback.bot)
     await state.clear()
     reminder_time_value = callback.data.removeprefix("reminder:time:")
     db.set_reminder_time(callback.from_user.id, reminder_time_value)
@@ -415,16 +455,18 @@ async def reminder_time(callback: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data == "reminder:custom")
 async def reminder_custom(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(ReminderSetup.custom_time)
-    await callback.message.answer("Напиши время в формате 08:30 или 19:00.")
+    await callback_answer_clean(callback, state, "Напиши время в формате 08:30 или 19:00.")
     await callback.answer()
 
 
 @router.message(ReminderSetup.custom_time)
 async def reminder_custom_apply(message: Message, state: FSMContext) -> None:
     reminder_time_value = normalize_reminder_time(message.text or "")
+    await safe_delete_message(message)
     if reminder_time_value is None:
-        await message.answer("Не понял время. Напиши, например: 08:30 или 19:00.")
+        await answer_clean(message, state, "Не понял время. Напиши, например: 08:30 или 19:00.")
         return
+    await cleanup_flow_messages(state, message.chat.id, message.bot)
     db.set_reminder_time(message.from_user.id, reminder_time_value)
     await state.clear()
     await message.answer(f"Договорились! Буду напоминать про учет еды ежедневно в {reminder_time_value}.")
@@ -537,14 +579,16 @@ async def admin_callback(callback: CallbackQuery) -> None:
 @router.message(F.text == "Настроить цель")
 @router.message(F.text == "Изменить цель/параметры")
 async def setup_goal_start(message: Message, state: FSMContext) -> None:
+    await cleanup_flow_messages(state, message.chat.id, message.bot)
     await state.clear()
-    await message.answer("Начнем с простого. Укажи пол:", reply_markup=sex_keyboard())
+    await answer_clean(message, state, "Начнем с простого. Укажи пол:", reply_markup=sex_keyboard())
 
 
 @router.callback_query(F.data == "setup:start")
 async def setup_goal_start_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    await cleanup_flow_messages(state, callback.message.chat.id, callback.bot)
     await state.clear()
-    await callback.message.answer("Начнем с простого. Укажи пол:", reply_markup=sex_keyboard())
+    await callback_answer_clean(callback, state, "Начнем с простого. Укажи пол:", reply_markup=sex_keyboard())
     await callback.answer()
 
 
@@ -553,47 +597,50 @@ async def setup_sex(callback: CallbackQuery, state: FSMContext) -> None:
     sex = callback.data.split(":")[-1]
     await state.update_data(sex=sex)
     await state.set_state(SetupGoal.age)
-    await callback.message.answer("Сколько тебе лет? Напиши число.")
+    await callback_answer_clean(callback, state, "Сколько тебе лет? Напиши число.")
     await callback.answer()
 
 
 @router.message(SetupGoal.age)
 async def setup_age(message: Message, state: FSMContext) -> None:
     age = parse_positive_int(message.text or "", 10, 100)
+    await safe_delete_message(message)
     if age is None:
-        await message.answer("Напиши возраст числом, например 32.")
+        await answer_clean(message, state, "Напиши возраст числом, например 32.")
         return
     await state.update_data(age=age)
     await state.set_state(SetupGoal.height)
-    await message.answer("Какой рост в сантиметрах?")
+    await answer_clean(message, state, "Какой рост в сантиметрах?")
 
 
 @router.message(SetupGoal.height)
 async def setup_height(message: Message, state: FSMContext) -> None:
     height = parse_positive_int(message.text or "", 100, 230)
+    await safe_delete_message(message)
     if height is None:
-        await message.answer("Напиши рост числом в сантиметрах, например 176.")
+        await answer_clean(message, state, "Напиши рост числом в сантиметрах, например 176.")
         return
     await state.update_data(height=height)
     await state.set_state(SetupGoal.weight)
-    await message.answer("Какой вес в килограммах?")
+    await answer_clean(message, state, "Какой вес в килограммах?")
 
 
 @router.message(SetupGoal.weight)
 async def setup_weight(message: Message, state: FSMContext) -> None:
     weight = parse_positive_float(message.text or "", 30, 300)
+    await safe_delete_message(message)
     if weight is None:
-        await message.answer("Напиши вес числом, например 72 или 72.5.")
+        await answer_clean(message, state, "Напиши вес числом, например 72 или 72.5.")
         return
     await state.update_data(weight=weight)
-    await message.answer("Какая цель?", reply_markup=goal_keyboard())
+    await answer_clean(message, state, "Какая цель?", reply_markup=goal_keyboard())
 
 
 @router.callback_query(F.data.startswith("setup:goal:"))
 async def setup_goal(callback: CallbackQuery, state: FSMContext) -> None:
     goal = callback.data.split(":")[-1]
     await state.update_data(goal=goal)
-    await callback.message.answer("Какая активность?", reply_markup=activity_keyboard())
+    await callback_answer_clean(callback, state, "Какая активность?", reply_markup=activity_keyboard())
     await callback.answer()
 
 
@@ -613,6 +660,7 @@ async def setup_activity(callback: CallbackQuery, state: FSMContext) -> None:
     data["calorie_target"] = calorie_target
     data["protein_target"] = protein_target
     db.update_user_goal(callback.from_user.id, data)
+    await cleanup_flow_messages(state, callback.message.chat.id, callback.bot)
     await state.clear()
     await callback.message.answer(
         "Готово, цель настроена.\n\n"
@@ -622,10 +670,11 @@ async def setup_activity(callback: CallbackQuery, state: FSMContext) -> None:
         f"Белок: {protein_target} г в день",
         reply_markup=main_menu(has_goal=True),
     )
-    await callback.message.answer(
+    reminder_message = await callback.message.answer(
         "Во сколько тебе обычно напоминать про учет еды?",
         reply_markup=reminder_keyboard(),
     )
+    await state.update_data(cleanup_message_ids=[reminder_message.message_id])
     await callback.answer()
 
 
