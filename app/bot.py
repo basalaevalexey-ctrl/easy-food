@@ -170,6 +170,9 @@ async def safe_delete_message(message: Message | None) -> None:
 async def cleanup_flow_messages(state: FSMContext, chat_id: int, bot: Bot) -> None:
     data = await state.get_data()
     message_ids = data.get("cleanup_message_ids", [])
+    flow_message_id = data.get("flow_message_id")
+    if flow_message_id:
+        message_ids = [*message_ids, flow_message_id]
     for message_id in message_ids:
         try:
             await bot.delete_message(chat_id=chat_id, message_id=message_id)
@@ -179,16 +182,51 @@ async def cleanup_flow_messages(state: FSMContext, chat_id: int, bot: Bot) -> No
 
 
 async def answer_clean(message: Message, state: FSMContext, text: str, **kwargs) -> Message:
-    await cleanup_flow_messages(state, message.chat.id, message.bot)
+    data = await state.get_data()
+    flow_message_id = data.get("flow_message_id")
+    reply_markup = kwargs.get("reply_markup")
+    if flow_message_id:
+        try:
+            edited = await message.bot.edit_message_text(
+                chat_id=message.chat.id,
+                message_id=flow_message_id,
+                text=text,
+                reply_markup=reply_markup,
+            )
+            await state.update_data(flow_message_id=flow_message_id, cleanup_message_ids=[])
+            return edited
+        except TelegramBadRequest:
+            pass
     sent = await message.answer(text, **kwargs)
-    await state.update_data(cleanup_message_ids=[sent.message_id])
+    await state.update_data(flow_message_id=sent.message_id, cleanup_message_ids=[])
     return sent
 
 
 async def callback_answer_clean(callback: CallbackQuery, state: FSMContext, text: str, **kwargs) -> Message:
-    await cleanup_flow_messages(state, callback.message.chat.id, callback.bot)
+    reply_markup = kwargs.get("reply_markup")
+    if callback.message:
+        try:
+            edited = await callback.message.edit_text(text, reply_markup=reply_markup)
+            await state.update_data(flow_message_id=callback.message.message_id, cleanup_message_ids=[])
+            return edited
+        except TelegramBadRequest:
+            pass
+    data = await state.get_data()
+    flow_message_id = data.get("flow_message_id")
+    if flow_message_id and callback.message:
+        try:
+            edited = await callback.bot.edit_message_text(
+                chat_id=callback.message.chat.id,
+                message_id=flow_message_id,
+                text=text,
+                reply_markup=reply_markup,
+            )
+            await state.update_data(flow_message_id=flow_message_id, cleanup_message_ids=[])
+            return edited
+        except TelegramBadRequest:
+            pass
     sent = await callback.message.answer(text, **kwargs)
-    await state.update_data(cleanup_message_ids=[sent.message_id])
+    await state.update_data(flow_message_id=sent.message_id, cleanup_message_ids=[])
     return sent
 
 
