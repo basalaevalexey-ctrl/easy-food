@@ -563,8 +563,19 @@ async def today_command(message: Message) -> None:
 @router.message(F.text == "Дневник")
 async def history_command(message: Message) -> None:
     user = db.get_or_create_user(message.from_user.id)
+    progress = db.get_user_progress_stats(message.from_user.id)
     rows = db.get_daily_history(message.from_user.id)
-    lines = ["Последние 7 дней", ""]
+    lines = [
+        "Твой прогресс:",
+        "",
+        f"🔥 Текущий Ням-стрик: {progress['current_streak']} дней",
+        f"🏆 Лучший стрик: {progress['best_streak']} дней",
+        f"🍽 Всего записей еды: {progress['total_entries']}",
+        f"📅 Дней с Нямметром: {progress['days_with_nyammetr']}",
+        "",
+        "Последние 7 дней",
+        "",
+    ]
     if not rows:
         lines.append("Пока записей нет.")
     else:

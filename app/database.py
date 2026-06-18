@@ -471,6 +471,60 @@ class Database:
             )
             return streak
 
+    def get_user_progress_stats(self, telegram_id: int) -> dict[str, int]:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            today = conn.execute("SELECT date('now', 'localtime')").fetchone()[0]
+            total_entries = conn.execute(
+                "SELECT COUNT(*) FROM food_entries WHERE user_id = ?",
+                (user.id,),
+            ).fetchone()[0]
+            days_with_nyammetr = conn.execute(
+                """
+                SELECT CAST(julianday(date('now', 'localtime')) - julianday(date(created_at, 'localtime')) AS INTEGER) + 1
+                FROM users
+                WHERE id = ?
+                """,
+                (user.id,),
+            ).fetchone()[0]
+            rows = conn.execute(
+                """
+                SELECT DISTINCT date(created_at, 'localtime') AS day
+                FROM food_entries
+                WHERE user_id = ?
+                ORDER BY day ASC
+                """,
+                (user.id,),
+            ).fetchall()
+
+        active_days = [datetime.fromisoformat(row["day"]).date() for row in rows]
+        active_day_set = set(active_days)
+
+        today_date = datetime.fromisoformat(today).date()
+        current_streak = 0
+        expected_day = today_date
+        while expected_day in active_day_set:
+            current_streak += 1
+            expected_day -= timedelta(days=1)
+
+        best_streak = 0
+        running_streak = 0
+        previous_day = None
+        for active_day in active_days:
+            if previous_day and active_day == previous_day + timedelta(days=1):
+                running_streak += 1
+            else:
+                running_streak = 1
+            best_streak = max(best_streak, running_streak)
+            previous_day = active_day
+
+        return {
+            "current_streak": current_streak,
+            "best_streak": best_streak,
+            "total_entries": int(total_entries),
+            "days_with_nyammetr": max(1, int(days_with_nyammetr or 1)),
+        }
+
     def stats(self) -> dict[str, int]:
         with self.connect() as conn:
             users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
