@@ -242,6 +242,12 @@ async def send_food_entry(message: Message, entry: FoodEntry, is_photo: bool = F
     )
 
 
+async def maybe_send_nyam_streak(message: Message) -> None:
+    streak = db.mark_nyam_streak_if_first_today(message.from_user.id)
+    if streak:
+        await message.answer(f"День засчитан 💚\nНям-стрик: {streak} дней")
+
+
 def format_today(user: User, entries: list[FoodEntry]) -> str:
     totals = today_totals(entries)
     target = user.calorie_target
@@ -846,6 +852,7 @@ async def photo_food(message: Message, bot: Bot) -> None:
         return
     entry = db.add_food_entry(message.from_user.id, estimate, source="photo")
     await send_food_entry(message, entry, is_photo=True)
+    await maybe_send_nyam_streak(message)
 
 
 @router.message(F.text)
@@ -865,6 +872,7 @@ async def text_food(message: Message) -> None:
         return
     entry = db.add_food_entry(message.from_user.id, estimate, source="text")
     await send_food_entry(message, entry)
+    await maybe_send_nyam_streak(message)
 
 
 async def main() -> None:

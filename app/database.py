@@ -1,7 +1,7 @@
 import sqlite3
 import shutil
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -416,6 +416,60 @@ class Database:
                 """,
                 (user.id, f"-{days - 1} days"),
             ).fetchall()
+
+    def mark_nyam_streak_if_first_today(self, telegram_id: int) -> int | None:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            already_sent = conn.execute(
+                """
+                SELECT 1 FROM user_events
+                WHERE user_id = ?
+                  AND event_type = 'nyam_streak_sent'
+                  AND date(created_at, 'localtime') = date('now', 'localtime')
+                """,
+                (user.id,),
+            ).fetchone()
+            if already_sent:
+                return None
+
+            today = conn.execute("SELECT date('now', 'localtime')").fetchone()[0]
+            active_today = conn.execute(
+                """
+                SELECT 1 FROM food_entries
+                WHERE user_id = ?
+                  AND date(created_at, 'localtime') = ?
+                LIMIT 1
+                """,
+                (user.id, today),
+            ).fetchone()
+            if not active_today:
+                return None
+
+            rows = conn.execute(
+                """
+                SELECT DISTINCT date(created_at, 'localtime') AS day
+                FROM food_entries
+                WHERE user_id = ?
+                ORDER BY day DESC
+                """,
+                (user.id,),
+            ).fetchall()
+
+            expected_day = datetime.fromisoformat(today).date()
+            streak = 0
+            for row in rows:
+                entry_day = datetime.fromisoformat(row["day"]).date()
+                if entry_day == expected_day:
+                    streak += 1
+                    expected_day -= timedelta(days=1)
+                elif entry_day < expected_day:
+                    break
+
+            conn.execute(
+                "INSERT INTO user_events (user_id, event_type) VALUES (?, ?)",
+                (user.id, "nyam_streak_sent"),
+            )
+            return streak
 
     def stats(self) -> dict[str, int]:
         with self.connect() as conn:
