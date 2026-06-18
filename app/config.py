@@ -17,6 +17,7 @@ class Config:
     admin_ids: set[int]
     database_path: Path
     legacy_database_paths: tuple[Path, ...]
+    database_backup_paths: tuple[Path, ...]
     openai_model: str
     auto_push_time: str
     admin_total_baseline: dict[str, int]
@@ -54,6 +55,15 @@ def _legacy_database_paths() -> tuple[Path, ...]:
     )
 
 
+def _database_backup_paths(primary_path: Path) -> tuple[Path, ...]:
+    candidates = (
+        BASE_DIR / "data" / "calories.sqlite3",
+        BASE_DIR / "calories.sqlite3",
+        Path("/data/calories.sqlite3"),
+    )
+    return tuple(path for path in candidates if path != primary_path)
+
+
 def _parse_int_dict(raw: str) -> dict[str, int]:
     if not raw.strip():
         return {}
@@ -73,12 +83,14 @@ def _parse_int_dict(raw: str) -> dict[str, int]:
 
 
 def load_config() -> Config:
+    database_path = _database_path()
     return Config(
         bot_token=os.getenv("BOT_TOKEN", ""),
         openai_api_key=os.getenv("OPENAI_API_KEY", ""),
         admin_ids=_parse_admin_ids(os.getenv("ADMIN_IDS", "")),
-        database_path=_database_path(),
+        database_path=database_path,
         legacy_database_paths=_legacy_database_paths(),
+        database_backup_paths=_database_backup_paths(database_path),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         auto_push_time=os.getenv("AUTO_PUSH_TIME", "19:00"),
         admin_total_baseline=_parse_int_dict(os.getenv("ADMIN_TOTAL_BASELINE", "")),

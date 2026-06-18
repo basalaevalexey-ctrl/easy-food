@@ -9,9 +9,15 @@ from app.models import FoodEntry, FoodEstimate, User
 
 
 class Database:
-    def __init__(self, path: Path, legacy_paths: tuple[Path, ...] = ()) -> None:
+    def __init__(
+        self,
+        path: Path,
+        legacy_paths: tuple[Path, ...] = (),
+        backup_paths: tuple[Path, ...] = (),
+    ) -> None:
         self.path = path
         self.legacy_paths = legacy_paths
+        self.backup_paths = backup_paths
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
@@ -22,10 +28,11 @@ class Database:
             conn.commit()
         finally:
             conn.close()
+            self._backup_database()
 
     def init(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._migrate_legacy_database()
+        self._restore_best_database()
         with self.connect() as conn:
             conn.execute(
                 """
@@ -91,15 +98,65 @@ class Database:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_user_events_type_date ON user_events(event_type, created_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_food_entries_user_date ON food_entries(user_id, created_at)")
 
-    def _migrate_legacy_database(self) -> None:
-        if self.path.exists():
-            return
-        for legacy_path in self.legacy_paths:
-            if legacy_path == self.path or not legacy_path.exists():
+    def _restore_best_database(self) -> None:
+        candidates = self._unique_paths((self.path, *self.legacy_paths, *self.backup_paths))
+        best_path = None
+        best_score = (-1, -1)
+        for candidate in candidates:
+            if not candidate.exists():
                 continue
+            score = self._database_score(candidate)
+            if score > best_score:
+                best_path = candidate
+                best_score = score
+
+        current_score = self._database_score(self.path) if self.path.exists() else (-1, -1)
+        if best_path and best_path != self.path and best_score > current_score:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(legacy_path, self.path)
+            shutil.copy2(best_path, self.path)
+
+    def _backup_database(self) -> None:
+        if not self.path.exists():
             return
+        for backup_path in self._unique_paths(self.backup_paths):
+            if backup_path == self.path:
+                continue
+            try:
+                backup_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(self.path, backup_path)
+            except OSError:
+                continue
+
+    @staticmethod
+    def _database_score(path: Path) -> tuple[int, int]:
+        try:
+            conn = sqlite3.connect(path)
+            try:
+                tables = {
+                    row[0]
+                    for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+                }
+                total = 0
+                for table in ("users", "food_entries", "user_events"):
+                    if table in tables:
+                        total += int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+                size = path.stat().st_size
+                return total, size
+            finally:
+                conn.close()
+        except (OSError, sqlite3.Error):
+            return -1, -1
+
+    @staticmethod
+    def _unique_paths(paths: tuple[Path, ...]) -> tuple[Path, ...]:
+        result: list[Path] = []
+        seen: set[str] = set()
+        for path in paths:
+            key = str(path)
+            if key not in seen:
+                seen.add(key)
+                result.append(path)
+        return tuple(result)
 
     @staticmethod
     def _backfill_default_reminders(conn: sqlite3.Connection) -> None:
@@ -376,6 +433,10 @@ class Database:
             users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
             entries = conn.execute("SELECT COUNT(*) FROM food_entries").fetchone()[0]
             events = conn.execute("SELECT COUNT(*) FROM user_events").fetchone()[0]
+        backup_info = []
+        for backup_path in self._unique_paths(self.backup_paths):
+            score = self._database_score(backup_path)
+            backup_info.append(f"{backup_path}: {score[0]} rows, {score[1]} bytes")
         return {
             "path": str(self.path),
             "exists": exists,
@@ -383,6 +444,7 @@ class Database:
             "users": users,
             "entries": entries,
             "events": events,
+            "backups": "\n".join(backup_info),
         }
 
     def admin_stats(self) -> dict[str, int | float]:

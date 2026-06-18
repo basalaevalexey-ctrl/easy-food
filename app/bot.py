@@ -38,7 +38,11 @@ logger = logging.getLogger(__name__)
 
 router = Router()
 config = load_config()
-db = Database(config.database_path, legacy_paths=config.legacy_database_paths)
+db = Database(
+    config.database_path,
+    legacy_paths=config.legacy_database_paths,
+    backup_paths=config.database_backup_paths,
+)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
 
 
@@ -276,6 +280,8 @@ def format_admin_period(title: str, days: int | None) -> str:
                 f"Путь: {db_info['path']}",
                 f"Размер: {int(db_info['size'])} байт",
                 f"users / food / events: {db_info['users']} / {db_info['entries']} / {db_info['events']}",
+                "Копии:",
+                str(db_info["backups"]) or "нет",
             ]
         )
     return "\n".join(lines)
