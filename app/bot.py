@@ -163,7 +163,10 @@ async def safe_delete_message(message: Message | None) -> None:
         return
     try:
         await message.delete()
-    except TelegramBadRequest:
+    except TelegramBadRequest as exc:
+        logger.debug("Telegram did not delete message %s: %s", message.message_id, exc)
+    except Exception as exc:
+        logger.debug("Could not delete message %s: %s", message.message_id, exc)
         return
 
 
@@ -447,6 +450,7 @@ def format_admin_users() -> str:
 async def start(message: Message, state: FSMContext) -> None:
     await cleanup_flow_messages(state, message.chat.id, message.bot)
     await state.clear()
+    await safe_delete_message(message)
     user = db.record_start(message.from_user.id)
     await message.answer(
         "Привет, я Нямметр 🍽\n\n"
@@ -619,6 +623,7 @@ async def admin_callback(callback: CallbackQuery) -> None:
 async def setup_goal_start(message: Message, state: FSMContext) -> None:
     await cleanup_flow_messages(state, message.chat.id, message.bot)
     await state.clear()
+    await safe_delete_message(message)
     await answer_clean(message, state, "Начнем с простого. Укажи пол:", reply_markup=sex_keyboard())
 
 
@@ -778,6 +783,7 @@ async def food_fix(callback: CallbackQuery, state: FSMContext) -> None:
 async def food_grams_apply(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     entry = db.get_food_entry(int(data["entry_id"]), message.from_user.id)
+    await safe_delete_message(message)
     if entry is None:
         await state.clear()
         await message.answer("Не нашел запись. Попробуй добавить еду заново.")
@@ -802,6 +808,7 @@ async def food_grams_apply(message: Message, state: FSMContext) -> None:
 async def food_fix_apply(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     entry = db.get_food_entry(int(data["entry_id"]), message.from_user.id)
+    await safe_delete_message(message)
     if entry is None:
         await state.clear()
         await message.answer("Не нашел запись. Попробуй добавить еду заново.")
