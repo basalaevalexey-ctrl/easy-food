@@ -50,6 +50,9 @@ class Database:
                     goal_set_at TEXT,
                     reminder_time TEXT,
                     reminder_last_sent_date TEXT,
+                    current_streak INTEGER NOT NULL DEFAULT 0,
+                    best_streak INTEGER NOT NULL DEFAULT 0,
+                    last_active_date TEXT,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """
@@ -57,6 +60,9 @@ class Database:
             self._ensure_column(conn, "users", "goal_set_at", "TEXT")
             self._ensure_column(conn, "users", "reminder_time", "TEXT")
             self._ensure_column(conn, "users", "reminder_last_sent_date", "TEXT")
+            self._ensure_column(conn, "users", "current_streak", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(conn, "users", "best_streak", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(conn, "users", "last_active_date", "TEXT")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS app_meta (
@@ -97,6 +103,7 @@ class Database:
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_user_events_type_date ON user_events(event_type, created_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_food_entries_user_date ON food_entries(user_id, created_at)")
+            self._rebuild_user_streaks(conn)
 
     def _restore_best_database(self) -> None:
         candidates = self._unique_paths((self.path, *self.legacy_paths, *self.backup_paths))
@@ -184,6 +191,51 @@ class Database:
         columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
         if column not in columns:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
+
+    def _rebuild_user_streaks(self, conn: sqlite3.Connection) -> None:
+        user_ids = [row["id"] for row in conn.execute("SELECT id FROM users").fetchall()]
+        for user_id in user_ids:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT date(created_at, 'localtime') AS day
+                FROM food_entries
+                WHERE user_id = ?
+                ORDER BY day ASC
+                """,
+                (user_id,),
+            ).fetchall()
+            active_days = [datetime.fromisoformat(row["day"]).date() for row in rows]
+            current_streak, best_streak, last_active_date = self._streaks_from_active_days(active_days)
+            conn.execute(
+                """
+                UPDATE users
+                SET current_streak = ?,
+                    best_streak = ?,
+                    last_active_date = ?
+                WHERE id = ?
+                """,
+                (current_streak, best_streak, last_active_date, user_id),
+            )
+
+    @staticmethod
+    def _streaks_from_active_days(active_days: list[Any]) -> tuple[int, int, str | None]:
+        if not active_days:
+            return 0, 0, None
+
+        best_streak = 0
+        running_streak = 0
+        previous_day = None
+        current_streak = 0
+        for active_day in active_days:
+            if previous_day and active_day == previous_day + timedelta(days=1):
+                running_streak += 1
+            else:
+                running_streak = 1
+            best_streak = max(best_streak, running_streak)
+            current_streak = running_streak
+            previous_day = active_day
+
+        return current_streak, best_streak, active_days[-1].isoformat()
 
     def get_or_create_user(self, telegram_id: int) -> User:
         with self.connect() as conn:
@@ -417,22 +469,11 @@ class Database:
                 (user.id, f"-{days - 1} days"),
             ).fetchall()
 
-    def mark_nyam_streak_if_first_today(self, telegram_id: int) -> int | None:
+    def mark_nyam_streak_if_first_today(self, telegram_id: int) -> dict[str, int | bool] | None:
         user = self.get_or_create_user(telegram_id)
         with self.connect() as conn:
-            already_sent = conn.execute(
-                """
-                SELECT 1 FROM user_events
-                WHERE user_id = ?
-                  AND event_type = 'nyam_streak_sent'
-                  AND date(created_at, 'localtime') = date('now', 'localtime')
-                """,
-                (user.id,),
-            ).fetchone()
-            if already_sent:
-                return None
-
             today = conn.execute("SELECT date('now', 'localtime')").fetchone()[0]
+            yesterday = conn.execute("SELECT date('now', 'localtime', '-1 day')").fetchone()[0]
             active_today = conn.execute(
                 """
                 SELECT 1 FROM food_entries
@@ -445,36 +486,50 @@ class Database:
             if not active_today:
                 return None
 
-            rows = conn.execute(
+            row = conn.execute(
                 """
-                SELECT DISTINCT date(created_at, 'localtime') AS day
-                FROM food_entries
-                WHERE user_id = ?
-                ORDER BY day DESC
+                SELECT current_streak, best_streak, last_active_date
+                FROM users
+                WHERE id = ?
                 """,
                 (user.id,),
-            ).fetchall()
+            ).fetchone()
+            last_active_date = row["last_active_date"]
+            if last_active_date == today:
+                return None
 
-            expected_day = datetime.fromisoformat(today).date()
-            streak = 0
-            for row in rows:
-                entry_day = datetime.fromisoformat(row["day"]).date()
-                if entry_day == expected_day:
-                    streak += 1
-                    expected_day -= timedelta(days=1)
-                elif entry_day < expected_day:
-                    break
+            current_streak = int(row["current_streak"] or 0)
+            previous_best_streak = int(row["best_streak"] or 0)
+            if last_active_date == yesterday:
+                current_streak += 1
+            else:
+                current_streak = 1
 
+            best_streak = max(previous_best_streak, current_streak)
+            best_updated = best_streak > previous_best_streak
+            conn.execute(
+                """
+                UPDATE users
+                SET current_streak = ?,
+                    best_streak = ?,
+                    last_active_date = ?
+                WHERE id = ?
+                """,
+                (current_streak, best_streak, today, user.id),
+            )
             conn.execute(
                 "INSERT INTO user_events (user_id, event_type) VALUES (?, ?)",
-                (user.id, "nyam_streak_sent"),
+                (user.id, "nyam_streak_day_counted"),
             )
-            return streak
+            return {
+                "current_streak": current_streak,
+                "best_streak": best_streak,
+                "best_updated": best_updated,
+            }
 
     def get_user_progress_stats(self, telegram_id: int) -> dict[str, int]:
         user = self.get_or_create_user(telegram_id)
         with self.connect() as conn:
-            today = conn.execute("SELECT date('now', 'localtime')").fetchone()[0]
             total_entries = conn.execute(
                 "SELECT COUNT(*) FROM food_entries WHERE user_id = ?",
                 (user.id,),
@@ -487,40 +542,10 @@ class Database:
                 """,
                 (user.id,),
             ).fetchone()[0]
-            rows = conn.execute(
-                """
-                SELECT DISTINCT date(created_at, 'localtime') AS day
-                FROM food_entries
-                WHERE user_id = ?
-                ORDER BY day ASC
-                """,
-                (user.id,),
-            ).fetchall()
-
-        active_days = [datetime.fromisoformat(row["day"]).date() for row in rows]
-        active_day_set = set(active_days)
-
-        today_date = datetime.fromisoformat(today).date()
-        current_streak = 0
-        expected_day = today_date
-        while expected_day in active_day_set:
-            current_streak += 1
-            expected_day -= timedelta(days=1)
-
-        best_streak = 0
-        running_streak = 0
-        previous_day = None
-        for active_day in active_days:
-            if previous_day and active_day == previous_day + timedelta(days=1):
-                running_streak += 1
-            else:
-                running_streak = 1
-            best_streak = max(best_streak, running_streak)
-            previous_day = active_day
 
         return {
-            "current_streak": current_streak,
-            "best_streak": best_streak,
+            "current_streak": int(user.current_streak or 0),
+            "best_streak": int(user.best_streak or 0),
             "total_entries": int(total_entries),
             "days_with_nyammetr": max(1, int(days_with_nyammetr or 1)),
         }
@@ -687,6 +712,9 @@ class Database:
             goal_set_at=row["goal_set_at"],
             reminder_time=row["reminder_time"],
             reminder_last_sent_date=row["reminder_last_sent_date"],
+            current_streak=row["current_streak"],
+            best_streak=row["best_streak"],
+            last_active_date=row["last_active_date"],
             created_at=datetime.fromisoformat(row["created_at"]),
         )
 

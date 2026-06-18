@@ -244,14 +244,28 @@ async def send_food_entry(message: Message, entry: FoodEntry, is_photo: bool = F
 
 async def maybe_send_nyam_streak(message: Message) -> None:
     streak = db.mark_nyam_streak_if_first_today(message.from_user.id)
-    if streak:
-        await message.answer(f"День засчитан 💚\nНям-стрик: {streak} дней")
+    if not streak:
+        return
+    lines = [
+        "День засчитан 💚",
+        f"🔥 Ням-стрик: {streak['current_streak']} дней",
+    ]
+    if streak["best_updated"]:
+        lines.append("Новый рекорд!")
+    await message.answer("\n".join(lines))
 
 
 def format_today(user: User, entries: list[FoodEntry]) -> str:
     totals = today_totals(entries)
     target = user.calorie_target
     protein_target = user.protein_target
+    entries_count = len(entries)
+    if entries_count >= 3:
+        full_day_line = "Полный день закрыт 🍽"
+    elif entries_count in (1, 2):
+        full_day_line = f"До полного дня осталось {3 - entries_count} запись"
+    else:
+        full_day_line = "Добавь первую запись еды, и день начнется мягко 💚"
 
     if target:
         left = target - round_num(totals["calories"])
@@ -269,6 +283,11 @@ def format_today(user: User, entries: list[FoodEntry]) -> str:
 
     lines = [
         "Сегодня",
+        "",
+        f"🔥 Текущий Ням-стрик: {user.current_streak} дней",
+        f"🏆 Лучший стрик: {user.best_streak} дней",
+        f"🍽 Записей еды сегодня: {entries_count}",
+        full_day_line,
         "",
         calorie_line,
         left_line,
