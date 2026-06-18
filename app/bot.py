@@ -24,6 +24,7 @@ from app.keyboards import (
     main_menu,
     reminder_keyboard,
     reminder_time_keyboard,
+    setup_goal_intro_keyboard,
     sex_keyboard,
 )
 from app.models import FoodEntry, User
@@ -381,8 +382,8 @@ async def start(message: Message) -> None:
         reply_markup=main_menu(),
     )
     await message.answer(
-        "Во сколько тебе обычно напоминать про учет еды?",
-        reply_markup=reminder_keyboard(),
+        "Укажи свои параметры, и я подберу дневную норму калорий и белка под твою цель.",
+        reply_markup=setup_goal_intro_keyboard(),
     )
 
 
@@ -539,6 +540,13 @@ async def setup_goal_start(message: Message, state: FSMContext) -> None:
     await message.answer("Начнем с простого. Укажи пол:", reply_markup=sex_keyboard())
 
 
+@router.callback_query(F.data == "setup:start")
+async def setup_goal_start_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    await callback.message.answer("Начнем с простого. Укажи пол:", reply_markup=sex_keyboard())
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("setup:sex:"))
 async def setup_sex(callback: CallbackQuery, state: FSMContext) -> None:
     sex = callback.data.split(":")[-1]
@@ -611,6 +619,10 @@ async def setup_activity(callback: CallbackQuery, state: FSMContext) -> None:
         f"Активность: {ACTIVITY_LABELS[data['activity']]}\n"
         f"Дневная норма: {calorie_target} ккал\n"
         f"Белок: {protein_target} г в день"
+    )
+    await callback.message.answer(
+        "Во сколько тебе обычно напоминать про учет еды?",
+        reply_markup=reminder_keyboard(),
     )
     await callback.answer()
 

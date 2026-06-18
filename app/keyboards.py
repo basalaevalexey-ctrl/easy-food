@@ -24,6 +24,14 @@ def sex_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def setup_goal_intro_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Указать параметры", callback_data="setup:start")],
+        ]
+    )
+
+
 def goal_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
