@@ -263,7 +263,26 @@ async def maybe_send_achievements(message: Message) -> None:
         )
 
 
-def format_today(user: User, entries: list[FoodEntry]) -> str:
+def format_daily_mission(status: dict) -> str:
+    mission = status["mission"]
+    return (
+        f"🎯 Миссия дня: {mission.emoji} {mission.title}\n"
+        f"{mission.description}\n"
+        f"Прогресс: {status['progress_text']}"
+    )
+
+
+async def maybe_send_daily_mission_completed(message: Message, telegram_id: int) -> None:
+    mission = db.complete_daily_mission_if_ready(telegram_id)
+    if mission:
+        await message.answer(
+            "Миссия выполнена 💚\n"
+            f"{mission.emoji} {mission.title}\n"
+            f"{mission.short_success_text}"
+        )
+
+
+def format_today(user: User, entries: list[FoodEntry], mission_status: dict | None = None) -> str:
     totals = today_totals(entries)
     target = user.calorie_target
     protein_target = user.protein_target
@@ -297,14 +316,20 @@ def format_today(user: User, entries: list[FoodEntry]) -> str:
         f"🍽 Записей еды сегодня: {entries_count}",
         full_day_line,
         "",
-        calorie_line,
-        left_line,
-        protein_line,
-        f"Жиры: {round_num(totals['fat'])} г",
-        f"Углеводы: {round_num(totals['carbs'])} г",
-        "",
-        "Еда:",
     ]
+    if mission_status:
+        lines.extend([format_daily_mission(mission_status), ""])
+    lines.extend(
+        [
+            calorie_line,
+            left_line,
+            protein_line,
+            f"Жиры: {round_num(totals['fat'])} г",
+            f"Углеводы: {round_num(totals['carbs'])} г",
+            "",
+            "Еда:",
+        ]
+    )
 
     if not entries:
         lines.append("Пока записей нет.")
@@ -581,10 +606,21 @@ async def help_command(message: Message) -> None:
 @router.message(Command("today"))
 @router.message(F.text == "Сегодня")
 async def today_command(message: Message) -> None:
+    if datetime.now().hour >= 18:
+        db.record_user_event(message.from_user.id, "today_opened_evening")
     user = db.get_or_create_user(message.from_user.id)
     entries = db.get_today_entries(message.from_user.id)
-    await message.answer(format_today(user, entries))
+    await maybe_send_daily_mission_completed(message, message.from_user.id)
+    mission_status = db.get_daily_mission_status(message.from_user.id)
+    await message.answer(format_today(user, entries, mission_status=mission_status))
     await maybe_send_achievements(message)
+    await maybe_send_daily_mission_completed(message, message.from_user.id)
+
+
+@router.message(Command("mission"))
+async def mission_command(message: Message) -> None:
+    await maybe_send_daily_mission_completed(message, message.from_user.id)
+    await message.answer(format_daily_mission(db.get_daily_mission_status(message.from_user.id)))
 
 
 @router.message(Command("history"))
@@ -793,7 +829,9 @@ async def food_scale(callback: CallbackQuery) -> None:
         format_food_saved(entry, user, entries),
         reply_markup=food_actions(entry.id, can_fix_dish=entry.source == "photo"),
     )
+    db.record_user_event(callback.from_user.id, "portion_adjustment")
     await callback.answer("Порция обновлена")
+    await maybe_send_daily_mission_completed(callback.message, callback.from_user.id)
 
 
 @router.callback_query(F.data.startswith("food:delete:"))
@@ -860,7 +898,9 @@ async def food_grams_apply(message: Message, state: FSMContext) -> None:
         return
     updated = db.replace_food_entry_estimate(entry.id, message.from_user.id, estimate)
     await state.clear()
+    db.record_user_event(message.from_user.id, "portion_adjustment")
     await send_food_entry(message, updated)
+    await maybe_send_daily_mission_completed(message, message.from_user.id)
 
 
 @router.message(PortionCorrection.dish)
@@ -907,6 +947,7 @@ async def photo_food(message: Message, bot: Bot) -> None:
     await send_food_entry(message, entry, is_photo=True)
     await maybe_send_nyam_streak(message)
     await maybe_send_achievements(message)
+    await maybe_send_daily_mission_completed(message, message.from_user.id)
 
 
 @router.message(F.text)
@@ -928,6 +969,7 @@ async def text_food(message: Message) -> None:
     await send_food_entry(message, entry)
     await maybe_send_nyam_streak(message)
     await maybe_send_achievements(message)
+    await maybe_send_daily_mission_completed(message, message.from_user.id)
 
 
 async def main() -> None:
@@ -957,9 +999,12 @@ async def reminder_loop(bot: Bot) -> None:
         today = today_date.isoformat()
         for user in db.get_users_for_reminder(current_time, today):
             try:
+                mission_status = db.get_daily_mission_status(user.telegram_id)
                 await bot.send_message(
                     user.telegram_id,
-                    "Нямметр на связи 🍽\n\nСамое время записать еду за сегодня. Можно фото или просто текстом.",
+                    "Нямметр на связи 🍽\n\n"
+                    "Самое время записать еду за сегодня. Можно фото или просто текстом.\n\n"
+                    f"{format_daily_mission(mission_status)}",
                 )
                 db.mark_reminder_sent(user.telegram_id, today)
             except Exception:

@@ -1,11 +1,20 @@
 import sqlite3
 import shutil
+import random
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
 from app.achievements import Achievement, available_achievements
+from app.missions import (
+    MISSION_ORDER,
+    MISSIONS,
+    SIMPLE_MISSION_KEYS,
+    DailyMission,
+    mission_is_completed,
+    mission_progress_text,
+)
 from app.models import FoodEntry, FoodEstimate, User
 
 
@@ -114,11 +123,27 @@ class Database:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS daily_missions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    mission_key TEXT NOT NULL,
+                    mission_date TEXT NOT NULL,
+                    is_completed INTEGER NOT NULL DEFAULT 0,
+                    completed_at TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(user_id, mission_date),
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+                """
+            )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_user_events_type_date ON user_events(event_type, created_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_food_entries_user_date ON food_entries(user_id, created_at)")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_user_achievements_user ON user_achievements(user_id, unlocked_at)"
             )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_daily_missions_user_date ON daily_missions(user_id, mission_date)")
             self._rebuild_user_streaks(conn)
 
     def _restore_best_database(self) -> None:
@@ -160,7 +185,7 @@ class Database:
                     for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
                 }
                 total = 0
-                for table in ("users", "food_entries", "user_events", "user_achievements"):
+                for table in ("users", "food_entries", "user_events", "user_achievements", "daily_missions"):
                     if table in tables:
                         total += int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
                 size = path.stat().st_size
@@ -623,6 +648,139 @@ class Database:
                 """,
                 (user.id,),
             ).fetchall()
+
+    def get_or_create_daily_mission(self, telegram_id: int) -> sqlite3.Row:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            today = conn.execute("SELECT date('now', 'localtime')").fetchone()[0]
+            row = conn.execute(
+                """
+                SELECT * FROM daily_missions
+                WHERE user_id = ? AND mission_date = ?
+                """,
+                (user.id, today),
+            ).fetchone()
+            if row:
+                return row
+
+            mission_key = self._choose_daily_mission(conn, user, today)
+            conn.execute(
+                """
+                INSERT INTO daily_missions (user_id, mission_key, mission_date)
+                VALUES (?, ?, ?)
+                """,
+                (user.id, mission_key, today),
+            )
+            return conn.execute(
+                """
+                SELECT * FROM daily_missions
+                WHERE user_id = ? AND mission_date = ?
+                """,
+                (user.id, today),
+            ).fetchone()
+
+    def _choose_daily_mission(self, conn: sqlite3.Connection, user: User, today: str) -> str:
+        days_with_nyammetr = int(
+            conn.execute(
+                """
+                SELECT CAST(julianday(?) - julianday(date(created_at, 'localtime')) AS INTEGER) + 1
+                FROM users
+                WHERE id = ?
+                """,
+                (today, user.id),
+            ).fetchone()[0]
+            or 1
+        )
+        if days_with_nyammetr <= 3:
+            candidates = list(SIMPLE_MISSION_KEYS)
+        else:
+            candidates = list(MISSION_ORDER)
+
+        if not user.calorie_target:
+            candidates = [key for key in candidates if key != "calorie_range"]
+        if not user.protein_target:
+            candidates = [key for key in candidates if key != "protein_day"]
+
+        recent_keys = {
+            row["mission_key"]
+            for row in conn.execute(
+                """
+                SELECT mission_key FROM daily_missions
+                WHERE user_id = ?
+                  AND mission_date < ?
+                  AND mission_date >= date(?, '-5 days')
+                """,
+                (user.id, today, today),
+            ).fetchall()
+        }
+        fresh_candidates = [key for key in candidates if key not in recent_keys]
+        if fresh_candidates:
+            candidates = fresh_candidates
+
+        return random.choice(candidates)
+
+    def daily_mission_context(self, telegram_id: int) -> dict[str, int | float | str | None]:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT
+                    (SELECT COUNT(*) FROM food_entries WHERE user_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')) AS food_entries_today,
+                    (SELECT COUNT(*) FROM food_entries WHERE user_id = ? AND source = 'photo' AND date(created_at, 'localtime') = date('now', 'localtime')) AS photo_entries_today,
+                    (SELECT COUNT(*) FROM food_entries WHERE user_id = ? AND source = 'text' AND date(created_at, 'localtime') = date('now', 'localtime')) AS text_entries_today,
+                    (SELECT COALESCE(SUM(calories), 0) FROM food_entries WHERE user_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')) AS calories_today,
+                    (SELECT COALESCE(SUM(protein), 0) FROM food_entries WHERE user_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')) AS protein_today,
+                    (SELECT time(MIN(created_at), 'localtime') FROM food_entries WHERE user_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')) AS first_entry_time,
+                    (SELECT COUNT(*) FROM user_events WHERE user_id = ? AND event_type = 'today_opened_evening' AND date(created_at, 'localtime') = date('now', 'localtime')) AS evening_today_opened,
+                    (SELECT COUNT(*) FROM user_events WHERE user_id = ? AND event_type = 'portion_adjustment' AND date(created_at, 'localtime') = date('now', 'localtime')) AS portion_adjustments_today
+                """,
+                (user.id, user.id, user.id, user.id, user.id, user.id, user.id, user.id),
+            ).fetchone()
+        return {
+            "food_entries_today": int(row["food_entries_today"] or 0),
+            "photo_entries_today": int(row["photo_entries_today"] or 0),
+            "text_entries_today": int(row["text_entries_today"] or 0),
+            "calories_today": float(row["calories_today"] or 0),
+            "protein_today": float(row["protein_today"] or 0),
+            "first_entry_time": row["first_entry_time"],
+            "evening_today_opened": int(row["evening_today_opened"] or 0),
+            "portion_adjustments_today": int(row["portion_adjustments_today"] or 0),
+            "calorie_target": user.calorie_target,
+            "protein_target": user.protein_target,
+        }
+
+    def get_daily_mission_status(self, telegram_id: int) -> dict[str, Any]:
+        row = self.get_or_create_daily_mission(telegram_id)
+        mission = MISSIONS[row["mission_key"]]
+        context = self.daily_mission_context(telegram_id)
+        return {
+            "mission": mission,
+            "is_completed": bool(row["is_completed"]),
+            "progress_text": mission_progress_text(mission.key, context),
+            "mission_date": row["mission_date"],
+        }
+
+    def complete_daily_mission_if_ready(self, telegram_id: int) -> DailyMission | None:
+        user = self.get_or_create_user(telegram_id)
+        row = self.get_or_create_daily_mission(telegram_id)
+        if row["is_completed"]:
+            return None
+
+        mission = MISSIONS[row["mission_key"]]
+        if not mission_is_completed(mission.key, self.daily_mission_context(telegram_id)):
+            return None
+
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE daily_missions
+                SET is_completed = 1,
+                    completed_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND user_id = ? AND is_completed = 0
+                """,
+                (row["id"], user.id),
+            )
+        return mission
 
     def stats(self) -> dict[str, int]:
         with self.connect() as conn:
