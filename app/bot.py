@@ -145,9 +145,8 @@ def format_food_saved(entry: FoodEntry, user: User, entries: list[FoodEntry], is
     if user.calorie_target:
         left = max(0, user.calorie_target - round_num(totals["calories"]))
         lines.append(f"Осталось на сегодня: {left} ккал")
-    if is_photo:
-        lines.append("Оценка по фото примерная.")
-    lines.append(f"Точность: {CONFIDENCE_LABELS.get(entry.confidence, 'средняя')}")
+    if not is_photo:
+        lines.append(f"Точность: {CONFIDENCE_LABELS.get(entry.confidence, 'средняя')}")
     return "\n".join(lines)
 
 
