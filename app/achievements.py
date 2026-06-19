@@ -1,0 +1,69 @@
+from dataclasses import dataclass
+from typing import Any
+
+
+@dataclass(frozen=True)
+class Achievement:
+    key: str
+    title: str
+    emoji: str
+    description: str
+
+
+ACHIEVEMENTS = {
+    "first_nyam": Achievement(
+        key="first_nyam",
+        title="Первый ням",
+        emoji="🥄",
+        description="Первая запись еды в дневнике. Нямметр рад знакомству!",
+    ),
+    "photo_lunch": Achievement(
+        key="photo_lunch",
+        title="Фото-обед",
+        emoji="📸",
+        description="Ты впервые добавил еду по фото. Быстро и без таблиц.",
+    ),
+    "in_rhythm": Achievement(
+        key="in_rhythm",
+        title="Вошел в ритм",
+        emoji="🔥",
+        description="Три дня с записями еды подряд. Спокойный ритм уже складывается.",
+    ),
+    "full_day": Achievement(
+        key="full_day",
+        title="Полный день",
+        emoji="🍽",
+        description="Сегодня в дневнике уже 3 записи еды. День выглядит собранно.",
+    ),
+    "target_day": Achievement(
+        key="target_day",
+        title="День в цель",
+        emoji="🎯",
+        description="Сегодня калории попали в мягкий коридор цели. Хорошее попадание.",
+    ),
+}
+
+ACHIEVEMENT_ORDER = tuple(ACHIEVEMENTS)
+
+
+def available_achievements(context: dict[str, Any]) -> list[Achievement]:
+    result: list[Achievement] = []
+    calorie_target = context.get("calorie_target")
+    today_calories = float(context.get("today_calories") or 0)
+    today_entries = int(context.get("today_entries") or 0)
+
+    if int(context.get("total_entries") or 0) >= 1:
+        result.append(ACHIEVEMENTS["first_nyam"])
+    if int(context.get("photo_entries") or 0) >= 1:
+        result.append(ACHIEVEMENTS["photo_lunch"])
+    if int(context.get("current_streak") or 0) >= 3:
+        result.append(ACHIEVEMENTS["in_rhythm"])
+    if today_entries >= 3:
+        result.append(ACHIEVEMENTS["full_day"])
+    if calorie_target and today_entries >= 2:
+        lower = float(calorie_target) * 0.9
+        upper = float(calorie_target) * 1.1
+        if lower <= today_calories <= upper:
+            result.append(ACHIEVEMENTS["target_day"])
+
+    return result

@@ -12,6 +12,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import CallbackQuery, Message
 
+from app.achievements import ACHIEVEMENTS
 from app.calorie_calculator import calculate_targets
 from app.config import load_config
 from app.database import Database
@@ -253,6 +254,14 @@ async def maybe_send_nyam_streak(message: Message) -> None:
     if streak["best_updated"]:
         lines.append("Новый рекорд!")
     await message.answer("\n".join(lines))
+
+
+async def maybe_send_achievements(message: Message) -> None:
+    for achievement in db.unlock_available_achievements(message.from_user.id):
+        await message.answer(
+            f"🏆 Ачивка открыта: {achievement.emoji} {achievement.title}\n"
+            f"{achievement.description}"
+        )
 
 
 def format_today(user: User, entries: list[FoodEntry]) -> str:
@@ -576,6 +585,7 @@ async def today_command(message: Message) -> None:
     user = db.get_or_create_user(message.from_user.id)
     entries = db.get_today_entries(message.from_user.id)
     await message.answer(format_today(user, entries))
+    await maybe_send_achievements(message)
 
 
 @router.message(Command("history"))
@@ -583,6 +593,7 @@ async def today_command(message: Message) -> None:
 async def history_command(message: Message) -> None:
     user = db.get_or_create_user(message.from_user.id)
     progress = db.get_user_progress_stats(message.from_user.id)
+    achievements = db.get_user_achievements(message.from_user.id)
     rows = db.get_daily_history(message.from_user.id)
     lines = [
         "Твой прогресс:",
@@ -592,9 +603,22 @@ async def history_command(message: Message) -> None:
         f"🍽 Всего записей еды: {progress['total_entries']}",
         f"📅 Дней с Нямметром: {progress['days_with_nyammetr']}",
         "",
-        "Последние 7 дней",
-        "",
+        "Мои ачивки:",
     ]
+    if achievements:
+        for row in achievements:
+            achievement = ACHIEVEMENTS.get(row["achievement_key"])
+            if achievement:
+                lines.append(f"{achievement.emoji} {achievement.title}")
+    else:
+        lines.append("Пока нет открытых ачивок. Они появятся сами по ходу дневника.")
+    lines.extend(
+        [
+            "",
+            "Последние 7 дней",
+            "",
+        ]
+    )
     if not rows:
         lines.append("Пока записей нет.")
     else:
@@ -883,6 +907,7 @@ async def photo_food(message: Message, bot: Bot) -> None:
     entry = db.add_food_entry(message.from_user.id, estimate, source="photo")
     await send_food_entry(message, entry, is_photo=True)
     await maybe_send_nyam_streak(message)
+    await maybe_send_achievements(message)
 
 
 @router.message(F.text)
@@ -903,6 +928,7 @@ async def text_food(message: Message) -> None:
     entry = db.add_food_entry(message.from_user.id, estimate, source="text")
     await send_food_entry(message, entry)
     await maybe_send_nyam_streak(message)
+    await maybe_send_achievements(message)
 
 
 async def main() -> None:

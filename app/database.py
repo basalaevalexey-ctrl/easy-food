@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
+from app.achievements import Achievement, available_achievements
 from app.models import FoodEntry, FoodEstimate, User
 
 
@@ -101,8 +102,23 @@ class Database:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_achievements (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    achievement_key TEXT NOT NULL,
+                    unlocked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(user_id, achievement_key),
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+                """
+            )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_user_events_type_date ON user_events(event_type, created_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_food_entries_user_date ON food_entries(user_id, created_at)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_user_achievements_user ON user_achievements(user_id, unlocked_at)"
+            )
             self._rebuild_user_streaks(conn)
 
     def _restore_best_database(self) -> None:
@@ -144,7 +160,7 @@ class Database:
                     for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
                 }
                 total = 0
-                for table in ("users", "food_entries", "user_events"):
+                for table in ("users", "food_entries", "user_events", "user_achievements"):
                     if table in tables:
                         total += int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
                 size = path.stat().st_size
@@ -549,6 +565,64 @@ class Database:
             "total_entries": int(total_entries),
             "days_with_nyammetr": max(1, int(days_with_nyammetr or 1)),
         }
+
+    def achievement_context(self, telegram_id: int) -> dict[str, int | float | None]:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT
+                    (SELECT COUNT(*) FROM food_entries WHERE user_id = ?) AS total_entries,
+                    (SELECT COUNT(*) FROM food_entries WHERE user_id = ? AND source = 'photo') AS photo_entries,
+                    (
+                        SELECT COUNT(*) FROM food_entries
+                        WHERE user_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')
+                    ) AS today_entries,
+                    (
+                        SELECT COALESCE(SUM(calories), 0) FROM food_entries
+                        WHERE user_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')
+                    ) AS today_calories
+                """,
+                (user.id, user.id, user.id, user.id),
+            ).fetchone()
+        return {
+            "total_entries": int(row["total_entries"] or 0),
+            "photo_entries": int(row["photo_entries"] or 0),
+            "today_entries": int(row["today_entries"] or 0),
+            "today_calories": float(row["today_calories"] or 0),
+            "current_streak": int(user.current_streak or 0),
+            "calorie_target": user.calorie_target,
+        }
+
+    def unlock_available_achievements(self, telegram_id: int) -> list[Achievement]:
+        user = self.get_or_create_user(telegram_id)
+        achievements = available_achievements(self.achievement_context(telegram_id))
+        unlocked: list[Achievement] = []
+        with self.connect() as conn:
+            for achievement in achievements:
+                cursor = conn.execute(
+                    """
+                    INSERT OR IGNORE INTO user_achievements (user_id, achievement_key)
+                    VALUES (?, ?)
+                    """,
+                    (user.id, achievement.key),
+                )
+                if cursor.rowcount:
+                    unlocked.append(achievement)
+        return unlocked
+
+    def get_user_achievements(self, telegram_id: int) -> list[sqlite3.Row]:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            return conn.execute(
+                """
+                SELECT achievement_key, unlocked_at
+                FROM user_achievements
+                WHERE user_id = ?
+                ORDER BY unlocked_at ASC, id ASC
+                """,
+                (user.id,),
+            ).fetchall()
 
     def stats(self) -> dict[str, int]:
         with self.connect() as conn:
