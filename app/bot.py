@@ -267,8 +267,7 @@ def format_daily_mission(status: dict) -> str:
     mission = status["mission"]
     return (
         f"🎯 Миссия дня: {mission.emoji} {mission.title}\n"
-        f"{mission.description}\n"
-        f"Прогресс: {status['progress_text']}"
+        f"{mission.description}"
     )
 
 
