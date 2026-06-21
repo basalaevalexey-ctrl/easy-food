@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from io import BytesIO
 
 from aiogram import Bot, Dispatcher, F, Router
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -19,6 +19,7 @@ from app.database import Database
 from app.keyboards import (
     admin_keyboard,
     activity_keyboard,
+    activation_keyboard,
     food_actions,
     goal_keyboard,
     instruction_keyboard,
@@ -106,6 +107,31 @@ DEFAULT_ADMIN_TOTAL_BASELINE_OFFSET = {
     "users_with_reminders_total": 0,
     "users_two_day_streak": 0,
 }
+
+ACTIVATION_TEXTS = {
+    1: (
+        "Нямметр на связи 🍽\n\n"
+        "Чтобы попробовать бота, просто отправь фото еды или напиши, что ел сегодня.\n\n"
+        "Например:\n"
+        "“омлет, кофе и банан”\n\n"
+        "Я примерно посчитаю калории и БЖУ."
+    ),
+    2: (
+        "Можно начать без настроек 👋\n\n"
+        "Просто скинь фото еды — Нямметр примерно посчитает калории и БЖУ.\n\n"
+        "Цель, вес и норму калорий можно настроить потом."
+    ),
+    3: (
+        "Кажется, ты пока не попробовал Нямметр.\n\n"
+        "Можно начать с самого простого: отправь любое фото еды, а я покажу, как работает расчет.\n\n"
+        "Если неактуально — просто не буду больше напоминать."
+    ),
+}
+
+
+def is_activation_window(now: datetime) -> bool:
+    current = now.time()
+    return datetime.strptime("09:00", "%H:%M").time() <= current <= datetime.strptime("23:30", "%H:%M").time()
 
 
 def round_num(value: float) -> int:
@@ -710,6 +736,7 @@ async def setup_goal_start(message: Message, state: FSMContext) -> None:
     await cleanup_flow_messages(state, message.chat.id, message.bot)
     await state.clear()
     await safe_delete_message(message)
+    db.record_useful_action(message.from_user.id, "goal_setup_started")
     await answer_clean(message, state, "Начнем с простого. Укажи пол:", reply_markup=sex_keyboard())
 
 
@@ -717,7 +744,31 @@ async def setup_goal_start(message: Message, state: FSMContext) -> None:
 async def setup_goal_start_callback(callback: CallbackQuery, state: FSMContext) -> None:
     await cleanup_flow_messages(state, callback.message.chat.id, callback.bot)
     await state.clear()
+    db.record_useful_action(callback.from_user.id, "goal_setup_started")
     await callback_answer_clean(callback, state, "Начнем с простого. Укажи пол:", reply_markup=sex_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("activation:"))
+async def activation_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    action = callback.data.split(":")[-1]
+    if action == "disable":
+        db.disable_activation(callback.from_user.id)
+        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.message.answer("Хорошо, больше не буду напоминать про старт 💚")
+        await callback.answer()
+        return
+    if action == "setup":
+        await cleanup_flow_messages(state, callback.message.chat.id, callback.bot)
+        await state.clear()
+        db.record_useful_action(callback.from_user.id, "goal_setup_started")
+        await callback_answer_clean(callback, state, "Начнем с простого. Укажи пол:", reply_markup=sex_keyboard())
+        await callback.answer()
+        return
+    if action in {"photo", "try"}:
+        await callback.message.answer("Отправь фото еды прямо сюда — я примерно посчитаю калории и БЖУ 🍽")
+    elif action == "text":
+        await callback.message.answer("Напиши, что ел сегодня. Например: омлет, кофе и банан ✍️")
     await callback.answer()
 
 
@@ -935,6 +986,7 @@ async def photo_food(message: Message, bot: Bot) -> None:
         await message.answer("Не смог распознать, попробуй еще раз или опиши еду текстом.")
         return
     entry = db.add_food_entry(message.from_user.id, estimate, source="photo")
+    db.record_useful_action(message.from_user.id, "food_photo_added")
     await send_food_entry(message, entry, is_photo=True)
     await maybe_send_nyam_streak(message)
     await maybe_send_achievements(message)
@@ -957,6 +1009,7 @@ async def text_food(message: Message) -> None:
         await message.answer("Не смог распознать, попробуй еще раз или опиши еду текстом.")
         return
     entry = db.add_food_entry(message.from_user.id, estimate, source="text")
+    db.record_useful_action(message.from_user.id, "food_text_added")
     await send_food_entry(message, entry)
     await maybe_send_nyam_streak(message)
     await maybe_send_achievements(message)
@@ -1000,6 +1053,20 @@ async def reminder_loop(bot: Bot) -> None:
                 db.mark_reminder_sent(user.telegram_id, today)
             except Exception:
                 logger.exception("Failed to send reminder to user %s", user.telegram_id)
+        if is_activation_window(now):
+            for user, step in db.get_users_for_activation():
+                try:
+                    await bot.send_message(
+                        user.telegram_id,
+                        ACTIVATION_TEXTS[step],
+                        reply_markup=activation_keyboard(step),
+                    )
+                    db.mark_activation_sent(user.telegram_id, step)
+                except TelegramForbiddenError:
+                    db.disable_activation(user.telegram_id)
+                    logger.info("User %s blocked bot, activation disabled", user.telegram_id)
+                except Exception:
+                    logger.exception("Failed to send activation message to user %s", user.telegram_id)
         if current_time == config.auto_push_time:
             yesterday = (today_date - timedelta(days=1)).isoformat()
             day_before_yesterday = (today_date - timedelta(days=2)).isoformat()

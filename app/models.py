@@ -20,6 +20,9 @@ class User:
     current_streak: int
     best_streak: int
     last_active_date: str | None
+    activation_step: int
+    last_activation_message_at: str | None
+    activation_disabled: bool
     created_at: datetime
 
 

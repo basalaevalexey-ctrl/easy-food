@@ -63,6 +63,9 @@ class Database:
                     current_streak INTEGER NOT NULL DEFAULT 0,
                     best_streak INTEGER NOT NULL DEFAULT 0,
                     last_active_date TEXT,
+                    activation_step INTEGER NOT NULL DEFAULT 0,
+                    last_activation_message_at TEXT,
+                    activation_disabled INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """
@@ -73,6 +76,9 @@ class Database:
             self._ensure_column(conn, "users", "current_streak", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(conn, "users", "best_streak", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(conn, "users", "last_active_date", "TEXT")
+            self._ensure_column(conn, "users", "activation_step", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(conn, "users", "last_activation_message_at", "TEXT")
+            self._ensure_column(conn, "users", "activation_disabled", "INTEGER NOT NULL DEFAULT 0")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS app_meta (
@@ -322,6 +328,74 @@ class Database:
 
     def record_start(self, telegram_id: int) -> User:
         return self.record_user_event(telegram_id, "start")
+
+    def record_useful_action(self, telegram_id: int, event_type: str) -> User:
+        return self.record_user_event(telegram_id, event_type)
+
+    def disable_activation(self, telegram_id: int) -> None:
+        self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE users SET activation_disabled = 1 WHERE telegram_id = ?",
+                (telegram_id,),
+            )
+
+    def get_users_for_activation(self) -> list[tuple[User, int]]:
+        useful_events = ("food_photo_added", "food_text_added", "goal_setup_started", "goal_set")
+        placeholders = ",".join("?" for _ in useful_events)
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"""
+                WITH latest_start AS (
+                    SELECT user_id, MAX(created_at) AS started_at
+                    FROM user_events
+                    WHERE event_type = 'start'
+                    GROUP BY user_id
+                )
+                SELECT users.*, users.activation_step + 1 AS next_activation_step
+                FROM users
+                JOIN latest_start ON latest_start.user_id = users.id
+                WHERE users.activation_disabled = 0
+                  AND users.activation_step < 3
+                  AND NOT EXISTS (
+                      SELECT 1 FROM user_events useful
+                      WHERE useful.user_id = users.id
+                        AND useful.event_type IN ({placeholders})
+                  )
+                  AND (
+                      (
+                          users.activation_step = 0
+                          AND datetime('now', 'localtime') >= datetime(latest_start.started_at, 'localtime', '+4 hours')
+                      )
+                      OR (
+                          users.activation_step = 1
+                          AND users.last_activation_message_at IS NOT NULL
+                          AND datetime('now', 'localtime') >= datetime(users.last_activation_message_at, '+24 hours')
+                      )
+                      OR (
+                          users.activation_step = 2
+                          AND users.last_activation_message_at IS NOT NULL
+                          AND datetime('now', 'localtime') >= datetime(users.last_activation_message_at, '+3 days')
+                      )
+                  )
+                ORDER BY users.id ASC
+                """,
+                useful_events,
+            ).fetchall()
+            return [(self._user_from_row(row), int(row["next_activation_step"])) for row in rows]
+
+    def mark_activation_sent(self, telegram_id: int, step: int) -> None:
+        self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE users
+                SET activation_step = ?,
+                    last_activation_message_at = datetime('now', 'localtime')
+                WHERE telegram_id = ?
+                """,
+                (step, telegram_id),
+            )
 
     def set_reminder_time(self, telegram_id: int, reminder_time: str | None) -> User:
         self.get_or_create_user(telegram_id)
@@ -947,6 +1021,9 @@ class Database:
             current_streak=row["current_streak"],
             best_streak=row["best_streak"],
             last_active_date=row["last_active_date"],
+            activation_step=row["activation_step"],
+            last_activation_message_at=row["last_activation_message_at"],
+            activation_disabled=bool(row["activation_disabled"]),
             created_at=datetime.fromisoformat(row["created_at"]),
         )
 

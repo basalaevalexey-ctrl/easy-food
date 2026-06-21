@@ -101,6 +101,27 @@ def instruction_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def activation_keyboard(step: int) -> InlineKeyboardMarkup:
+    if step == 1:
+        keyboard = [
+            [InlineKeyboardButton(text="📸 Отправить фото еды", callback_data="activation:photo")],
+            [InlineKeyboardButton(text="✍️ Написать текстом", callback_data="activation:text")],
+            [InlineKeyboardButton(text="🎯 Настроить цель", callback_data="activation:setup")],
+        ]
+    elif step == 2:
+        keyboard = [
+            [InlineKeyboardButton(text="🍽 Попробовать на одной еде", callback_data="activation:try")],
+            [InlineKeyboardButton(text="🎯 Настроить цель", callback_data="activation:setup")],
+            [InlineKeyboardButton(text="🔕 Не напоминать", callback_data="activation:disable")],
+        ]
+    else:
+        keyboard = [
+            [InlineKeyboardButton(text="📸 Попробовать", callback_data="activation:photo")],
+            [InlineKeyboardButton(text="🔕 Не напоминать", callback_data="activation:disable")],
+        ]
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
 def food_actions(entry_id: int, can_fix_dish: bool = False) -> InlineKeyboardMarkup:
     keyboard = [
         [
