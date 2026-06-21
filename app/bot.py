@@ -981,7 +981,7 @@ async def main() -> None:
     bot = Bot(token=config.bot_token)
     dispatcher = Dispatcher(storage=MemoryStorage())
     dispatcher.include_router(router)
-    logger.info("Bot started with database: %s", config.database_path)
+    logger.info("Bot started with database: %s, timezone: %s", config.database_path, config.timezone)
     reminder_task = asyncio.create_task(reminder_loop(bot))
     try:
         await dispatcher.start_polling(bot)

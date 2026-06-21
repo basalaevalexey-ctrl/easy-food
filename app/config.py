@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import json
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -20,6 +21,7 @@ class Config:
     database_backup_paths: tuple[Path, ...]
     openai_model: str
     auto_push_time: str
+    timezone: str
     admin_total_baseline: dict[str, int]
     admin_total_baseline_offset: dict[str, int]
 
@@ -82,8 +84,20 @@ def _parse_int_dict(raw: str) -> dict[str, int]:
     return result
 
 
+def _app_timezone() -> str:
+    return os.getenv("APP_TIMEZONE", os.getenv("TZ", "Europe/Moscow")).strip() or "Europe/Moscow"
+
+
+def _apply_process_timezone(timezone: str) -> None:
+    os.environ["TZ"] = timezone
+    if hasattr(time, "tzset"):
+        time.tzset()
+
+
 def load_config() -> Config:
     database_path = _database_path()
+    timezone = _app_timezone()
+    _apply_process_timezone(timezone)
     return Config(
         bot_token=os.getenv("BOT_TOKEN", ""),
         openai_api_key=os.getenv("OPENAI_API_KEY", ""),
@@ -93,6 +107,7 @@ def load_config() -> Config:
         database_backup_paths=_database_backup_paths(database_path),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         auto_push_time=os.getenv("AUTO_PUSH_TIME", "19:00"),
+        timezone=timezone,
         admin_total_baseline=_parse_int_dict(os.getenv("ADMIN_TOTAL_BASELINE", "")),
         admin_total_baseline_offset=_parse_int_dict(os.getenv("ADMIN_TOTAL_BASELINE_OFFSET", "")),
     )
