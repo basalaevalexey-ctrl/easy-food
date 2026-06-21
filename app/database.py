@@ -341,11 +341,9 @@ class Database:
             )
 
     def get_users_for_activation(self) -> list[tuple[User, int]]:
-        useful_events = ("food_photo_added", "food_text_added", "goal_setup_started", "goal_set")
-        placeholders = ",".join("?" for _ in useful_events)
         with self.connect() as conn:
             rows = conn.execute(
-                f"""
+                """
                 WITH latest_start AS (
                     SELECT user_id, MAX(created_at) AS started_at
                     FROM user_events
@@ -358,9 +356,9 @@ class Database:
                 WHERE users.activation_disabled = 0
                   AND users.activation_step < 3
                   AND NOT EXISTS (
-                      SELECT 1 FROM user_events useful
-                      WHERE useful.user_id = users.id
-                        AND useful.event_type IN ({placeholders})
+                      SELECT 1 FROM user_events actions
+                      WHERE actions.user_id = users.id
+                        AND actions.event_type != 'start'
                   )
                   AND (
                       (
@@ -380,7 +378,6 @@ class Database:
                   )
                 ORDER BY users.id ASC
                 """,
-                useful_events,
             ).fetchall()
             return [(self._user_from_row(row), int(row["next_activation_step"])) for row in rows]
 

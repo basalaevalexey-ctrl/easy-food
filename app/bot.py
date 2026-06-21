@@ -544,6 +544,7 @@ async def start(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "reminder:choose")
 async def reminder_choose(callback: CallbackQuery, state: FSMContext) -> None:
+    db.record_user_event(callback.from_user.id, "reminder_choose_clicked")
     await callback_answer_clean(callback, state, "Выбери удобное время:", reply_markup=reminder_time_keyboard())
     await callback.answer()
 
@@ -552,6 +553,7 @@ async def reminder_choose(callback: CallbackQuery, state: FSMContext) -> None:
 async def reminder_disable(callback: CallbackQuery, state: FSMContext) -> None:
     await cleanup_flow_messages(state, callback.message.chat.id, callback.bot)
     await state.clear()
+    db.record_user_event(callback.from_user.id, "reminder_disabled")
     db.set_reminder_time(callback.from_user.id, None)
     await callback.message.answer("Хорошо, не буду напоминать.")
     await callback.answer()
@@ -562,6 +564,7 @@ async def reminder_time(callback: CallbackQuery, state: FSMContext) -> None:
     await cleanup_flow_messages(state, callback.message.chat.id, callback.bot)
     await state.clear()
     reminder_time_value = callback.data.removeprefix("reminder:time:")
+    db.record_user_event(callback.from_user.id, "reminder_time_set")
     db.set_reminder_time(callback.from_user.id, reminder_time_value)
     await callback.message.answer(
         f"Договорились! Буду напоминать про учет еды ежедневно в {reminder_time_value}."
@@ -571,6 +574,7 @@ async def reminder_time(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "reminder:custom")
 async def reminder_custom(callback: CallbackQuery, state: FSMContext) -> None:
+    db.record_user_event(callback.from_user.id, "reminder_custom_clicked")
     await state.set_state(ReminderSetup.custom_time)
     await callback_answer_clean(callback, state, "Напиши время в формате 08:30 или 19:00.")
     await callback.answer()
@@ -584,6 +588,7 @@ async def reminder_custom_apply(message: Message, state: FSMContext) -> None:
         await answer_clean(message, state, "Не понял время. Напиши, например: 08:30 или 19:00.")
         return
     await cleanup_flow_messages(state, message.chat.id, message.bot)
+    db.record_user_event(message.from_user.id, "reminder_time_set")
     db.set_reminder_time(message.from_user.id, reminder_time_value)
     await state.clear()
     await message.answer(f"Договорились! Буду напоминать про учет еды ежедневно в {reminder_time_value}.")
@@ -592,6 +597,7 @@ async def reminder_custom_apply(message: Message, state: FSMContext) -> None:
 @router.message(Command("help"))
 @router.message(F.text == "Инструкция")
 async def help_command(message: Message) -> None:
+    db.record_user_event(message.from_user.id, "instruction_opened")
     await message.answer(
         "Инструкция по Нямметру 🍽\n\n"
         "1. Как добавить еду\n"
@@ -623,6 +629,7 @@ async def help_command(message: Message) -> None:
 @router.message(Command("today"))
 @router.message(F.text == "Сегодня")
 async def today_command(message: Message) -> None:
+    db.record_user_event(message.from_user.id, "today_opened")
     if datetime.now().hour >= 18:
         db.record_user_event(message.from_user.id, "today_opened_evening")
     user = db.get_or_create_user(message.from_user.id)
@@ -636,6 +643,7 @@ async def today_command(message: Message) -> None:
 
 @router.message(Command("mission"))
 async def mission_command(message: Message) -> None:
+    db.record_user_event(message.from_user.id, "mission_opened")
     await maybe_send_daily_mission_completed(message, message.from_user.id)
     await message.answer(format_daily_mission(db.get_daily_mission_status(message.from_user.id)))
 
@@ -643,6 +651,7 @@ async def mission_command(message: Message) -> None:
 @router.message(Command("history"))
 @router.message(F.text == "Дневник")
 async def history_command(message: Message) -> None:
+    db.record_user_event(message.from_user.id, "history_opened")
     user = db.get_or_create_user(message.from_user.id)
     progress = db.get_user_progress_stats(message.from_user.id)
     achievements = db.get_user_achievements(message.from_user.id)
@@ -694,6 +703,7 @@ async def admin_command(message: Message) -> None:
     if not is_admin(message.from_user.id):
         await message.answer("Команда только для админа.")
         return
+    db.record_user_event(message.from_user.id, "admin_opened")
     db.get_or_create_user(message.from_user.id)
     await message.answer(format_admin_period("Общее", None), reply_markup=admin_keyboard())
 
@@ -709,6 +719,7 @@ async def admin_callback(callback: CallbackQuery) -> None:
         await callback.answer("Команда только для админа.", show_alert=True)
         return
 
+    db.record_user_event(callback.from_user.id, "admin_clicked")
     action = callback.data.split(":")[-1]
     if action == "today":
         text = format_admin_today()
@@ -753,11 +764,13 @@ async def setup_goal_start_callback(callback: CallbackQuery, state: FSMContext) 
 async def activation_callback(callback: CallbackQuery, state: FSMContext) -> None:
     action = callback.data.split(":")[-1]
     if action == "disable":
+        db.record_user_event(callback.from_user.id, "activation_disabled")
         db.disable_activation(callback.from_user.id)
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer("Хорошо, больше не буду напоминать про старт 💚")
         await callback.answer()
         return
+    db.record_user_event(callback.from_user.id, "activation_prompt_clicked")
     if action == "setup":
         await cleanup_flow_messages(state, callback.message.chat.id, callback.bot)
         await state.clear()
