@@ -96,7 +96,7 @@ def admin_keyboard() -> InlineKeyboardMarkup:
 def instruction_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Поддержка", url="https://t.me/+5wTs-r8KGN9hZjcy")],
+            [InlineKeyboardButton(text="Группа Нямметра", url="https://t.me/nyammetr_group")],
         ]
     )
 
