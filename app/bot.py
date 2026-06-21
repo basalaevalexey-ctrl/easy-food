@@ -63,12 +63,6 @@ class ReminderSetup(StatesGroup):
     custom_time = State()
 
 
-CONFIDENCE_LABELS = {
-    "low": "низкая",
-    "medium": "средняя",
-    "high": "высокая",
-}
-
 GOAL_LABELS = {
     "lose": "похудеть",
     "maintain": "поддерживать",
@@ -145,8 +139,6 @@ def format_food_saved(entry: FoodEntry, user: User, entries: list[FoodEntry], is
     if user.calorie_target:
         left = max(0, user.calorie_target - round_num(totals["calories"]))
         lines.append(f"Осталось на сегодня: {left} ккал")
-    if not is_photo:
-        lines.append(f"Точность: {CONFIDENCE_LABELS.get(entry.confidence, 'средняя')}")
     return "\n".join(lines)
 
 
