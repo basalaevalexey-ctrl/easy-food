@@ -532,7 +532,7 @@ async def start(message: Message, state: FSMContext) -> None:
         "Помогаю считать калории без весов и таблиц.\n\n"
         "Просто отправь фото еды или напиши, что съел — я примерно посчитаю калории, белки, жиры и углеводы.\n\n"
         "Важно: это примерная оценка, не медицинская рекомендация.",
-        reply_markup=main_menu(has_goal=bool(user.calorie_target)),
+        reply_markup=main_menu(has_goal=bool(user.calorie_target), miniapp_url=config.miniapp_url),
     )
     await answer_clean(
         message,
@@ -861,7 +861,7 @@ async def setup_activity(callback: CallbackQuery, state: FSMContext) -> None:
         f"Активность: {ACTIVITY_LABELS[data['activity']]}\n"
         f"Дневная норма: {calorie_target} ккал\n"
         f"Белок: {protein_target} г в день",
-        reply_markup=main_menu(has_goal=True),
+        reply_markup=main_menu(has_goal=True, miniapp_url=config.miniapp_url),
     )
     reminder_message = await callback.message.answer(
         "Во сколько тебе обычно напоминать про учет еды?",
