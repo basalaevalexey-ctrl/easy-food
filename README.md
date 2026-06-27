@@ -45,8 +45,7 @@ OPENAI_MODEL=gpt-4o-mini
 DATABASE_PATH=/app/data/calories.sqlite3
 AUTO_PUSH_TIME=19:00
 APP_TIMEZONE=Europe/Moscow
-WEBAPP_URL=
-MINIAPP_URL=
+MINIAPP_URL=https://basalaevalexey-ctrl.github.io/nyammetr-miniapp/
 ```
 
 `ADMIN_IDS` можно оставить пустым, если команда `/stats` не нужна.
@@ -63,7 +62,7 @@ DATABASE_PATH=/app/data/calories.sqlite3
 
 `AUTO_PUSH_TIME` - время ежедневного мотивационного пуша для пользователей с целью, которые были активны два дня подряд, но еще не заходили сегодня.
 
-`WEBAPP_URL` включает кнопку "Открыть Нямметр" в главном меню Telegram. На BotHost используйте URL, который он выдает для миниаппа. `MINIAPP_URL` можно указать вручную, если нужно переопределить эту ссылку.
+`MINIAPP_URL` включает кнопку "Открыть Нямметр" в главном меню Telegram. Оставьте пустым, если миниапп пока не опубликован.
 
 `APP_TIMEZONE` - таймзона, по которой считаются напоминания, дни дневника, миссии и стрики. Для Москвы оставьте `Europe/Moscow`.
 
