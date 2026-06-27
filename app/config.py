@@ -9,6 +9,7 @@ import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
+DEFAULT_WEBAPP_URL = "https://bot_1781113957_1206-alioosha.bothost.tech/"
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,10 @@ def _app_timezone() -> str:
     return os.getenv("APP_TIMEZONE", os.getenv("TZ", "Europe/Moscow")).strip() or "Europe/Moscow"
 
 
+def _webapp_url() -> str:
+    return os.getenv("WEBAPP_URL", DEFAULT_WEBAPP_URL).strip() or DEFAULT_WEBAPP_URL
+
+
 def _apply_process_timezone(timezone: str) -> None:
     os.environ["TZ"] = timezone
     if hasattr(time, "tzset"):
@@ -116,7 +121,7 @@ def load_config() -> Config:
         openai_api_key=os.getenv("OPENAI_API_KEY", ""),
         admin_ids=_parse_admin_ids(os.getenv("ADMIN_IDS", "")),
         port=_int_env("PORT", 3000),
-        webapp_url=os.getenv("WEBAPP_URL", "").strip(),
+        webapp_url=_webapp_url(),
         public_dir=BASE_DIR / "public",
         database_path=database_path,
         legacy_database_paths=_legacy_database_paths(),
