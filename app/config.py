@@ -16,6 +16,9 @@ class Config:
     bot_token: str
     openai_api_key: str
     admin_ids: set[int]
+    port: int
+    webapp_url: str
+    public_dir: Path
     database_path: Path
     legacy_database_paths: tuple[Path, ...]
     database_backup_paths: tuple[Path, ...]
@@ -84,6 +87,16 @@ def _parse_int_dict(raw: str) -> dict[str, int]:
     return result
 
 
+def _int_env(name: str, fallback: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return fallback
+    try:
+        return int(raw)
+    except ValueError:
+        return fallback
+
+
 def _app_timezone() -> str:
     return os.getenv("APP_TIMEZONE", os.getenv("TZ", "Europe/Moscow")).strip() or "Europe/Moscow"
 
@@ -102,6 +115,9 @@ def load_config() -> Config:
         bot_token=os.getenv("BOT_TOKEN", ""),
         openai_api_key=os.getenv("OPENAI_API_KEY", ""),
         admin_ids=_parse_admin_ids(os.getenv("ADMIN_IDS", "")),
+        port=_int_env("PORT", 3000),
+        webapp_url=os.getenv("WEBAPP_URL", "").strip(),
+        public_dir=BASE_DIR / "public",
         database_path=database_path,
         legacy_database_paths=_legacy_database_paths(),
         database_backup_paths=_database_backup_paths(database_path),

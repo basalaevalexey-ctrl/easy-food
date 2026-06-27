@@ -2,7 +2,10 @@ import asyncio
 import logging
 import re
 from datetime import datetime, timedelta
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
+import threading
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
@@ -10,7 +13,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, MenuButtonWebApp, Message, WebAppInfo
 
 from app.achievements import ACHIEVEMENTS
 from app.calorie_calculator import calculate_targets
@@ -532,7 +535,7 @@ async def start(message: Message, state: FSMContext) -> None:
         "Помогаю считать калории без весов и таблиц.\n\n"
         "Просто отправь фото еды или напиши, что съел — я примерно посчитаю калории, белки, жиры и углеводы.\n\n"
         "Важно: это примерная оценка, не медицинская рекомендация.",
-        reply_markup=main_menu(has_goal=bool(user.calorie_target)),
+        reply_markup=main_menu(has_goal=bool(user.calorie_target), webapp_url=config.webapp_url),
     )
     await answer_clean(
         message,
@@ -861,7 +864,7 @@ async def setup_activity(callback: CallbackQuery, state: FSMContext) -> None:
         f"Активность: {ACTIVITY_LABELS[data['activity']]}\n"
         f"Дневная норма: {calorie_target} ккал\n"
         f"Белок: {protein_target} г в день",
-        reply_markup=main_menu(has_goal=True),
+        reply_markup=main_menu(has_goal=True, webapp_url=config.webapp_url),
     )
     reminder_message = await callback.message.answer(
         "Во сколько тебе обычно напоминать про учет еды?",
@@ -1040,12 +1043,36 @@ async def main() -> None:
     dispatcher = Dispatcher(storage=MemoryStorage())
     dispatcher.include_router(router)
     logger.info("Bot started with database: %s, timezone: %s", config.database_path, config.timezone)
+    web_server = await start_miniapp_server()
+    await configure_bot_ui(bot)
     reminder_task = asyncio.create_task(reminder_loop(bot))
     try:
         await dispatcher.start_polling(bot)
     finally:
         reminder_task.cancel()
+        web_server.shutdown()
+        web_server.server_close()
         await bot.session.close()
+
+
+async def start_miniapp_server() -> ThreadingHTTPServer:
+    handler = partial(SimpleHTTPRequestHandler, directory=str(config.public_dir))
+    server = ThreadingHTTPServer(("0.0.0.0", config.port), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    logger.info("Mini app server started on http://0.0.0.0:%s", config.port)
+    return server
+
+
+async def configure_bot_ui(bot: Bot) -> None:
+    if not config.webapp_url:
+        return
+    await bot.set_chat_menu_button(
+        menu_button=MenuButtonWebApp(
+            text="Нямметр",
+            web_app=WebAppInfo(url=config.webapp_url),
+        )
+    )
 
 
 async def reminder_loop(bot: Bot) -> None:

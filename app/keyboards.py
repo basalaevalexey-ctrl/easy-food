@@ -1,14 +1,17 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
 
 
-def main_menu(has_goal: bool = False) -> ReplyKeyboardMarkup:
+def main_menu(has_goal: bool = False, webapp_url: str = "") -> ReplyKeyboardMarkup:
     goal_button_text = "Изменить цель/параметры" if has_goal else "Настроить цель"
+    keyboard = [
+        [KeyboardButton(text=goal_button_text)],
+        [KeyboardButton(text="Сегодня"), KeyboardButton(text="Дневник")],
+        [KeyboardButton(text="Инструкция")],
+    ]
+    if webapp_url:
+        keyboard.insert(0, [KeyboardButton(text="Открыть Нямметр", web_app=WebAppInfo(url=webapp_url))])
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=goal_button_text)],
-            [KeyboardButton(text="Сегодня"), KeyboardButton(text="Дневник")],
-            [KeyboardButton(text="Инструкция")],
-        ],
+        keyboard=keyboard,
         resize_keyboard=True,
         input_field_placeholder="Фото еды или что вы съели",
     )
