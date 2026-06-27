@@ -109,7 +109,7 @@ def load_config() -> Config:
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         auto_push_time=os.getenv("AUTO_PUSH_TIME", "19:00"),
         timezone=timezone,
-        miniapp_url=os.getenv("MINIAPP_URL", "").strip(),
+        miniapp_url=(os.getenv("MINIAPP_URL") or os.getenv("WEBAPP_URL") or "").strip(),
         admin_total_baseline=_parse_int_dict(os.getenv("ADMIN_TOTAL_BASELINE", "")),
         admin_total_baseline_offset=_parse_int_dict(os.getenv("ADMIN_TOTAL_BASELINE_OFFSET", "")),
     )
