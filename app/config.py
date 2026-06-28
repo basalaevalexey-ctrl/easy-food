@@ -9,7 +9,7 @@ import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
-DEFAULT_WEBAPP_URL = "https://bot-1781113957-1206-alioosha.bothost.tech/"
+DEFAULT_WEBAPP_URL = ""
 
 
 @dataclass(frozen=True)

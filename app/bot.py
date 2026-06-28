@@ -13,7 +13,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import CallbackQuery, MenuButtonWebApp, Message, WebAppInfo
+from aiogram.types import CallbackQuery, MenuButtonDefault, MenuButtonWebApp, Message, WebAppInfo
 
 from app.achievements import ACHIEVEMENTS
 from app.calorie_calculator import calculate_targets
@@ -1066,6 +1066,7 @@ async def start_miniapp_server() -> ThreadingHTTPServer:
 
 async def configure_bot_ui(bot: Bot) -> None:
     if not config.webapp_url:
+        await bot.set_chat_menu_button(menu_button=MenuButtonDefault())
         return
     await bot.set_chat_menu_button(
         menu_button=MenuButtonWebApp(
