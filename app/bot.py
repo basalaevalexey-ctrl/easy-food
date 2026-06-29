@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -250,6 +252,26 @@ def build_miniapp_payload(telegram_user: dict) -> dict:
     }
 
 
+async def add_miniapp_food_text(telegram_user: dict, text: str) -> dict:
+    telegram_id = int(telegram_user["id"])
+    estimate = await food_ai.estimate_text(text)
+    entry = db.add_food_entry(telegram_id, estimate, source="text")
+    db.record_useful_action(telegram_id, "food_text_added")
+    db.unlock_available_achievements(telegram_id)
+    db.complete_daily_mission_if_ready(telegram_id)
+    return {"entry": entry, "state": build_miniapp_payload(telegram_user)}
+
+
+async def add_miniapp_food_photo(telegram_user: dict, image_bytes: bytes, mime_type: str) -> dict:
+    telegram_id = int(telegram_user["id"])
+    estimate = await food_ai.estimate_image(image_bytes, mime_type=mime_type)
+    entry = db.add_food_entry(telegram_id, estimate, source="photo")
+    db.record_useful_action(telegram_id, "food_photo_added")
+    db.unlock_available_achievements(telegram_id)
+    db.complete_daily_mission_if_ready(telegram_id)
+    return {"entry": entry, "state": build_miniapp_payload(telegram_user)}
+
+
 class MiniAppApiHandler(BaseHTTPRequestHandler):
     server_version = "NyammetrMiniApi/1.0"
 
@@ -261,7 +283,7 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Access-Control-Allow-Origin", origin)
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
@@ -269,6 +291,38 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
     def _send_json(self, status: int, payload: dict) -> None:
         self._send_headers(status)
         self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+
+    def _read_json(self) -> dict:
+        length = int(self.headers.get("Content-Length") or 0)
+        if length <= 0:
+            return {}
+        if length > 8 * 1024 * 1024:
+            raise ValueError("request_too_large")
+        raw = self.rfile.read(length)
+        return json.loads(raw.decode("utf-8"))
+
+    def _telegram_user(self) -> dict | None:
+        authorization = self.headers.get("Authorization", "")
+        init_data = ""
+        if authorization.lower().startswith("tma "):
+            init_data = authorization[4:].strip()
+        if not init_data:
+            query = dict(parse_qsl(urlparse(self.path).query, keep_blank_values=True))
+            init_data = query.get("initData", "")
+        return parse_telegram_init_data(init_data)
+
+    def _entry_payload(self, entry: FoodEntry) -> dict:
+        return {
+            "id": entry.id,
+            "title": entry.title,
+            "description": entry.description,
+            "calories": round_num(entry.calories),
+            "protein": round_num(entry.protein),
+            "fat": round_num(entry.fat),
+            "carbs": round_num(entry.carbs),
+            "source": entry.source,
+            "created_at": _json_safe(entry.created_at),
+        }
 
     def do_OPTIONS(self) -> None:
         self._send_headers(204)
@@ -284,20 +338,61 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             self._send_json(404, {"error": "not_found"})
             return
 
-        authorization = self.headers.get("Authorization", "")
-        init_data = ""
-        if authorization.lower().startswith("tma "):
-            init_data = authorization[4:].strip()
-        if not init_data:
-            query = dict(parse_qsl(parsed.query, keep_blank_values=True))
-            init_data = query.get("initData", "")
-
-        telegram_user = parse_telegram_init_data(init_data)
+        telegram_user = self._telegram_user()
         if not telegram_user:
             self._send_json(401, {"error": "invalid_init_data"})
             return
 
         self._send_json(200, build_miniapp_payload(telegram_user))
+
+    def do_POST(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path not in {"/api/miniapp/food/text", "/api/miniapp/food/photo"}:
+            self._send_json(404, {"error": "not_found"})
+            return
+
+        telegram_user = self._telegram_user()
+        if not telegram_user:
+            self._send_json(401, {"error": "invalid_init_data"})
+            return
+
+        try:
+            payload = self._read_json()
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            self._send_json(400, {"error": "bad_request"})
+            return
+
+        try:
+            if parsed.path == "/api/miniapp/food/text":
+                text = str(payload.get("text") or "").strip()
+                if not text:
+                    self._send_json(400, {"error": "empty_text"})
+                    return
+                result = asyncio.run(add_miniapp_food_text(telegram_user, text))
+            else:
+                image_base64 = str(payload.get("imageBase64") or "")
+                mime_type = str(payload.get("mimeType") or "image/jpeg")
+                if "," in image_base64:
+                    image_base64 = image_base64.split(",", 1)[1]
+                image_bytes = base64.b64decode(image_base64, validate=True)
+                if not image_bytes:
+                    self._send_json(400, {"error": "empty_photo"})
+                    return
+                result = asyncio.run(add_miniapp_food_photo(telegram_user, image_bytes, mime_type))
+        except NotFoodError as exc:
+            self._send_json(422, {"error": "not_food", "reason": exc.reason})
+            return
+        except (OpenAIRecognitionError, ValueError, binascii.Error):
+            self._send_json(400, {"error": "recognition_failed"})
+            return
+
+        self._send_json(
+            200,
+            {
+                "entry": self._entry_payload(result["entry"]),
+                "state": result["state"],
+            },
+        )
 
 
 def format_food_saved(entry: FoodEntry, user: User, entries: list[FoodEntry], is_photo: bool = False) -> str:
