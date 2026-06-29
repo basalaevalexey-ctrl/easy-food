@@ -252,6 +252,53 @@ def build_miniapp_payload(telegram_user: dict) -> dict:
     }
 
 
+def update_miniapp_profile(telegram_user: dict, payload: dict) -> dict:
+    telegram_id = int(telegram_user["id"])
+    user = db.get_or_create_user(telegram_id)
+
+    sex = user.sex or str(payload.get("sex") or "male")
+    age = int(user.age or payload.get("age") or 30)
+    height = int(payload.get("height") or user.height or 175)
+    weight = float(payload.get("weight") or user.weight or 75)
+    goal = str(payload.get("goal") or user.goal or "maintain")
+    activity = str(payload.get("activity") or user.activity or "medium")
+
+    if goal == "support":
+        goal = "maintain"
+    if sex not in {"male", "female"}:
+        sex = "male"
+    if goal not in {"lose", "maintain", "gain"}:
+        goal = "maintain"
+    if activity not in {"low", "medium", "high"}:
+        activity = "medium"
+    if not 10 <= age <= 100 or not 100 <= height <= 230 or not 30 <= weight <= 300:
+        raise ValueError("profile_out_of_range")
+
+    calorie_target, protein_target = calculate_targets(
+        sex=sex,
+        age=age,
+        height=height,
+        weight=weight,
+        goal=goal,
+        activity=activity,
+    )
+    db.update_user_goal(
+        telegram_id,
+        {
+            "sex": sex,
+            "age": age,
+            "height": height,
+            "weight": weight,
+            "goal": goal,
+            "activity": activity,
+            "calorie_target": calorie_target,
+            "protein_target": protein_target,
+        },
+    )
+    db.record_user_event(telegram_id, "miniapp_profile_updated")
+    return build_miniapp_payload(telegram_user)
+
+
 async def add_miniapp_food_text(telegram_user: dict, text: str) -> dict:
     telegram_id = int(telegram_user["id"])
     estimate = await food_ai.estimate_text(text)
@@ -347,7 +394,7 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path not in {"/api/miniapp/food/text", "/api/miniapp/food/photo"}:
+        if parsed.path not in {"/api/miniapp/food/text", "/api/miniapp/food/photo", "/api/miniapp/profile"}:
             self._send_json(404, {"error": "not_found"})
             return
 
@@ -363,6 +410,10 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             return
 
         try:
+            if parsed.path == "/api/miniapp/profile":
+                result = update_miniapp_profile(telegram_user, payload)
+                self._send_json(200, result)
+                return
             if parsed.path == "/api/miniapp/food/text":
                 text = str(payload.get("text") or "").strip()
                 if not text:
