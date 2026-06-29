@@ -1,11 +1,14 @@
 import asyncio
+import hashlib
+import hmac
+import json
 import logging
 import re
 from datetime import datetime, timedelta
-from functools import partial
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 import threading
+from urllib.parse import parse_qsl, urlparse
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
@@ -148,6 +151,147 @@ def today_totals(entries: list[FoodEntry]) -> dict[str, float]:
         "fat": sum(entry.fat for entry in entries),
         "carbs": sum(entry.carbs for entry in entries),
     }
+
+
+def _json_safe(value):
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
+def parse_telegram_init_data(init_data: str) -> dict | None:
+    if not init_data:
+        return None
+
+    pairs = dict(parse_qsl(init_data, keep_blank_values=True))
+    received_hash = pairs.pop("hash", None)
+    if not received_hash:
+        return None
+
+    check_string = "\n".join(f"{key}={value}" for key, value in sorted(pairs.items()))
+    secret_key = hmac.new(b"WebAppData", config.bot_token.encode("utf-8"), hashlib.sha256).digest()
+    expected_hash = hmac.new(secret_key, check_string.encode("utf-8"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected_hash, received_hash):
+        return None
+
+    try:
+        user_data = json.loads(pairs.get("user", "{}"))
+    except json.JSONDecodeError:
+        return None
+
+    if not user_data.get("id"):
+        return None
+
+    return user_data
+
+
+def build_miniapp_payload(telegram_user: dict) -> dict:
+    telegram_id = int(telegram_user["id"])
+    user = db.get_or_create_user(telegram_id)
+    entries = db.get_today_entries(telegram_id)
+    totals = today_totals(entries)
+    progress = db.get_user_progress_stats(telegram_id)
+    achievements = db.get_user_achievements(telegram_id)
+    mission_status = db.get_daily_mission_status(telegram_id)
+    mission = mission_status["mission"]
+
+    return {
+        "user": {
+            "telegram_id": telegram_id,
+            "display_name": telegram_user.get("first_name") or telegram_user.get("username") or "Алексей",
+            "sex": user.sex,
+            "age": user.age,
+            "height": user.height,
+            "weight": user.weight,
+            "goal": {"maintain": "support"}.get(user.goal, user.goal),
+            "activity": user.activity,
+        },
+        "targets": {
+            "calories": user.calorie_target,
+            "protein": user.protein_target,
+        },
+        "today": {
+            "totals": {key: round_num(value) for key, value in totals.items()},
+            "entries": [
+                {
+                    "id": entry.id,
+                    "title": entry.title,
+                    "description": entry.description,
+                    "calories": round_num(entry.calories),
+                    "protein": round_num(entry.protein),
+                    "fat": round_num(entry.fat),
+                    "carbs": round_num(entry.carbs),
+                    "source": entry.source,
+                    "created_at": _json_safe(entry.created_at),
+                }
+                for entry in entries
+            ],
+        },
+        "progress": progress,
+        "mission": {
+            "key": mission.key,
+            "is_completed": mission_status["is_completed"],
+            "progress_text": mission_status["progress_text"],
+            "mission_date": mission_status["mission_date"],
+        },
+        "achievements": [
+            {
+                "key": row["achievement_key"],
+                "unlocked_at": _json_safe(row["unlocked_at"]),
+            }
+            for row in achievements
+        ],
+    }
+
+
+class MiniAppApiHandler(BaseHTTPRequestHandler):
+    server_version = "NyammetrMiniApi/1.0"
+
+    def log_message(self, format: str, *args) -> None:
+        logger.debug("Mini app API: " + format, *args)
+
+    def _send_headers(self, status: int, content_type: str = "application/json") -> None:
+        origin = self.headers.get("Origin") or "*"
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
+    def _send_json(self, status: int, payload: dict) -> None:
+        self._send_headers(status)
+        self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+
+    def do_OPTIONS(self) -> None:
+        self._send_headers(204)
+
+    def do_GET(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path == "/health":
+            self._send_headers(200, "text/plain; charset=utf-8")
+            self.wfile.write(b"ok")
+            return
+
+        if parsed.path != "/api/miniapp/me":
+            self._send_json(404, {"error": "not_found"})
+            return
+
+        authorization = self.headers.get("Authorization", "")
+        init_data = ""
+        if authorization.lower().startswith("tma "):
+            init_data = authorization[4:].strip()
+        if not init_data:
+            query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+            init_data = query.get("initData", "")
+
+        telegram_user = parse_telegram_init_data(init_data)
+        if not telegram_user:
+            self._send_json(401, {"error": "invalid_init_data"})
+            return
+
+        self._send_json(200, build_miniapp_payload(telegram_user))
 
 
 def format_food_saved(entry: FoodEntry, user: User, entries: list[FoodEntry], is_photo: bool = False) -> str:
@@ -1056,11 +1200,10 @@ async def main() -> None:
 
 
 async def start_miniapp_server() -> ThreadingHTTPServer:
-    handler = partial(SimpleHTTPRequestHandler, directory=str(config.public_dir))
-    server = ThreadingHTTPServer(("0.0.0.0", config.port), handler)
+    server = ThreadingHTTPServer(("0.0.0.0", config.port), MiniAppApiHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    logger.info("Mini app server started on http://0.0.0.0:%s", config.port)
+    logger.info("Mini app API started on http://0.0.0.0:%s", config.port)
     return server
 
 
