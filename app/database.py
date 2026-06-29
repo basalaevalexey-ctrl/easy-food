@@ -565,6 +565,19 @@ class Database:
             ).fetchall()
             return [self._entry_from_row(row) for row in rows]
 
+    def get_entries_between(self, telegram_id: int, start: str, end: str) -> list[FoodEntry]:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM food_entries
+                WHERE user_id = ? AND created_at >= ? AND created_at < ?
+                ORDER BY created_at ASC
+                """,
+                (user.id, start, end),
+            ).fetchall()
+            return [self._entry_from_row(row) for row in rows]
+
     def get_daily_history(self, telegram_id: int, days: int = 7) -> list[sqlite3.Row]:
         user = self.get_or_create_user(telegram_id)
         with self.connect() as conn:
