@@ -55,6 +55,12 @@ db = Database(
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
 
 
+def webapp_url_for_user(user_id: int | None) -> str:
+    if not user_id or not config.webapp_url or user_id not in config.admin_ids:
+        return ""
+    return config.webapp_url
+
+
 class SetupGoal(StatesGroup):
     age = State()
     height = State()
@@ -679,7 +685,7 @@ async def start(message: Message, state: FSMContext) -> None:
         "Помогаю считать калории без весов и таблиц.\n\n"
         "Просто отправь фото еды или напиши, что съел — я примерно посчитаю калории, белки, жиры и углеводы.\n\n"
         "Важно: это примерная оценка, не медицинская рекомендация.",
-        reply_markup=main_menu(has_goal=bool(user.calorie_target), webapp_url=config.webapp_url),
+        reply_markup=main_menu(has_goal=bool(user.calorie_target), webapp_url=webapp_url_for_user(message.from_user.id)),
     )
     await answer_clean(
         message,
@@ -1008,7 +1014,7 @@ async def setup_activity(callback: CallbackQuery, state: FSMContext) -> None:
         f"Активность: {ACTIVITY_LABELS[data['activity']]}\n"
         f"Дневная норма: {calorie_target} ккал\n"
         f"Белок: {protein_target} г в день",
-        reply_markup=main_menu(has_goal=True, webapp_url=config.webapp_url),
+        reply_markup=main_menu(has_goal=True, webapp_url=webapp_url_for_user(callback.from_user.id)),
     )
     reminder_message = await callback.message.answer(
         "Во сколько тебе обычно напоминать про учет еды?",
@@ -1208,6 +1214,21 @@ async def start_miniapp_server() -> ThreadingHTTPServer:
 
 
 async def configure_bot_ui(bot: Bot) -> None:
+    await bot.set_chat_menu_button(menu_button=MenuButtonDefault())
+    if config.webapp_url and config.admin_ids:
+        for admin_id in config.admin_ids:
+            try:
+                await bot.set_chat_menu_button(
+                    chat_id=admin_id,
+                    menu_button=MenuButtonWebApp(
+                        text="Нямметр",
+                        web_app=WebAppInfo(url=config.webapp_url),
+                    ),
+                )
+            except TelegramBadRequest as exc:
+                logger.warning("Could not set mini app menu button for admin %s: %s", admin_id, exc)
+    return
+
     if not config.webapp_url:
         await bot.set_chat_menu_button(menu_button=MenuButtonDefault())
         return
