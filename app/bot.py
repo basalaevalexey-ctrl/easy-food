@@ -9,6 +9,8 @@ import re
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import threading
 from urllib.parse import parse_qsl, urlparse
 from zoneinfo import ZoneInfo
@@ -19,7 +21,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import CallbackQuery, MenuButtonDefault, MenuButtonWebApp, Message, WebAppInfo
+from aiogram.types import CallbackQuery, FSInputFile, MenuButtonDefault, MenuButtonWebApp, Message, WebAppInfo
 
 from app.achievements import ACHIEVEMENTS
 from app.calorie_calculator import calculate_targets
@@ -746,7 +748,11 @@ def format_admin_period(title: str, days: int | None) -> str:
                 "База данных:",
                 f"Путь: {db_info['path']}",
                 f"Размер: {int(db_info['size'])} байт",
-                f"users / food / events: {db_info['users']} / {db_info['entries']} / {db_info['events']}",
+                (
+                    "users / food / events / achievements / missions: "
+                    f"{db_info['users']} / {db_info['entries']} / {db_info['events']} / "
+                    f"{db_info['achievements']} / {db_info['missions']}"
+                ),
                 "Копии:",
                 str(db_info["backups"]) or "нет",
             ]
@@ -1027,6 +1033,26 @@ async def admin_command(message: Message) -> None:
 @router.message(Command("stats"))
 async def stats_command(message: Message) -> None:
     await admin_command(message)
+
+
+@router.message(Command("backup_db"))
+async def backup_db_command(message: Message) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Команда только для админа.")
+        return
+    db.record_user_event(message.from_user.id, "database_backup_requested")
+    db_info = db.database_info()
+    with TemporaryDirectory() as temp_dir:
+        snapshot_path = db.export_snapshot(Path(temp_dir) / "calories.sqlite3")
+        await message.answer_document(
+            FSInputFile(snapshot_path, filename="calories.sqlite3"),
+            caption=(
+                "Снимок базы Нямметра.\n"
+                f"Путь на сервере: {db_info['path']}\n"
+                f"users / food / events: {db_info['users']} / {db_info['entries']} / {db_info['events']}\n"
+                f"achievements / missions: {db_info['achievements']} / {db_info['missions']}"
+            ),
+        )
 
 
 @router.callback_query(F.data.startswith("admin:"))

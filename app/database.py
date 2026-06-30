@@ -882,6 +882,8 @@ class Database:
             users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
             entries = conn.execute("SELECT COUNT(*) FROM food_entries").fetchone()[0]
             events = conn.execute("SELECT COUNT(*) FROM user_events").fetchone()[0]
+            achievements = conn.execute("SELECT COUNT(*) FROM user_achievements").fetchone()[0]
+            missions = conn.execute("SELECT COUNT(*) FROM daily_missions").fetchone()[0]
         backup_info = []
         for backup_path in self._unique_paths(self.backup_paths):
             score = self._database_score(backup_path)
@@ -893,8 +895,20 @@ class Database:
             "users": users,
             "entries": entries,
             "events": events,
+            "achievements": achievements,
+            "missions": missions,
             "backups": "\n".join(backup_info),
         }
+
+    def export_snapshot(self, destination: Path) -> Path:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with self.connect() as source:
+            target = sqlite3.connect(destination)
+            try:
+                source.backup(target)
+            finally:
+                target.close()
+        return destination
 
     def admin_stats(self) -> dict[str, int | float]:
         with self.connect() as conn:
