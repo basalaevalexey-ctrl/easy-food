@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from app.database import Database
+
+
+MOSCOW_TZ = timezone(timedelta(hours=3))
+
+
+def moscow_today() -> date:
+    return datetime.now(MOSCOW_TZ).date()
 
 
 ADMIN_SCREENS = {
@@ -51,16 +58,16 @@ class AdminStatsService:
         return stats
 
     def get_daily_stats(self, days: int = 7) -> list[dict[str, Any]]:
-        start = date.today() - timedelta(days=days - 1)
+        start = moscow_today() - timedelta(days=days - 1)
         with self.db.connect() as conn:
             rows = conn.execute(
                 """
-                SELECT date(created_at, 'localtime') AS day,
+                SELECT date(created_at, '+3 hours') AS day,
                        COUNT(DISTINCT user_id) AS active_users,
                        COUNT(*) AS meal_logs,
                        COALESCE(SUM(calories), 0) AS kcal
                 FROM food_entries
-                WHERE date(created_at, 'localtime') >= ?
+                WHERE date(created_at, '+3 hours') >= ?
                 GROUP BY day
                 """,
                 (start.isoformat(),),
@@ -136,7 +143,7 @@ class AdminStatsService:
                     (
                         SELECT COUNT(*) FROM (
                             SELECT user_id FROM food_entries
-                            WHERE date(created_at, 'localtime') >= date('now', 'localtime', '-6 days')
+                            WHERE date(created_at, '+3 hours') >= date('now', '+3 hours', '-6 days')
                             GROUP BY user_id
                             HAVING COUNT(*) >= 5
                         )
@@ -209,34 +216,72 @@ class AdminStatsService:
         }
 
     def _reminders_stats(self, days: int | None) -> dict[str, Any]:
-        event_filter = self._date_filter("e.created_at", days)
-        sent_filter = self._date_filter("created_at", days)
+        log_filter = self._date_filter("sent_at", days)
+        conversion_log_filter = self._date_filter("l.sent_at", days)
         with self.db.connect() as conn:
+            total_logs = conn.execute("SELECT COUNT(*) FROM reminder_logs").fetchone()[0]
             sent = conn.execute(
-                f"SELECT COUNT(*) FROM user_events WHERE event_type IN ('reminder_sent', 'duolingo_push_sent') AND {sent_filter}",
+                f"SELECT COUNT(*) FROM reminder_logs WHERE status = 'sent' AND {log_filter}",
+            ).fetchone()[0]
+            failed = conn.execute(
+                f"SELECT COUNT(*) FROM reminder_logs WHERE status = 'failed' AND {log_filter}",
             ).fetchone()[0]
             converted = conn.execute(
                 f"""
-                SELECT COUNT(DISTINCT e.user_id)
-                FROM user_events e
-                JOIN food_entries f ON f.user_id = e.user_id
-                 AND datetime(f.created_at) >= datetime(e.created_at)
-                 AND datetime(f.created_at) <= datetime(e.created_at, '+1 hour')
-                WHERE e.event_type IN ('reminder_sent', 'duolingo_push_sent')
-                  AND {event_filter}
+                SELECT COUNT(DISTINCT l.id)
+                FROM reminder_logs l
+                JOIN food_entries f ON f.user_id = l.user_id
+                 AND datetime(f.created_at) >= datetime(l.sent_at)
+                 AND datetime(f.created_at) <= datetime(l.sent_at, '+1 hour')
+                WHERE l.status = 'sent'
+                  AND {conversion_log_filter}
                 """,
             ).fetchone()[0]
             enabled = conn.execute("SELECT COUNT(*) FROM users WHERE reminder_time IS NOT NULL").fetchone()[0]
+            slot_rows = conn.execute(
+                f"""
+                SELECT slot_group,
+                       COUNT(*) AS sent_count,
+                       SUM(converted) AS converted_count
+                FROM (
+                    SELECT l.id,
+                           CASE
+                               WHEN CAST(substr(COALESCE(l.slot, strftime('%H:%M', l.sent_at, '+3 hours')), 1, 2) AS INTEGER) < 12 THEN 'morning'
+                               WHEN CAST(substr(COALESCE(l.slot, strftime('%H:%M', l.sent_at, '+3 hours')), 1, 2) AS INTEGER) < 18 THEN 'day'
+                               ELSE 'evening'
+                           END AS slot_group,
+                           CASE WHEN EXISTS (
+                               SELECT 1
+                               FROM food_entries f
+                               WHERE f.user_id = l.user_id
+                                 AND datetime(f.created_at) >= datetime(l.sent_at)
+                                 AND datetime(f.created_at) <= datetime(l.sent_at, '+1 hour')
+                           ) THEN 1 ELSE 0 END AS converted
+                    FROM reminder_logs l
+                    WHERE l.status = 'sent' AND {conversion_log_filter}
+                )
+                GROUP BY slot_group
+                """
+            ).fetchall()
+        has_data = int(total_logs or 0) > 0
+        slot_cvr = {
+            row["slot_group"]: percent(row["converted_count"], row["sent_count"])
+            for row in slot_rows
+            if int(row["sent_count"] or 0) > 0
+        }
+        best_slot, worst_slot = reminder_slot_extremes(slot_cvr)
         return {
             "reminders_enabled_total": int(enabled or 0),
             "reminders_sent": int(sent or 0),
+            "reminders_failed": int(failed or 0),
             "reminder_converted": int(converted or 0),
             "reminder_cvr": percent(converted, sent),
-            "morning_cvr": "нет данных",
-            "day_cvr": "нет данных",
-            "evening_cvr": "нет данных",
-            "best_slot": "нет данных",
-            "worst_slot": "нет данных",
+            "reminders_has_data": has_data,
+            "morning_cvr": format_slot_cvr(slot_cvr, "morning", has_data),
+            "day_cvr": format_slot_cvr(slot_cvr, "day", has_data),
+            "evening_cvr": format_slot_cvr(slot_cvr, "evening", has_data),
+            "best_slot": best_slot if has_data else "нет данных",
+            "worst_slot": worst_slot if has_data else "нет данных",
         }
 
     def _retention_for_day(self, conn: Any, offset: int, days: int | None) -> dict[str, Any]:
@@ -248,7 +293,7 @@ class AdminStatsService:
             FROM users u
             LEFT JOIN food_entries f
               ON f.user_id = u.id
-             AND date(f.created_at, 'localtime') = date(u.created_at, 'localtime', '+{offset} days')
+             AND date(f.created_at, '+3 hours') = date(u.created_at, '+3 hours', '+{offset} days')
             WHERE {cohort_filter}
             """
         ).fetchone()
@@ -260,7 +305,7 @@ class AdminStatsService:
         period_filter = self._date_filter("created_at", days)
         rows = conn.execute(
             f"""
-            SELECT user_id, date(created_at, 'localtime') AS day
+            SELECT user_id, date(created_at, '+3 hours') AS day
             FROM food_entries
             WHERE {period_filter}
             GROUP BY user_id, day
@@ -281,21 +326,21 @@ class AdminStatsService:
         if days is None:
             return "1 = 1"
         if days == 1:
-            return f"date({column}, 'localtime') = date('now', 'localtime')"
-        start = date.today() - timedelta(days=days - 1)
-        return f"date({column}, 'localtime') >= date('{start.isoformat()}')"
+            return f"date({column}, '+3 hours') = date('now', '+3 hours')"
+        start = moscow_today() - timedelta(days=days - 1)
+        return f"date({column}, '+3 hours') >= date('{start.isoformat()}')"
 
     @staticmethod
     def _previous_date_filter(column: str, days: int | None) -> str:
         if days is None:
             return "0 = 1"
         if days == 1:
-            return f"date({column}, 'localtime') = date('now', 'localtime', '-1 day')"
-        current_start = date.today() - timedelta(days=days - 1)
+            return f"date({column}, '+3 hours') = date('now', '+3 hours', '-1 day')"
+        current_start = moscow_today() - timedelta(days=days - 1)
         previous_start = current_start - timedelta(days=days)
         return (
-            f"date({column}, 'localtime') >= date('{previous_start.isoformat()}') "
-            f"AND date({column}, 'localtime') < date('{current_start.isoformat()}')"
+            f"date({column}, '+3 hours') >= date('{previous_start.isoformat()}') "
+            f"AND date({column}, '+3 hours') < date('{current_start.isoformat()}')"
         )
 
 
@@ -327,9 +372,10 @@ def format_today_stats(stats: dict[str, Any]) -> str:
             "━━━━━━━━━━━━",
             "🔔 НАПОМИНАНИЯ",
             f"Пользователей с напоминаниями: {stats['reminders_enabled_total']}",
-            f"Отправлено сегодня: {stats['reminders_sent']}",
-            f"Сработало: {stats['reminder_converted']}",
-            f"CVR: {fmt_percent(stats['reminder_cvr'])}",
+            f"Отправлено сегодня: {fmt_reminder_count(stats, 'reminders_sent')}",
+            f"Не отправилось: {fmt_reminder_count(stats, 'reminders_failed')}",
+            f"Сработало: {fmt_reminder_count(stats, 'reminder_converted')}",
+            f"CVR: {fmt_reminder_percent(stats, 'reminder_cvr')}",
             "",
             "━━━━━━━━━━━━",
             "🔥 УДЕРЖАНИЕ",
@@ -388,9 +434,10 @@ def format_period_stats(title: str, stats: dict[str, Any], active_label: str) ->
             "━━━━━━━━━━━━",
             "🔔 НАПОМИНАНИЯ",
             f"Пользователей с напоминаниями: {stats['reminders_enabled_total']}",
-            f"Напоминаний отправлено: {stats['reminders_sent']}",
-            f"Сработало: {stats['reminder_converted']}",
-            f"CVR: {fmt_percent(stats['reminder_cvr'])}",
+            f"Напоминаний отправлено: {fmt_reminder_count(stats, 'reminders_sent')}",
+            f"Не отправилось: {fmt_reminder_count(stats, 'reminders_failed')}",
+            f"Сработало: {fmt_reminder_count(stats, 'reminder_converted')}",
+            f"CVR: {fmt_reminder_percent(stats, 'reminder_cvr')}",
             "",
             "━━━━━━━━━━━━",
             "📈 КЛЮЧЕВАЯ МЕТРИКА",
@@ -424,8 +471,9 @@ def format_total_stats(stats: dict[str, Any]) -> str:
             "━━━━━━━━━━━━",
             "🔔 НАПОМИНАНИЯ",
             f"Всего включили напоминания: {stats['reminders_enabled_total']}",
-            f"Всего отправлено напоминаний: {stats['reminders_sent']}",
-            f"Всего сработало после напоминания: {stats['reminder_converted']}",
+            f"Всего отправлено напоминаний: {fmt_reminder_count(stats, 'reminders_sent')}",
+            f"Всего не отправилось: {fmt_reminder_count(stats, 'reminders_failed')}",
+            f"Всего сработало после напоминания: {fmt_reminder_count(stats, 'reminder_converted')}",
             "",
             "━━━━━━━━━━━━",
             "🔥 ПОВЕДЕНИЕ",
@@ -486,9 +534,10 @@ def format_reminders_stats(stats: dict[str, Any]) -> str:
             f"Пользователей с напоминаниями: {stats['reminders_enabled_total']}",
             "",
             "За 7 дней:",
-            f"Отправлено: {stats['reminders_sent']}",
-            f"Сработало: {stats['reminder_converted']}",
-            f"Конверсия: {fmt_percent(stats['reminder_cvr'])}",
+            f"Отправлено: {fmt_reminder_count(stats, 'reminders_sent')}",
+            f"Не отправилось: {fmt_reminder_count(stats, 'reminders_failed')}",
+            f"Сработало: {fmt_reminder_count(stats, 'reminder_converted')}",
+            f"Конверсия: {fmt_reminder_percent(stats, 'reminder_cvr')}",
             "",
             "По слотам:",
             f"Утро: {stats['morning_cvr']}",
@@ -551,6 +600,36 @@ def growth(current: Any, previous: Any) -> float:
 
 def fmt_percent(value: Any) -> str:
     return f"{float(value or 0):.1f}%"
+
+
+def fmt_reminder_count(stats: dict[str, Any], key: str) -> str:
+    if not stats.get("reminders_has_data"):
+        return "нет данных"
+    return str(stats.get(key, 0))
+
+
+def fmt_reminder_percent(stats: dict[str, Any], key: str) -> str:
+    if not stats.get("reminders_has_data"):
+        return "нет данных"
+    return fmt_percent(stats.get(key, 0))
+
+
+def format_slot_cvr(slot_cvr: dict[str, float], slot: str, has_data: bool) -> str:
+    if not has_data or slot not in slot_cvr:
+        return "нет данных"
+    return fmt_percent(slot_cvr[slot])
+
+
+def reminder_slot_extremes(slot_cvr: dict[str, float]) -> tuple[str, str]:
+    if not slot_cvr:
+        return "нет данных", "нет данных"
+    labels = {"morning": "утро", "day": "день", "evening": "вечер"}
+    best_key = max(slot_cvr, key=slot_cvr.get)
+    worst_key = min(slot_cvr, key=slot_cvr.get)
+    return (
+        f"{labels.get(best_key, best_key)} ({fmt_percent(slot_cvr[best_key])})",
+        f"{labels.get(worst_key, worst_key)} ({fmt_percent(slot_cvr[worst_key])})",
+    )
 
 
 def fmt_float(value: Any) -> str:

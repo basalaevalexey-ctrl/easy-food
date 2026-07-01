@@ -1935,7 +1935,10 @@ async def reminder_loop(bot: Bot) -> None:
         current_time = now.strftime("%H:%M")
         today_date = now.date()
         today = today_date.isoformat()
-        for user in db.get_users_for_reminder(current_time, today):
+        reminder_users = db.get_users_for_reminder(current_time, today)
+        reminders_sent = 0
+        reminders_logged = 0
+        for user in reminder_users:
             try:
                 mission_status = db.get_daily_mission_status(user.telegram_id)
                 await bot.send_message(
@@ -1945,8 +1948,28 @@ async def reminder_loop(bot: Bot) -> None:
                     f"{format_daily_mission(mission_status)}",
                 )
                 db.mark_reminder_sent(user.telegram_id, today)
-            except Exception:
+                db.log_reminder(user.telegram_id, "daily", current_time, "sent")
+                reminders_sent += 1
+                reminders_logged += 1
+            except Exception as exc:
+                db.log_reminder(user.telegram_id, "daily", current_time, "failed", str(exc))
+                reminders_logged += 1
                 logger.exception("Failed to send reminder to user %s", user.telegram_id)
+        logger.debug(
+            "Reminder loop %s: found=%s sent=%s reminder_logs=%s",
+            current_time,
+            len(reminder_users),
+            reminders_sent,
+            reminders_logged,
+        )
+        if reminder_users:
+            logger.info(
+                "Reminder loop %s: found=%s sent=%s reminder_logs=%s",
+                current_time,
+                len(reminder_users),
+                reminders_sent,
+                reminders_logged,
+            )
         if is_activation_window(now):
             for user, step in db.get_users_for_activation():
                 try:
@@ -1968,7 +1991,9 @@ async def reminder_loop(bot: Bot) -> None:
                 try:
                     await bot.send_message(user.telegram_id, duolingo_push_text(user.telegram_id, today))
                     db.mark_duolingo_push_sent(user.telegram_id)
-                except Exception:
+                    db.log_reminder(user.telegram_id, "duolingo", config.auto_push_time, "sent")
+                except Exception as exc:
+                    db.log_reminder(user.telegram_id, "duolingo", config.auto_push_time, "failed", str(exc))
                     logger.exception("Failed to send duolingo push to user %s", user.telegram_id)
         await asyncio.sleep(60)
 

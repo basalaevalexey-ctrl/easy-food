@@ -144,12 +144,28 @@ class Database:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS reminder_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    sent_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    reminder_type TEXT NOT NULL,
+                    slot TEXT,
+                    status TEXT NOT NULL,
+                    error TEXT,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+                """
+            )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_user_events_type_date ON user_events(event_type, created_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_food_entries_user_date ON food_entries(user_id, created_at)")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_user_achievements_user ON user_achievements(user_id, unlocked_at)"
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_daily_missions_user_date ON daily_missions(user_id, mission_date)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_reminder_logs_sent_at ON reminder_logs(sent_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_reminder_logs_user_sent ON reminder_logs(user_id, sent_at)")
             self._rebuild_user_streaks(conn)
 
     def _restore_best_database(self) -> None:
@@ -468,6 +484,29 @@ class Database:
                 "UPDATE users SET reminder_last_sent_date = ? WHERE telegram_id = ?",
                 (today, telegram_id),
             )
+
+    def log_reminder(
+        self,
+        telegram_id: int,
+        reminder_type: str,
+        slot: str | None,
+        status: str,
+        error: str | None = None,
+    ) -> None:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO reminder_logs (user_id, sent_at, reminder_type, slot, status, error)
+                VALUES (?, CURRENT_TIMESTAMP, ?, ?, ?, ?)
+                """,
+                (user.id, reminder_type, slot, status, error[:500] if error else None),
+            )
+            if status == "sent":
+                conn.execute(
+                    "INSERT INTO user_events (user_id, event_type) VALUES (?, ?)",
+                    (user.id, "reminder_sent" if reminder_type == "daily" else f"{reminder_type}_sent"),
+                )
 
     def add_food_entry(self, telegram_id: int, estimate: FoodEstimate, source: str) -> FoodEntry:
         user = self.get_or_create_user(telegram_id)
