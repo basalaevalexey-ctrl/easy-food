@@ -67,8 +67,8 @@ db = Database(
     backup_paths=config.database_backup_paths,
 )
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-44"
-WEBAPP_ENTRY_PATH = "/nyammetr"
+WEBAPP_BUILD = "nyam-46"
+WEBAPP_ENTRY_PATH = "/api/miniapp/app"
 
 
 def webapp_url_with_build() -> str:
@@ -85,6 +85,46 @@ def webapp_url_for_user(user_id: int | None) -> str:
     if not user_id or not config.webapp_url or user_id not in config.admin_ids:
         return ""
     return webapp_url_with_build()
+
+
+def sanitize_miniapp_html(html: str) -> str:
+    if "<base " not in html:
+        html = html.replace("<head>", '<head>\n    <base href="/" />', 1)
+    html = re.sub(
+        r"<small>mini app(?:\s*[·В]\s*nyam-\d+)?</small>",
+        f"<small>mini app · {WEBAPP_BUILD}</small>",
+        html,
+    )
+    html = re.sub(r"styles\.css\?v=nyam-\d+", f"styles.css?v={WEBAPP_BUILD}", html)
+    html = re.sub(r"<small data-build-label>nyam-\d+</small>", f"<small data-build-label>{WEBAPP_BUILD}</small>", html)
+    html = re.sub(r"<span data-calories>\d+</span>", "<span data-calories>0</span>", html)
+    html = re.sub(r"<em data-calorie-goal-label>.*?</em>", "<em data-calorie-goal-label></em>", html)
+    html = re.sub(r'style="width:\s*\d+%"', 'style="width: 0%"', html)
+    html = re.sub(r'<span class="macro-current">\d+</span>', '<span class="macro-current">0</span>', html)
+    html = re.sub(r"<small>/\d+</small>", "<small></small>", html)
+    html = re.sub(r'<small class="macro-percent">\d+%</small>', '<small class="macro-percent"></small>', html)
+    html = re.sub(r"<strong data-goal-calories>.*?</strong>", '<strong data-goal-calories>0 ккал</strong>', html)
+    html = re.sub(r"<strong data-goal-protein>.*?</strong>", '<strong data-goal-protein>0 г</strong>', html)
+    html = re.sub(r"<article class=\"streak-card\">.*?</article>", '<article class="streak-card">🔥 <strong>Ням-стрик:</strong> <b>0 дней</b></article>', html, flags=re.S)
+    html = re.sub(r"<small>Собрано \d+ из 12</small>", "<small>Собрано 0 из 12</small>", html)
+    html = re.sub(r"<strong>\d+ дней</strong>", "<strong>0 дней</strong>", html)
+
+    meal_start = html.find('<div class="meal-list">')
+    meal_end = html.find('<aside class="tip-card wide">', meal_start)
+    if meal_start != -1 and meal_end != -1:
+        meal_list = """<div class="meal-list">
+          <article class="meal-card open">
+            <button type="button" class="meal-toggle" aria-expanded="true">
+              <span class="meal-emoji"><img src="./assets/meal-snack.png" alt="" /></span>
+              <span><b>Загружаю данные</b><small>Синхронизируюсь с дневником Нямметра</small></span>
+              <strong>0 ккал</strong>
+            </button>
+          </article>
+        </div>
+
+        """
+        html = html[:meal_start] + meal_list + html[meal_end:]
+    return html
 
 
 class SetupGoal(StatesGroup):
@@ -388,6 +428,10 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             if content_type.startswith("text/"):
                 content_type += "; charset=utf-8"
             self._send_headers(200, content_type)
+            if relative_path == "index.html":
+                html = file_path.read_text(encoding="utf-8", errors="replace")
+                self.wfile.write(sanitize_miniapp_html(html).encode("utf-8"))
+                return
             self.wfile.write(file_path.read_bytes())
         except OSError:
             logger.exception("Failed to serve mini app file: %s", requested_path)
@@ -433,6 +477,9 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
         if parsed.path == "/health":
             self._send_headers(200, "text/plain; charset=utf-8")
             self.wfile.write(b"ok")
+            return
+        if parsed.path == WEBAPP_ENTRY_PATH:
+            self._send_static("/")
             return
 
         if not parsed.path.startswith("/api/"):
