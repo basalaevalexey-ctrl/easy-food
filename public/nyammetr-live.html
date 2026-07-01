@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>Нямметр</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root { --green:#58bd35; --muted:#6d756d; --paper:#fffaf0; --line:#eadfcd; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Arial, sans-serif; background:#f6f1e7; color:#111; }
+    main { width:min(420px, 100%); min-height:100vh; margin:0 auto; padding:18px 16px 90px; background:#fffaf3; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
+    header b { display:block; font-size:20px; }
+    header small, .muted { color:var(--muted); }
+    section { display:none; }
+    section.active { display:block; }
+    .card { background:#fff; border:1px solid var(--line); border-radius:18px; padding:16px; margin:12px 0; box-shadow:0 8px 24px rgba(39,32,20,.08); }
+    .hero { text-align:center; }
+    .hero h1 { margin:0; font-size:24px; }
+    .summary strong { font-size:32px; }
+    .summary em { font-style:normal; font-size:18px; }
+    .bar { height:12px; background:#ece5d7; border-radius:999px; overflow:hidden; margin:12px 0; }
+    .bar span { display:block; height:100%; width:0; background:var(--green); }
+    .macros { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+    .macros span { background:var(--paper); border-radius:12px; padding:10px; text-align:center; font-weight:700; }
+    .macros small { display:block; color:var(--muted); font-weight:400; }
+    .entry { display:grid; gap:6px; border-bottom:1px solid var(--line); padding:12px 0; }
+    .entry:last-child { border-bottom:0; }
+    .entry b { font-size:16px; }
+    .entry small { color:var(--muted); }
+    label { display:grid; gap:6px; margin:12px 0; font-weight:700; }
+    input, select { width:100%; border:1px solid #dbcdb8; border-radius:12px; padding:12px; font:inherit; background:#fffaf0; }
+    button { border:0; border-radius:14px; padding:12px 14px; font:inherit; font-weight:700; background:var(--green); color:#fff; }
+    .ghost { background:#efe8d9; color:#111; }
+    nav { position:fixed; left:50%; bottom:12px; transform:translateX(-50%); width:min(390px, calc(100% - 24px)); display:grid; grid-template-columns:repeat(3,1fr); gap:8px; background:#fff; border:1px solid var(--line); border-radius:18px; padding:8px; }
+    nav button { background:#f5efdf; color:#777; padding:10px 6px; }
+    nav button.active { color:#208a19; background:#eaf7df; }
+    .toast { position:fixed; left:50%; bottom:88px; transform:translate(-50%, 140px); max-width:min(340px, calc(100% - 32px)); padding:12px 16px; border-radius:999px; background:rgba(20,20,20,.9); color:#fff; text-align:center; transition:.2s; }
+    .toast.show { transform:translate(-50%, 0); }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <span>Закрыть</span>
+    <div><b>Нямметр</b><small>mini app · nyam-48</small></div>
+    <button class="ghost" type="button">•••</button>
+  </header>
+
+  <section class="active" data-screen="home">
+    <div class="card hero"><h1>Привет, я Нямметр 🍽</h1><small>Данные подтягиваются из твоего дневника</small></div>
+    <div class="card summary">
+      <small>Калории сегодня</small>
+      <div><strong data-calories>0</strong> <em data-target></em></div>
+      <div class="bar"><span data-calorie-bar></span></div>
+      <div class="macros">
+        <span>Б <b data-protein>0</b><small data-protein-target>г</small></span>
+        <span>Ж <b data-fat>0</b><small>г</small></span>
+        <span>У <b data-carbs>0</b><small>г</small></span>
+      </div>
+    </div>
+  </section>
+
+  <section data-screen="diary">
+    <h2>Дневник</h2>
+    <div class="card" data-entries><p>Загружаю данные...</p></div>
+  </section>
+
+  <section data-screen="profile">
+    <h2 data-name>Профиль</h2>
+    <div class="card">
+      <label>Вес, кг<input type="number" min="30" max="300" data-weight /></label>
+      <label>Рост, см<input type="number" min="100" max="230" data-height /></label>
+      <label>Активность<select data-activity><option value="low">Низкая</option><option value="medium">Средняя</option><option value="high">Высокая</option></select></label>
+      <button type="button" data-save>Сохранить профиль</button>
+    </div>
+    <div class="card">
+      <b>Цели</b>
+      <p>Калории: <span data-profile-calories>0</span> ккал</p>
+      <p>Белок: <span data-profile-protein>0</span> г</p>
+    </div>
+  </section>
+</main>
+<nav>
+  <button class="active" type="button" data-tab="home">Главная</button>
+  <button type="button" data-tab="diary">Дневник</button>
+  <button type="button" data-tab="profile">Профиль</button>
+</nav>
+<div class="toast" data-toast></div>
+<script>
+const tg = window.Telegram?.WebApp;
+tg?.ready?.();
+tg?.expand?.();
+
+const toast = document.querySelector("[data-toast]");
+const state = { data: null };
+
+function showToast(message) {
+  toast.textContent = message;
+  toast.classList.add("show");
+  clearTimeout(showToast.timer);
+  showToast.timer = setTimeout(() => toast.classList.remove("show"), 2400);
+}
+
+function initData() {
+  return window.Telegram?.WebApp?.initData || "";
+}
+
+async function request(path, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  let requestPath = path;
+  const auth = initData();
+  if (auth) {
+    headers.Authorization = `TMA ${auth}`;
+    const url = new URL(path, window.location.href);
+    url.searchParams.set("initData", auth);
+    requestPath = `${url.pathname}${url.search}`;
+  }
+  const response = await fetch(requestPath, { ...options, headers });
+  if (!response.ok) {
+    let error = `request_failed_${response.status}`;
+    try { error = (await response.json()).error || error; } catch {}
+    throw new Error(error);
+  }
+  return response.json();
+}
+
+function round(value) {
+  return Math.round(Number(value) || 0);
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[char]));
+}
+
+function render(data) {
+  state.data = data;
+  const totals = data.today?.totals || {};
+  const entries = data.today?.entries || [];
+  const target = round(data.targets?.calories);
+  const proteinTarget = round(data.targets?.protein);
+  const calories = round(totals.calories);
+  document.querySelector("[data-calories]").textContent = calories;
+  document.querySelector("[data-target]").textContent = target ? `/ ${target} ккал` : "";
+  document.querySelector("[data-calorie-bar]").style.width = target ? `${Math.min(100, Math.round(calories / target * 100))}%` : "0%";
+  document.querySelector("[data-protein]").textContent = round(totals.protein);
+  document.querySelector("[data-fat]").textContent = round(totals.fat);
+  document.querySelector("[data-carbs]").textContent = round(totals.carbs);
+  document.querySelector("[data-protein-target]").textContent = proteinTarget ? `/ ${proteinTarget} г` : "г";
+  document.querySelector("[data-profile-calories]").textContent = target;
+  document.querySelector("[data-profile-protein]").textContent = proteinTarget;
+
+  const user = data.user || {};
+  document.querySelector("[data-name]").textContent = user.display_name || "Профиль";
+  document.querySelector("[data-weight]").value = user.weight || "";
+  document.querySelector("[data-height]").value = user.height || "";
+  document.querySelector("[data-activity]").value = user.activity || "medium";
+
+  const box = document.querySelector("[data-entries]");
+  if (!entries.length) {
+    box.innerHTML = "<p>Пока записей нет. Добавь еду в боте или миниаппе.</p>";
+    return;
+  }
+  box.innerHTML = entries.map((entry) => `
+    <div class="entry">
+      <b>${escapeHtml(entry.title || "Еда")}</b>
+      <small>${escapeHtml(entry.description || "")}</small>
+      <strong>${round(entry.calories)} ккал</strong>
+      <small>Б ${round(entry.protein)} г · Ж ${round(entry.fat)} г · У ${round(entry.carbs)} г</small>
+    </div>
+  `).join("");
+}
+
+async function load() {
+  if (!initData()) {
+    document.querySelector("[data-entries]").innerHTML = "<p>Открой миниапп через кнопку в Telegram, чтобы увидеть свои данные.</p>";
+    return;
+  }
+  try {
+    render(await request("/api/miniapp/me"));
+  } catch (error) {
+    showToast(`Не смог загрузить данные: ${error.message}`);
+  }
+}
+
+async function saveProfile() {
+  try {
+    const payload = {
+      weight: Number(document.querySelector("[data-weight]").value),
+      height: Number(document.querySelector("[data-height]").value),
+      activity: document.querySelector("[data-activity]").value,
+      goal: state.data?.user?.goal || "support",
+      sex: state.data?.user?.sex || "male",
+    };
+    render(await request("/api/miniapp/profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }));
+    showToast("Профиль сохранен");
+  } catch (error) {
+    showToast(`Не смог сохранить профиль: ${error.message}`);
+  }
+}
+
+document.querySelector("[data-save]").addEventListener("click", saveProfile);
+document.querySelectorAll("[data-tab]").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll("[data-tab]").forEach((item) => item.classList.toggle("active", item === tab));
+    document.querySelectorAll("[data-screen]").forEach((screen) => screen.classList.toggle("active", screen.dataset.screen === tab.dataset.tab));
+  });
+});
+load();
+</script>
+</body>
+</html>
