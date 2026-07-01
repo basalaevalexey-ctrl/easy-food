@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=nyam-39" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-40" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -442,7 +442,7 @@ async function saveProfileToServer() {
     showToast("Профиль сохранен");
   } catch (error) {
     console.error(error);
-    showToast("Не смог сохранить профиль");
+    showToast(`Не смог сохранить профиль: ${error.message}`);
   }
 }
 
@@ -631,7 +631,12 @@ async function miniappRequest(path, options = {}) {
     headers,
   });
   if (!response.ok) {
-    throw new Error(`request_failed_${response.status}`);
+    let errorCode = "";
+    try {
+      const payload = await response.json();
+      errorCode = payload.error || "";
+    } catch {}
+    throw new Error(errorCode || `request_failed_${response.status}`);
   }
   return response.json();
 }

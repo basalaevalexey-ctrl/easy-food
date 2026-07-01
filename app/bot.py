@@ -58,7 +58,7 @@ db = Database(
     backup_paths=config.database_backup_paths,
 )
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-39"
+WEBAPP_BUILD = "nyam-40"
 
 
 def webapp_url_with_build() -> str:
@@ -456,7 +456,15 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
 
         try:
             if parsed.path == "/api/miniapp/profile":
-                result = update_miniapp_profile(telegram_user, payload)
+                try:
+                    result = update_miniapp_profile(telegram_user, payload)
+                except ValueError as exc:
+                    self._send_json(400, {"error": str(exc) or "profile_out_of_range"})
+                    return
+                except Exception:
+                    logger.exception("Failed to save mini app profile")
+                    self._send_json(500, {"error": "profile_save_failed"})
+                    return
                 self._send_json(200, result)
                 return
             if parsed.path == "/api/miniapp/food/text":
