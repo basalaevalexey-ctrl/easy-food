@@ -13,7 +13,7 @@ from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import threading
-from urllib.parse import parse_qsl, urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
@@ -58,12 +58,22 @@ db = Database(
     backup_paths=config.database_backup_paths,
 )
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
+WEBAPP_BUILD = "nyam-38"
+
+
+def webapp_url_with_build() -> str:
+    if not config.webapp_url:
+        return ""
+    parsed = urlparse(config.webapp_url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query["v"] = WEBAPP_BUILD
+    return urlunparse(parsed._replace(query=urlencode(query)))
 
 
 def webapp_url_for_user(user_id: int | None) -> str:
     if not user_id or not config.webapp_url or user_id not in config.admin_ids:
         return ""
-    return config.webapp_url
+    return webapp_url_with_build()
 
 
 class SetupGoal(StatesGroup):
@@ -252,6 +262,14 @@ def build_miniapp_payload(telegram_user: dict) -> dict:
             }
             for row in achievements
         ],
+        "debug": {
+            "build": WEBAPP_BUILD,
+            "is_admin": telegram_id in config.admin_ids,
+            "telegram_id": telegram_id,
+            "db_path": str(config.database_path),
+            "today_entries": len(entries),
+            "webapp_url": webapp_url_with_build(),
+        },
     }
 
 
@@ -1043,6 +1061,38 @@ async def stats_command(message: Message) -> None:
     await admin_command(message)
 
 
+@router.message(Command("miniapp_debug"))
+async def miniapp_debug_command(message: Message) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Команда только для админа.")
+        return
+    payload = build_miniapp_payload(
+        {
+            "id": message.from_user.id,
+            "first_name": message.from_user.first_name,
+            "username": message.from_user.username,
+        }
+    )
+    entries = payload["today"]["entries"]
+    lines = [
+        "Miniapp debug",
+        "",
+        f"build: {WEBAPP_BUILD}",
+        f"telegram_id: {message.from_user.id}",
+        f"WEBAPP_URL: {webapp_url_with_build() or 'не задан'}",
+        f"DB: {config.database_path}",
+        f"today entries: {len(entries)}",
+        f"today calories: {payload['today']['totals']['calories']}",
+        f"target: {payload['targets']['calories'] or 'нет'} ккал",
+    ]
+    if entries:
+        lines.append("")
+        lines.append("entries:")
+        for entry in entries[:5]:
+            lines.append(f"- {entry['title']}: {entry['calories']} ккал, {entry['created_at']}")
+    await message.answer("\n".join(lines))
+
+
 @router.message(Command("backup_db"))
 async def backup_db_command(message: Message) -> None:
     if not is_admin(message.from_user.id):
@@ -1419,7 +1469,7 @@ async def configure_bot_ui(bot: Bot) -> None:
                     chat_id=admin_id,
                     menu_button=MenuButtonWebApp(
                         text="Нямметр",
-                        web_app=WebAppInfo(url=config.webapp_url),
+                        web_app=WebAppInfo(url=webapp_url_with_build()),
                     ),
                 )
             except TelegramBadRequest as exc:
@@ -1432,7 +1482,7 @@ async def configure_bot_ui(bot: Bot) -> None:
     await bot.set_chat_menu_button(
         menu_button=MenuButtonWebApp(
             text="Нямметр",
-            web_app=WebAppInfo(url=config.webapp_url),
+            web_app=WebAppInfo(url=webapp_url_with_build()),
         )
     )
 

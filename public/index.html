@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=nyam-37" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-38" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -734,7 +734,11 @@ function renderEntries(entries) {
   if (!mealList) return;
 
   if (!entries.length) {
-    renderMessageEntry("Пока записей нет", "Добавь еду в боте или миниаппе");
+    const debug = window.__nyammetrDebug;
+    const subtitle = debug?.is_admin
+      ? `ID ${debug.telegram_id} · entries ${debug.today_entries} · ${debug.build}`
+      : "Добавь еду в боте или миниаппе";
+    renderMessageEntry("Пока записей нет", subtitle);
     return;
   }
 
@@ -776,6 +780,7 @@ function renderEntries(entries) {
 }
 
 function applyServerState(data) {
+  window.__nyammetrDebug = data.debug || null;
   const targetCalories = Number(data.targets?.calories) || 0;
   const targetProtein = Number(data.targets?.protein) || 0;
   const totals = data.today?.totals || {};
