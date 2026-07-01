@@ -29,6 +29,7 @@ from aiogram.types import (
     MenuButtonDefault,
     MenuButtonWebApp,
     Message,
+    ReplyKeyboardRemove,
     WebAppInfo,
 )
 
@@ -67,7 +68,7 @@ db = Database(
     backup_paths=config.database_backup_paths,
 )
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-48"
+WEBAPP_BUILD = "nyam-49"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 
 
@@ -1406,6 +1407,28 @@ async def miniapp_link_command(message: Message) -> None:
                 ]
             ]
         ),
+    )
+
+
+@router.message(Command("fix_menu"))
+async def fix_menu_command(message: Message) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Команда только для админа.")
+        return
+    url = webapp_url_with_build()
+    if not url:
+        await message.answer("WEBAPP_URL не задан.")
+        return
+    await message.bot.set_chat_menu_button(
+        chat_id=message.chat.id,
+        menu_button=MenuButtonWebApp(
+            text=f"Нямметр {WEBAPP_BUILD}",
+            web_app=WebAppInfo(url=url),
+        ),
+    )
+    await message.answer(
+        f"Синюю кнопку обновил на {WEBAPP_BUILD}\n{url}",
+        reply_markup=ReplyKeyboardRemove(),
     )
 
 
