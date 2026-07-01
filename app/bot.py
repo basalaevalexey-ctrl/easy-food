@@ -67,7 +67,8 @@ db = Database(
     backup_paths=config.database_backup_paths,
 )
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-43"
+WEBAPP_BUILD = "nyam-44"
+WEBAPP_ENTRY_PATH = "/nyammetr"
 
 
 def webapp_url_with_build() -> str:
@@ -76,7 +77,8 @@ def webapp_url_with_build() -> str:
     parsed = urlparse(config.webapp_url)
     query = dict(parse_qsl(parsed.query, keep_blank_values=True))
     query["v"] = WEBAPP_BUILD
-    return urlunparse(parsed._replace(query=urlencode(query)))
+    path = parsed.path if parsed.path and parsed.path != "/" else WEBAPP_ENTRY_PATH
+    return urlunparse(parsed._replace(path=path, query=urlencode(query)))
 
 
 def webapp_url_for_user(user_id: int | None) -> str:
@@ -372,7 +374,7 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
 
     def _send_static(self, requested_path: str) -> None:
-        relative_path = "index.html" if requested_path in {"", "/"} else requested_path.lstrip("/")
+        relative_path = "index.html" if requested_path in {"", "/", WEBAPP_ENTRY_PATH} else requested_path.lstrip("/")
         try:
             file_path = (config.public_dir / relative_path).resolve()
             public_dir = config.public_dir.resolve()
