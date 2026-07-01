@@ -7,14 +7,13 @@ import json
 import logging
 import mimetypes
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import threading
 from urllib.parse import parse_qsl, urlparse
-from zoneinfo import ZoneInfo
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
@@ -165,21 +164,6 @@ def today_totals(entries: list[FoodEntry]) -> dict[str, float]:
     }
 
 
-def current_day_utc_range() -> tuple[str, str]:
-    try:
-        app_timezone = ZoneInfo(config.timezone)
-    except Exception:
-        app_timezone = ZoneInfo("Europe/Moscow")
-
-    local_now = datetime.now(app_timezone)
-    local_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
-    local_end = local_start + timedelta(days=1)
-    return (
-        local_start.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-        local_end.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-    )
-
-
 def _json_safe(value):
     if hasattr(value, "isoformat"):
         return value.isoformat()
@@ -215,8 +199,7 @@ def parse_telegram_init_data(init_data: str) -> dict | None:
 def build_miniapp_payload(telegram_user: dict) -> dict:
     telegram_id = int(telegram_user["id"])
     user = db.get_or_create_user(telegram_id)
-    day_start, day_end = current_day_utc_range()
-    entries = db.get_entries_between(telegram_id, day_start, day_end)
+    entries = db.get_today_entries(telegram_id)
     totals = today_totals(entries)
     progress = db.get_user_progress_stats(telegram_id)
     achievements = db.get_user_achievements(telegram_id)
