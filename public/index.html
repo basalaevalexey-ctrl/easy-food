@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
-    <link rel="stylesheet" href="./styles.css?v=nyam-35" />
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="./styles.css?v=nyam-36" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -640,6 +641,186 @@ function updateDishAmount(row, value) {
   updateTotalCalories();
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function roundValue(value) {
+  return Math.round(Number(value) || 0);
+}
+
+function telegramInitData() {
+  return window.Telegram?.WebApp?.initData || "";
+}
+
+async function miniappRequest(path, options = {}) {
+  const initData = telegramInitData();
+  const headers = {
+    ...(options.headers || {}),
+  };
+  if (initData) {
+    headers.Authorization = `TMA ${initData}`;
+  }
+  const response = await fetch(path, {
+    ...options,
+    headers,
+  });
+  if (!response.ok) {
+    throw new Error(`request_failed_${response.status}`);
+  }
+  return response.json();
+}
+
+function entryTime(entry) {
+  if (!entry.created_at) return "";
+  const date = new Date(entry.created_at);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function entryIcon(entry) {
+  return entry.source === "photo" ? "./assets/meal-lunch.png" : "./assets/meal-snack.png";
+}
+
+function renderEntries(entries) {
+  const mealList = document.querySelector(".meal-list");
+  if (!mealList) return;
+
+  if (!entries.length) {
+    mealList.innerHTML = '<article class="meal-card open"><button type="button" class="meal-toggle" aria-expanded="true"><span class="meal-emoji"><img src="./assets/meal-snack.png" alt="" /></span><span><b>Пока записей нет</b><small>Добавь еду в боте или миниаппе</small></span><strong>0 ккал</strong></button></article>';
+    return;
+  }
+
+  mealList.innerHTML = entries.map((entry) => {
+    const title = escapeHtml(entry.title || "Еда");
+    const description = escapeHtml(entry.description || "Запись Нямметра");
+    const calories = roundValue(entry.calories);
+    const protein = roundValue(entry.protein);
+    const fat = roundValue(entry.fat);
+    const carbs = roundValue(entry.carbs);
+    const timeLabel = entryTime(entry);
+    return `
+      <article class="meal-card">
+        <button type="button" class="meal-toggle" aria-expanded="false">
+          <span class="meal-emoji"><img src="${entryIcon(entry)}" alt="" /></span>
+          <span><b>${title}</b><small>${timeLabel || "Сегодня"} · ${entry.source === "photo" ? "фото" : "текст"}</small></span>
+          <strong>${calories} ккал</strong>
+        </button>
+        <div class="meal-actions">
+          <div class="dish-list">
+            <span><b>${description}</b><small>Б ${protein} · Ж ${fat} · У ${carbs}</small><strong>${calories} ккал</strong></span>
+          </div>
+          <button type="button" data-meal-action="smaller">Порция меньше</button>
+          <button type="button" data-meal-action="larger">Порция больше</button>
+          <button type="button" data-meal-action="grams">Указать граммы</button>
+          <button type="button" class="danger" data-meal-action="delete">Удалить</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  document.querySelectorAll(".meal-card").forEach((card) => {
+    const toggle = card.querySelector(".meal-toggle");
+    toggle?.addEventListener("click", () => {
+      const isOpen = card.classList.toggle("open");
+      toggle.setAttribute("aria-expanded", String(isOpen));
+    });
+  });
+}
+
+function applyServerState(data) {
+  const targetCalories = Number(data.targets?.calories) || 0;
+  const targetProtein = Number(data.targets?.protein) || 0;
+  const totals = data.today?.totals || {};
+  const entries = data.today?.entries || [];
+  const calories = roundValue(totals.calories);
+  const protein = roundValue(totals.protein);
+  const fat = roundValue(totals.fat);
+  const carbs = roundValue(totals.carbs);
+
+  if (targetCalories > 0) {
+    calorieGoal = targetCalories;
+    goalCalories.textContent = `${roundValue(targetCalories)} ${text.kcal}`;
+  }
+  if (targetProtein > 0) {
+    goalProtein.textContent = `${roundValue(targetProtein)} ${text.gram}`;
+  }
+
+  document.querySelectorAll("[data-calories]").forEach((node) => {
+    node.textContent = calories;
+  });
+  document.querySelectorAll("[data-calorie-goal-label]").forEach((node) => {
+    node.textContent = targetCalories > 0 ? `/ ${roundValue(targetCalories)} ${text.kcal}` : "";
+  });
+
+  const fatTarget = targetCalories > 0 ? Math.round((targetCalories * 0.3) / 9) : 0;
+  const carbTarget = targetCalories > 0 && targetProtein > 0
+    ? Math.max(0, Math.round((targetCalories - targetProtein * 4 - fatTarget * 9) / 4))
+    : 0;
+  document.querySelectorAll(".macro-grid").forEach((grid) => {
+    const cells = grid.querySelectorAll("span");
+    const values = [
+      [protein, targetProtein],
+      [fat, fatTarget],
+      [carbs, carbTarget],
+    ];
+    cells.forEach((cell, index) => {
+      const current = cell.querySelector(".macro-current");
+      const target = cell.querySelector("small:not(.macro-percent)");
+      const percent = cell.querySelector(".macro-percent");
+      if (current) current.textContent = values[index][0];
+      if (target) target.textContent = values[index][1] ? `/${values[index][1]}` : "";
+      if (percent) {
+        percent.textContent = values[index][1] ? `${Math.min(999, Math.round(values[index][0] / values[index][1] * 100))}%` : "";
+      }
+    });
+  });
+
+  document.querySelectorAll(".calorie-card .progress-line span").forEach((bar) => {
+    const percent = targetCalories > 0 ? Math.min(100, Math.round((calories / targetCalories) * 100)) : 0;
+    bar.style.width = `${percent}%`;
+  });
+
+  if (data.user) {
+    profileName.textContent = data.user.display_name || profileName.textContent;
+    profileGoal = data.user.goal || profileGoal;
+    profileSex = data.user.sex || profileSex;
+    profileGoalLabel.textContent = goalLabels[profileGoal] || goalLabels.support;
+    if (data.user.weight) profileWeight.value = data.user.weight;
+    if (data.user.height) profileHeight.value = data.user.height;
+    if (data.user.activity) profileActivity.value = data.user.activity;
+  }
+
+  renderEntries(entries);
+}
+
+async function loadServerState() {
+  const tg = window.Telegram?.WebApp;
+  tg?.ready?.();
+  tg?.expand?.();
+
+  if (!telegramInitData()) {
+    showToast("Открой миниапп через Telegram");
+    return;
+  }
+
+  try {
+    const data = await miniappRequest("/api/miniapp/me");
+    applyServerState(data);
+  } catch (error) {
+    console.error(error);
+    showToast("Не смог загрузить данные");
+  }
+}
+
 function closeAddMenu() {
   addMenu.classList.remove("open");
   addToggle.setAttribute("aria-expanded", "false");
@@ -774,6 +955,7 @@ document.querySelectorAll(".meal-card").forEach(updateMealCard);
 loadProfile();
 calculateGoals();
 updateTotalCalories();
+loadServerState();
     </script>
   </body>
 </html>
