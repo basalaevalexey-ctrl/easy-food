@@ -33,6 +33,18 @@ from aiogram.types import (
     WebAppInfo,
 )
 
+from app.admin_stats import (
+    AdminStatsService,
+    format_30d_stats,
+    format_7d_stats,
+    format_daily_stats,
+    format_funnel_stats,
+    format_reminders_stats,
+    format_retention_stats,
+    format_revenue_stats,
+    format_today_stats,
+    format_total_stats,
+)
 from app.achievements import ACHIEVEMENTS
 from app.calorie_calculator import calculate_targets
 from app.config import load_config
@@ -67,6 +79,7 @@ db = Database(
     legacy_paths=config.legacy_database_paths,
     backup_paths=config.database_backup_paths,
 )
+admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
 WEBAPP_BUILD = "nyam-50"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
@@ -1029,6 +1042,72 @@ def is_admin(telegram_id: int) -> bool:
     return telegram_id in config.admin_ids
 
 
+def format_admin_dashboard(screen: str) -> str:
+    if screen == "today":
+        return format_today_stats(admin_stats_service.get_stats_today())
+    if screen == "week":
+        return format_7d_stats(admin_stats_service.get_stats_7d())
+    if screen == "month":
+        return format_30d_stats(admin_stats_service.get_stats_30d())
+    if screen == "daily":
+        return format_daily_stats(admin_stats_service.get_daily_stats(7))
+    if screen == "funnel":
+        return format_funnel_stats(admin_stats_service.get_funnel_stats(7))
+    if screen == "retention":
+        return format_retention_stats(admin_stats_service.get_retention_stats())
+    if screen == "reminders":
+        return format_reminders_stats(admin_stats_service.get_reminders_stats(7))
+    if screen == "revenue":
+        return format_revenue_stats(admin_stats_service.get_revenue_stats())
+    return format_total_stats(apply_admin_dashboard_baseline(admin_stats_service.get_stats_total()))
+
+
+def apply_admin_dashboard_baseline(stats: dict[str, int | float]) -> dict[str, int | float]:
+    result = dict(stats)
+    baseline = {**DEFAULT_ADMIN_TOTAL_BASELINE, **config.admin_total_baseline}
+    offset = {**DEFAULT_ADMIN_TOTAL_BASELINE_OFFSET, **config.admin_total_baseline_offset}
+    mapping = {
+        "users_total": "total_users",
+        "users_started": "total_starts",
+        "users_goal_set": "total_goal_set",
+        "users_with_reminders_total": "reminders_enabled_total",
+        "food_entries": "meal_logs",
+        "text_entries": "text_logs",
+        "photo_recognitions": "photo_logs",
+        "active_users": "total_active_users_ever",
+        "calories": "kcal",
+    }
+    for old_key, new_key in mapping.items():
+        if old_key not in baseline:
+            continue
+        current_value = result.get(new_key, 0)
+        result[new_key] = baseline[old_key] + max(0, current_value - offset.get(old_key, 0))
+    return result
+
+
+def detect_admin_screen(text: str | None) -> str:
+    source = text or ""
+    if "СЕГОДНЯ" in source:
+        return "today"
+    if "7 ДНЕЙ" in source:
+        return "week"
+    if "30 ДНЕЙ" in source:
+        return "month"
+    if "ОБЩЕЕ" in source:
+        return "total"
+    if "ПО ДНЯМ" in source:
+        return "daily"
+    if "ВОРОНКА" in source:
+        return "funnel"
+    if "RETENTION" in source:
+        return "retention"
+    if "НАПОМИНАНИЯ" in source:
+        return "reminders"
+    if "ДЕНЬГИ" in source:
+        return "revenue"
+    return "today"
+
+
 def format_admin_period(title: str, days: int | None) -> str:
     stats = db.admin_period_stats(days)
     if days is None:
@@ -1346,7 +1425,7 @@ async def admin_command(message: Message) -> None:
         return
     db.record_user_event(message.from_user.id, "admin_opened")
     db.get_or_create_user(message.from_user.id)
-    await message.answer(format_admin_period("Общее", None), reply_markup=admin_keyboard())
+    await message.answer(format_admin_dashboard("today"), reply_markup=admin_keyboard())
 
 
 @router.message(Command("stats"))
@@ -1491,16 +1570,9 @@ async def admin_callback(callback: CallbackQuery) -> None:
 
     db.record_user_event(callback.from_user.id, "admin_clicked")
     action = callback.data.split(":")[-1]
-    if action == "today":
-        text = format_admin_today()
-    elif action == "week":
-        text = format_admin_week()
-    elif action == "users":
-        text = format_admin_users()
-    elif action == "total":
-        text = format_admin_period("Общее", None)
-    else:
-        text = format_admin_period("Общее", None)
+    if action == "refresh":
+        action = detect_admin_screen(callback.message.text if callback.message else "")
+    text = format_admin_dashboard(action)
 
     try:
         await callback.message.edit_text(text, reply_markup=admin_keyboard())

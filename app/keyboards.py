@@ -83,12 +83,24 @@ def admin_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="Общее", callback_data="admin:total"),
                 InlineKeyboardButton(text="Сегодня", callback_data="admin:today"),
+                InlineKeyboardButton(text="7 дней", callback_data="admin:week"),
+                InlineKeyboardButton(text="30 дней", callback_data="admin:month"),
             ],
             [
-                InlineKeyboardButton(text="7 дней", callback_data="admin:week"),
-                InlineKeyboardButton(text="Пользователи", callback_data="admin:users"),
+                InlineKeyboardButton(text="Общее", callback_data="admin:total"),
+                InlineKeyboardButton(text="По дням", callback_data="admin:daily"),
+            ],
+            [
+                InlineKeyboardButton(text="Воронка", callback_data="admin:funnel"),
+                InlineKeyboardButton(text="Retention", callback_data="admin:retention"),
+            ],
+            [
+                InlineKeyboardButton(text="Напоминания", callback_data="admin:reminders"),
+                InlineKeyboardButton(text="Деньги", callback_data="admin:revenue"),
+            ],
+            [
+                InlineKeyboardButton(text="Обновить", callback_data="admin:refresh"),
             ],
         ]
     )
