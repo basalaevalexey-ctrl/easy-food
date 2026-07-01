@@ -21,7 +21,16 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import CallbackQuery, FSInputFile, MenuButtonDefault, MenuButtonWebApp, Message, WebAppInfo
+from aiogram.types import (
+    CallbackQuery,
+    FSInputFile,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    MenuButtonDefault,
+    MenuButtonWebApp,
+    Message,
+    WebAppInfo,
+)
 
 from app.achievements import ACHIEVEMENTS
 from app.calorie_calculator import calculate_targets
@@ -58,7 +67,7 @@ db = Database(
     backup_paths=config.database_backup_paths,
 )
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-41"
+WEBAPP_BUILD = "nyam-42"
 
 
 def webapp_url_with_build() -> str:
@@ -1101,6 +1110,30 @@ async def miniapp_debug_command(message: Message) -> None:
         for entry in entries[:5]:
             lines.append(f"- {entry['title']}: {entry['calories']} ккал, {entry['created_at']}")
     await message.answer("\n".join(lines))
+
+
+@router.message(Command("miniapp_link"))
+async def miniapp_link_command(message: Message) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Команда только для админа.")
+        return
+    url = webapp_url_with_build()
+    if not url:
+        await message.answer("WEBAPP_URL не задан.")
+        return
+    await message.answer(
+        f"Miniapp build: {WEBAPP_BUILD}\n{url}",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=f"Открыть Нямметр {WEBAPP_BUILD}",
+                        web_app=WebAppInfo(url=url),
+                    )
+                ]
+            ]
+        ),
+    )
 
 
 @router.message(Command("backup_db"))
