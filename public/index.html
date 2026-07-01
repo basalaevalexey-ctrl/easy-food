@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=nyam-36" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-37" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -690,12 +690,51 @@ function entryIcon(entry) {
   return entry.source === "photo" ? "./assets/meal-lunch.png" : "./assets/meal-snack.png";
 }
 
+function renderMessageEntry(title, subtitle) {
+  const mealList = document.querySelector(".meal-list");
+  if (!mealList) return;
+  mealList.innerHTML = `
+    <article class="meal-card open">
+      <button type="button" class="meal-toggle" aria-expanded="true">
+        <span class="meal-emoji"><img src="./assets/meal-snack.png" alt="" /></span>
+        <span><b>${escapeHtml(title)}</b><small>${escapeHtml(subtitle)}</small></span>
+        <strong>0 ${text.kcal}</strong>
+      </button>
+    </article>
+  `;
+}
+
+function resetLiveTotals() {
+  document.querySelectorAll("[data-calories]").forEach((node) => {
+    node.textContent = "0";
+  });
+  document.querySelectorAll(".macro-current").forEach((node) => {
+    node.textContent = "0";
+  });
+  document.querySelectorAll(".macro-percent").forEach((node) => {
+    node.textContent = "";
+  });
+  document.querySelectorAll(".calorie-card .progress-line span").forEach((bar) => {
+    bar.style.width = "0%";
+  });
+}
+
+function showLoadingState() {
+  resetLiveTotals();
+  renderMessageEntry("Загружаю данные", "Синхронизируюсь с дневником Нямметра");
+}
+
+function showLoadError(subtitle) {
+  resetLiveTotals();
+  renderMessageEntry("Не смог загрузить данные", subtitle);
+}
+
 function renderEntries(entries) {
   const mealList = document.querySelector(".meal-list");
   if (!mealList) return;
 
   if (!entries.length) {
-    mealList.innerHTML = '<article class="meal-card open"><button type="button" class="meal-toggle" aria-expanded="true"><span class="meal-emoji"><img src="./assets/meal-snack.png" alt="" /></span><span><b>Пока записей нет</b><small>Добавь еду в боте или миниаппе</small></span><strong>0 ккал</strong></button></article>';
+    renderMessageEntry("Пока записей нет", "Добавь еду в боте или миниаппе");
     return;
   }
 
@@ -808,6 +847,7 @@ async function loadServerState() {
   tg?.expand?.();
 
   if (!telegramInitData()) {
+    showLoadError("Открой миниапп через кнопку в Telegram");
     showToast("Открой миниапп через Telegram");
     return;
   }
@@ -817,6 +857,7 @@ async function loadServerState() {
     applyServerState(data);
   } catch (error) {
     console.error(error);
+    showLoadError("Проверь редеплой и WEBAPP_URL");
     showToast("Не смог загрузить данные");
   }
 }
@@ -954,7 +995,7 @@ updateDiaryDate(today);
 document.querySelectorAll(".meal-card").forEach(updateMealCard);
 loadProfile();
 calculateGoals();
-updateTotalCalories();
+showLoadingState();
 loadServerState();
     </script>
   </body>
