@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=nyam-38" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-39" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -245,6 +245,7 @@ let calorieGoal = 2100;
 let profileGoal = "support";
 let profileSex = "male";
 const profileStoreKey = "nyammetr-profile";
+let profileSaveTimer = 0;
 
 const text = {
   today: "\u0421\u0435\u0433\u043e\u0434\u043d\u044f",
@@ -419,6 +420,30 @@ function applyProfile(profile) {
 
 function saveProfile() {
   localStorage.setItem(profileStoreKey, JSON.stringify(readProfile()));
+}
+
+function scheduleProfileSave() {
+  saveProfile();
+  window.clearTimeout(profileSaveTimer);
+  profileSaveTimer = window.setTimeout(saveProfileToServer, 500);
+}
+
+async function saveProfileToServer() {
+  if (!telegramInitData()) return;
+  try {
+    const data = await miniappRequest("/api/miniapp/profile", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(readProfile()),
+    });
+    applyServerState(data);
+    showToast("Профиль сохранен");
+  } catch (error) {
+    console.error(error);
+    showToast("Не смог сохранить профиль");
+  }
 }
 
 function loadProfile() {
@@ -850,7 +875,7 @@ document.querySelectorAll("[data-soon-update]").forEach((node) => {
 [profileWeight, profileHeight, profileActivity].forEach((control) => {
   control.addEventListener("input", calculateGoals);
   control.addEventListener("change", calculateGoals);
-  control.addEventListener("change", saveProfile);
+  control.addEventListener("change", scheduleProfileSave);
 });
 
 onboardingForm.addEventListener("submit", (event) => {
@@ -864,6 +889,7 @@ onboardingForm.addEventListener("submit", (event) => {
     goal: onboardingGoal.value,
   });
   saveProfile();
+  saveProfileToServer();
   onboarding.hidden = true;
   showToast("Профиль настроен");
 });

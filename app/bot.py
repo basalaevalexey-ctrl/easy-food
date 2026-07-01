@@ -58,7 +58,7 @@ db = Database(
     backup_paths=config.database_backup_paths,
 )
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-38"
+WEBAPP_BUILD = "nyam-39"
 
 
 def webapp_url_with_build() -> str:
