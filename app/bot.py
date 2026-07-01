@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import logging
+import mimetypes
 import re
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -358,6 +359,26 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
         self._send_headers(status)
         self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
 
+    def _send_static(self, requested_path: str) -> None:
+        relative_path = "index.html" if requested_path in {"", "/"} else requested_path.lstrip("/")
+        try:
+            file_path = (config.public_dir / relative_path).resolve()
+            public_dir = config.public_dir.resolve()
+            if public_dir not in file_path.parents and file_path != public_dir:
+                self._send_json(404, {"error": "not_found"})
+                return
+            if not file_path.is_file():
+                self._send_json(404, {"error": "not_found"})
+                return
+            content_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+            if content_type.startswith("text/"):
+                content_type += "; charset=utf-8"
+            self._send_headers(200, content_type)
+            self.wfile.write(file_path.read_bytes())
+        except OSError:
+            logger.exception("Failed to serve mini app file: %s", requested_path)
+            self._send_json(500, {"error": "static_file_error"})
+
     def _read_json(self) -> dict:
         length = int(self.headers.get("Content-Length") or 0)
         if length <= 0:
@@ -398,6 +419,10 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
         if parsed.path == "/health":
             self._send_headers(200, "text/plain; charset=utf-8")
             self.wfile.write(b"ok")
+            return
+
+        if not parsed.path.startswith("/api/"):
+            self._send_static(parsed.path)
             return
 
         if parsed.path != "/api/miniapp/me":
