@@ -68,7 +68,7 @@ db = Database(
     backup_paths=config.database_backup_paths,
 )
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-49"
+WEBAPP_BUILD = "nyam-50"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 
 
@@ -1430,6 +1430,37 @@ async def fix_menu_command(message: Message) -> None:
         f"Синюю кнопку обновил на {WEBAPP_BUILD}\n{url}",
         reply_markup=ReplyKeyboardRemove(),
     )
+
+
+@router.message(Command("miniapp_files"))
+async def miniapp_files_command(message: Message) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Команда только для админа.")
+        return
+    lines = [
+        "Miniapp files",
+        "",
+        f"build: {WEBAPP_BUILD}",
+        f"public_dir: {config.public_dir}",
+        f"url: {webapp_url_with_build() or 'не задан'}",
+    ]
+    banned = ("Овсянка", "Завтрак", "1800", "2350", "420 ккал", "680 ккал")
+    for name in ("index.html", "nyammetr-live.html"):
+        path = config.public_dir / name
+        lines.append("")
+        lines.append(name)
+        if not path.exists():
+            lines.append("missing")
+            continue
+        raw = path.read_bytes()
+        text = raw.decode("utf-8", errors="replace")
+        digest = hashlib.sha256(raw).hexdigest()[:16]
+        found = [word for word in banned if word in text]
+        lines.append(f"size: {len(raw)}")
+        lines.append(f"sha256: {digest}")
+        lines.append(f"has old demo: {'yes ' + ', '.join(found) if found else 'no'}")
+        lines.append(f"head: {text[:80].replace(chr(10), ' ')}")
+    await message.answer("\n".join(lines))
 
 
 @router.message(Command("backup_db"))
