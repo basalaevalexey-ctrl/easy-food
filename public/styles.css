@@ -1352,11 +1352,13 @@ h2 {
   left: 50%;
   bottom: 28px;
   min-width: 230px;
+  max-width: min(320px, calc(100vw - 40px));
   padding: 14px 18px;
   border-radius: 999px;
   color: white;
   background: rgba(25, 25, 25, 0.9);
   text-align: center;
+  overflow-wrap: anywhere;
   transform: translate(-50%, 120px);
   transition: transform 0.22s ease;
   pointer-events: none;
