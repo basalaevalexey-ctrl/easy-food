@@ -258,17 +258,7 @@ class Database:
     def _rebuild_user_streaks(self, conn: sqlite3.Connection) -> None:
         user_ids = [row["id"] for row in conn.execute("SELECT id FROM users").fetchall()]
         for user_id in user_ids:
-            rows = conn.execute(
-                """
-                SELECT DISTINCT date(created_at, 'localtime') AS day
-                FROM food_entries
-                WHERE user_id = ?
-                ORDER BY day ASC
-                """,
-                (user_id,),
-            ).fetchall()
-            active_days = [datetime.fromisoformat(row["day"]).date() for row in rows]
-            current_streak, best_streak, last_active_date = self._streaks_from_active_days(active_days)
+            current_streak, best_streak, last_active_date = self._streaks_for_user(conn, user_id)
             conn.execute(
                 """
                 UPDATE users
@@ -279,6 +269,25 @@ class Database:
                 """,
                 (current_streak, best_streak, last_active_date, user_id),
             )
+
+    def _streaks_for_user(self, conn: sqlite3.Connection, user_id: int) -> tuple[int, int, str | None]:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT date(created_at, '+3 hours') AS day
+            FROM food_entries
+            WHERE user_id = ?
+            ORDER BY day ASC
+            """,
+            (user_id,),
+        ).fetchall()
+        active_days = [datetime.fromisoformat(row["day"]).date() for row in rows]
+        current_streak, best_streak, last_active_date = self._streaks_from_active_days(active_days)
+        if last_active_date:
+            today = conn.execute("SELECT date('now', '+3 hours')").fetchone()[0]
+            yesterday = conn.execute("SELECT date('now', '+3 hours', '-1 day')").fetchone()[0]
+            if last_active_date not in (today, yesterday):
+                current_streak = 0
+        return current_streak, best_streak, last_active_date
 
     @staticmethod
     def _streaks_from_active_days(active_days: list[Any]) -> tuple[int, int, str | None]:
@@ -636,13 +645,13 @@ class Database:
     def mark_nyam_streak_if_first_today(self, telegram_id: int) -> dict[str, int | bool] | None:
         user = self.get_or_create_user(telegram_id)
         with self.connect() as conn:
-            today = conn.execute("SELECT date('now', 'localtime')").fetchone()[0]
-            yesterday = conn.execute("SELECT date('now', 'localtime', '-1 day')").fetchone()[0]
+            today = conn.execute("SELECT date('now', '+3 hours')").fetchone()[0]
+            yesterday = conn.execute("SELECT date('now', '+3 hours', '-1 day')").fetchone()[0]
             active_today = conn.execute(
                 """
                 SELECT 1 FROM food_entries
                 WHERE user_id = ?
-                  AND date(created_at, 'localtime') = ?
+                  AND date(created_at, '+3 hours') = ?
                 LIMIT 1
                 """,
                 (user.id, today),
@@ -694,13 +703,29 @@ class Database:
     def get_user_progress_stats(self, telegram_id: int) -> dict[str, int]:
         user = self.get_or_create_user(telegram_id)
         with self.connect() as conn:
+            current_streak, best_streak, last_active_date = self._streaks_for_user(conn, user.id)
+            if (
+                current_streak != int(user.current_streak or 0)
+                or best_streak != int(user.best_streak or 0)
+                or last_active_date != user.last_active_date
+            ):
+                conn.execute(
+                    """
+                    UPDATE users
+                    SET current_streak = ?,
+                        best_streak = ?,
+                        last_active_date = ?
+                    WHERE id = ?
+                    """,
+                    (current_streak, best_streak, last_active_date, user.id),
+                )
             total_entries = conn.execute(
                 "SELECT COUNT(*) FROM food_entries WHERE user_id = ?",
                 (user.id,),
             ).fetchone()[0]
             active_days = conn.execute(
                 """
-                SELECT COUNT(DISTINCT date(created_at, 'localtime'))
+                SELECT COUNT(DISTINCT date(created_at, '+3 hours'))
                 FROM food_entries
                 WHERE user_id = ?
                 """,
@@ -708,7 +733,7 @@ class Database:
             ).fetchone()[0]
             days_with_nyammetr = conn.execute(
                 """
-                SELECT CAST(julianday(date('now', 'localtime')) - julianday(date(created_at, 'localtime')) AS INTEGER) + 1
+                SELECT CAST(julianday(date('now', '+3 hours')) - julianday(date(created_at, '+3 hours')) AS INTEGER) + 1
                 FROM users
                 WHERE id = ?
                 """,
@@ -716,8 +741,8 @@ class Database:
             ).fetchone()[0]
 
         return {
-            "current_streak": int(user.current_streak or 0),
-            "best_streak": int(user.best_streak or 0),
+            "current_streak": int(current_streak or 0),
+            "best_streak": int(best_streak or 0),
             "total_entries": int(total_entries),
             "active_days": int(active_days or 0),
             "days_with_nyammetr": max(1, int(days_with_nyammetr or 1)),
