@@ -81,7 +81,7 @@ db = Database(
 )
 admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-52"
+WEBAPP_BUILD = "nyam-53"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 
 

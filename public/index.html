@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=nyam-52" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-53" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -598,10 +598,14 @@ async function miniappRequest(path, options = {}) {
   const headers = {
     ...(options.headers || {}),
   };
+  let requestPath = path;
   if (initData) {
     headers.Authorization = `TMA ${initData}`;
+    const url = new URL(path, window.location.href);
+    url.searchParams.set("initData", initData);
+    requestPath = `${url.pathname}${url.search}`;
   }
-  const response = await fetch(path, {
+  const response = await fetch(requestPath, {
     ...options,
     headers,
   });
@@ -797,7 +801,7 @@ async function loadServerState() {
     applyServerState(data);
   } catch (error) {
     console.error(error);
-    showLoadError("Проверь редеплой и WEBAPP_URL");
+    showLoadError(error.message || "Проверь редеплой и WEBAPP_URL");
     showToast("Не смог загрузить данные");
   }
 }
