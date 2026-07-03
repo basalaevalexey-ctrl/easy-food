@@ -998,6 +998,16 @@ h2 {
   font-weight: 700;
 }
 
+.badges span.locked b {
+  filter: grayscale(1);
+  opacity: 0.42;
+  box-shadow: none;
+}
+
+.badges span.locked small {
+  color: #9a958c;
+}
+
 .lower {
   margin-top: 24px;
 }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=nyam-55" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-56" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -114,28 +114,28 @@
           <img class="mission-cat-art" src="./assets/cat-medal-large.png?v=2" alt="" />
         </div>
 
-        <article class="streak-card">🔥 <strong>Ням-стрик:</strong> <b>5 дней</b></article>
+        <article class="streak-card">🔥 <strong>Ням-стрик:</strong> <b><span data-current-streak>0</span> дней</b></article>
 
         <article class="mission-card">
           <span class="mission-icon"><img src="./assets/mission-target.png" alt="" /></span>
           <div>
             <strong>Миссия дня:</strong>
-            <small>Запиши 3 приема пищи</small>
-            <div class="progress-line"><span style="width: 66%"></span></div>
+            <small data-mission-title>Загружаю миссию</small>
+            <div class="progress-line"><span data-mission-progress-bar style="width: 0%"></span></div>
           </div>
-          <b>2/3</b>
+          <b data-mission-progress-value>0/1</b>
         </article>
 
         <div class="achievements-title">
           <h2>Достижения</h2>
-          <small>Собрано 6 из 12</small>
+          <small data-achievements-summary>Собрано 0 из 5</small>
         </div>
         <div class="badges">
-          <span><b><img src="./assets/achievement-01-trim.png" alt="" /></b><small>Первые шаги</small></span>
-          <span><b><img src="./assets/achievement-02-trim.png" alt="" /></b><small>5 дней подряд</small></span>
-          <span><b><img src="./assets/achievement-03-trim.png" alt="" /></b><small>Баланс дня</small></span>
-          <span><b><img src="./assets/achievement-04-trim.png" alt="" /></b><small>Мастер цели</small></span>
-          <span class="locked"><b><img src="./assets/achievement-12-trim.png" alt="" /></b><small>Секрет</small></span>
+          <span data-achievement-key="first_nyam"><b><img src="./assets/achievement-01-trim.png" alt="" /></b><small>Первый ням</small></span>
+          <span data-achievement-key="photo_lunch"><b><img src="./assets/achievement-02-trim.png" alt="" /></b><small>Фото-обед</small></span>
+          <span data-achievement-key="in_rhythm"><b><img src="./assets/achievement-03-trim.png" alt="" /></b><small>Вошел в ритм</small></span>
+          <span data-achievement-key="full_day"><b><img src="./assets/achievement-04-trim.png" alt="" /></b><small>Полный день</small></span>
+          <span data-achievement-key="target_day"><b><img src="./assets/achievement-12-trim.png" alt="" /></b><small>День в цель</small></span>
         </div>
 
         <button class="primary-action lower" type="button" data-missions-add>
@@ -184,7 +184,7 @@
           <div class="profile-stats">
             <span><b><img src="./assets/profile-streak-symbol.png" alt="" /></b><small>Ням-стрик</small><strong><span data-current-streak>0</span> дней</strong></span>
             <span><b><img src="./assets/profile-active-days-symbol.png" alt="" /></b><small>Активных дней</small><strong data-active-days>0</strong></span>
-            <span><b><img src="./assets/profile-achievements-symbol.png" alt="" /></b><small>Достижений</small><strong data-achievements-count>0</strong></span>
+            <span><b><img src="./assets/profile-achievements-symbol.png" alt="" /></b><small>Достиже-<br>ний</small><strong data-achievements-count>0</strong></span>
           </div>
         </article>
       </section>
@@ -268,6 +268,20 @@ const goalLabels = {
   lose: "\u0441\u043d\u0438\u0437\u0438\u0442\u044c \u0432\u0435\u0441",
   gain: "\u043d\u0430\u0431\u0440\u0430\u0442\u044c \u043c\u0430\u0441\u0441\u0443",
 };
+
+const missionTitles = {
+  photo_food: "Фото-старт",
+  text_food: "Текстовый ням",
+  full_day: "Полный день",
+  calorie_range: "Попади в коридор",
+  protein_day: "Белковый день",
+  breakfast: "Запиши завтрак",
+  evening_summary: "Закрой день",
+  adjust_portion: "Уточни порцию",
+  keep_streak: "Сохрани Ням-стрик",
+};
+
+const achievementKeys = ["first_nyam", "photo_lunch", "in_rhythm", "full_day", "target_day"];
 
 const today = startOfDay(new Date());
 let selectedDate = new Date(today);
@@ -589,6 +603,31 @@ function roundValue(value) {
   return Math.round(Number(value) || 0);
 }
 
+function missionProgress(data) {
+  const mission = data.mission || {};
+  const key = mission.key || "";
+  const totals = data.today?.totals || {};
+  const entries = data.today?.entries || [];
+  const targetCalories = Number(data.targets?.calories) || 0;
+  const targetProtein = Number(data.targets?.protein) || 0;
+  const calories = Number(totals.calories) || 0;
+  const protein = Number(totals.protein) || 0;
+  const textEntries = entries.filter((entry) => entry.source === "text").length;
+  const photoEntries = entries.filter((entry) => entry.source === "photo").length;
+
+  if (mission.is_completed) return { current: 1, target: 1, label: "1/1", percent: 100 };
+  if (key === "full_day") return { current: Math.min(entries.length, 3), target: 3, label: `${Math.min(entries.length, 3)}/3`, percent: Math.min(100, entries.length / 3 * 100) };
+  if (key === "photo_food") return { current: Math.min(photoEntries, 1), target: 1, label: `${Math.min(photoEntries, 1)}/1`, percent: Math.min(100, photoEntries * 100) };
+  if (key === "text_food") return { current: Math.min(textEntries, 1), target: 1, label: `${Math.min(textEntries, 1)}/1`, percent: Math.min(100, textEntries * 100) };
+  if (key === "keep_streak") return { current: Math.min(entries.length, 1), target: 1, label: `${Math.min(entries.length, 1)}/1`, percent: Math.min(100, entries.length * 100) };
+  if (key === "calorie_range" && targetCalories > 0) return { current: calories, target: targetCalories, label: `${roundValue(calories)}/${roundValue(targetCalories)}`, percent: Math.min(100, calories / targetCalories * 100) };
+  if (key === "protein_day" && targetProtein > 0) {
+    const target = targetProtein * 0.8;
+    return { current: protein, target, label: `${roundValue(protein)}/${roundValue(target)}`, percent: Math.min(100, protein / target * 100) };
+  }
+  return { current: 0, target: 1, label: "0/1", percent: 0 };
+}
+
 function telegramInitData() {
   return window.Telegram?.WebApp?.initData || "";
 }
@@ -725,6 +764,8 @@ function applyServerState(data) {
   const totals = data.today?.totals || {};
   const entries = data.today?.entries || [];
   const progress = data.progress || {};
+  const mission = data.mission || {};
+  const unlockedAchievements = new Set((data.achievements || []).map((item) => item.key));
   const calories = roundValue(totals.calories);
   const protein = roundValue(totals.protein);
   const fat = roundValue(totals.fat);
@@ -792,6 +833,23 @@ function applyServerState(data) {
   });
   document.querySelectorAll("[data-achievements-count]").forEach((node) => {
     node.textContent = (data.achievements || []).length;
+  });
+  document.querySelectorAll("[data-achievements-summary]").forEach((node) => {
+    node.textContent = `Собрано ${unlockedAchievements.size} из ${achievementKeys.length}`;
+  });
+  document.querySelectorAll("[data-achievement-key]").forEach((node) => {
+    node.classList.toggle("locked", !unlockedAchievements.has(node.dataset.achievementKey));
+  });
+
+  const missionState = missionProgress(data);
+  document.querySelectorAll("[data-mission-title]").forEach((node) => {
+    node.textContent = missionTitles[mission.key] || mission.progress_text || "Миссия дня";
+  });
+  document.querySelectorAll("[data-mission-progress-value]").forEach((node) => {
+    node.textContent = mission.is_completed ? "✓" : missionState.label;
+  });
+  document.querySelectorAll("[data-mission-progress-bar]").forEach((bar) => {
+    bar.style.width = `${Math.max(0, Math.min(100, Math.round(missionState.percent)))}%`;
   });
 
   renderEntries(entries);
