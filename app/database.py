@@ -698,6 +698,14 @@ class Database:
                 "SELECT COUNT(*) FROM food_entries WHERE user_id = ?",
                 (user.id,),
             ).fetchone()[0]
+            active_days = conn.execute(
+                """
+                SELECT COUNT(DISTINCT date(created_at, 'localtime'))
+                FROM food_entries
+                WHERE user_id = ?
+                """,
+                (user.id,),
+            ).fetchone()[0]
             days_with_nyammetr = conn.execute(
                 """
                 SELECT CAST(julianday(date('now', 'localtime')) - julianday(date(created_at, 'localtime')) AS INTEGER) + 1
@@ -711,6 +719,7 @@ class Database:
             "current_streak": int(user.current_streak or 0),
             "best_streak": int(user.best_streak or 0),
             "total_entries": int(total_entries),
+            "active_days": int(active_days or 0),
             "days_with_nyammetr": max(1, int(days_with_nyammetr or 1)),
         }
 

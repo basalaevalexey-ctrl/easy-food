@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=nyam-54" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-55" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -182,9 +182,9 @@
         <article class="profile-panel" data-soon-update role="button" tabindex="0">
           <h2><span><img src="./assets/profile-progress-trim.png" alt="" /></span>Прогресс</h2>
           <div class="profile-stats">
-            <span><b><img src="./assets/profile-streak-symbol.png" alt="" /></b><small>Ням-стрик</small><strong>5 дней</strong></span>
-            <span><b><img src="./assets/profile-active-days-symbol.png" alt="" /></b><small>Активных дней</small><strong>14</strong></span>
-            <span><b><img src="./assets/profile-achievements-symbol.png" alt="" /></b><small>Достижений</small><strong>6</strong></span>
+            <span><b><img src="./assets/profile-streak-symbol.png" alt="" /></b><small>Ням-стрик</small><strong><span data-current-streak>0</span> дней</strong></span>
+            <span><b><img src="./assets/profile-active-days-symbol.png" alt="" /></b><small>Активных дней</small><strong data-active-days>0</strong></span>
+            <span><b><img src="./assets/profile-achievements-symbol.png" alt="" /></b><small>Достижений</small><strong data-achievements-count>0</strong></span>
           </div>
         </article>
       </section>
@@ -724,6 +724,7 @@ function applyServerState(data) {
   const targetProtein = Number(data.targets?.protein) || 0;
   const totals = data.today?.totals || {};
   const entries = data.today?.entries || [];
+  const progress = data.progress || {};
   const calories = roundValue(totals.calories);
   const protein = roundValue(totals.protein);
   const fat = roundValue(totals.fat);
@@ -782,6 +783,16 @@ function applyServerState(data) {
     if (data.user.height) profileHeight.value = data.user.height;
     if (data.user.activity) profileActivity.value = data.user.activity;
   }
+
+  document.querySelectorAll("[data-current-streak]").forEach((node) => {
+    node.textContent = roundValue(progress.current_streak);
+  });
+  document.querySelectorAll("[data-active-days]").forEach((node) => {
+    node.textContent = roundValue(progress.active_days ?? progress.days_with_nyammetr);
+  });
+  document.querySelectorAll("[data-achievements-count]").forEach((node) => {
+    node.textContent = (data.achievements || []).length;
+  });
 
   renderEntries(entries);
 }
