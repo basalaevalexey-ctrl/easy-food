@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=nyam-53" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-54" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -749,7 +749,7 @@ function applyServerState(data) {
     ? Math.max(0, Math.round((targetCalories - targetProtein * 4 - fatTarget * 9) / 4))
     : 0;
   document.querySelectorAll(".macro-grid").forEach((grid) => {
-    const cells = grid.querySelectorAll("span");
+    const cells = Array.from(grid.children).filter((child) => child.matches("span"));
     const values = [
       [protein, targetProtein],
       [fat, fatTarget],
@@ -759,10 +759,11 @@ function applyServerState(data) {
       const current = cell.querySelector(".macro-current");
       const target = cell.querySelector("small:not(.macro-percent)");
       const percent = cell.querySelector(".macro-percent");
-      if (current) current.textContent = values[index][0];
-      if (target) target.textContent = values[index][1] ? `/${values[index][1]}` : "";
+      const value = values[index] || [0, 0];
+      if (current) current.textContent = value[0];
+      if (target) target.textContent = value[1] ? `/${value[1]}` : "";
       if (percent) {
-        percent.textContent = values[index][1] ? `${Math.min(999, Math.round(values[index][0] / values[index][1] * 100))}%` : "";
+        percent.textContent = value[1] ? `${Math.min(999, Math.round(value[0] / value[1] * 100))}%` : "";
       }
     });
   });
