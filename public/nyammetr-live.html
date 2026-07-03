@@ -9,88 +9,459 @@
   <title>Нямметр</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
-    :root { --green:#58bd35; --muted:#6d756d; --paper:#fffaf0; --line:#eadfcd; }
-    * { box-sizing:border-box; }
-    body { margin:0; font-family:Arial, sans-serif; background:#f6f1e7; color:#111; }
-    main { width:min(420px, 100%); min-height:100vh; margin:0 auto; padding:18px 16px 90px; background:#fffaf3; }
-    header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
-    header b { display:block; font-size:20px; }
-    header small, .muted { color:var(--muted); }
-    section { display:none; }
-    section.active { display:block; }
-    .card { background:#fff; border:1px solid var(--line); border-radius:18px; padding:16px; margin:12px 0; box-shadow:0 8px 24px rgba(39,32,20,.08); }
-    .hero { text-align:center; }
-    .hero h1 { margin:0; font-size:24px; }
-    .summary strong { font-size:32px; }
-    .summary em { font-style:normal; font-size:18px; }
-    .bar { height:12px; background:#ece5d7; border-radius:999px; overflow:hidden; margin:12px 0; }
-    .bar span { display:block; height:100%; width:0; background:var(--green); }
-    .macros { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
-    .macros span { background:var(--paper); border-radius:12px; padding:10px; text-align:center; font-weight:700; }
-    .macros small { display:block; color:var(--muted); font-weight:400; }
-    .entry { display:grid; gap:6px; border-bottom:1px solid var(--line); padding:12px 0; }
-    .entry:last-child { border-bottom:0; }
-    .entry b { font-size:16px; }
-    .entry small { color:var(--muted); }
-    label { display:grid; gap:6px; margin:12px 0; font-weight:700; }
-    input, select { width:100%; border:1px solid #dbcdb8; border-radius:12px; padding:12px; font:inherit; background:#fffaf0; }
-    button { border:0; border-radius:14px; padding:12px 14px; font:inherit; font-weight:700; background:var(--green); color:#fff; }
-    .ghost { background:#efe8d9; color:#111; }
-    nav { position:fixed; left:50%; bottom:12px; transform:translateX(-50%); width:min(390px, calc(100% - 24px)); display:grid; grid-template-columns:repeat(3,1fr); gap:8px; background:#fff; border:1px solid var(--line); border-radius:18px; padding:8px; }
-    nav button { background:#f5efdf; color:#777; padding:10px 6px; }
-    nav button.active { color:#208a19; background:#eaf7df; }
-    .toast { position:fixed; left:50%; bottom:88px; transform:translate(-50%, 140px); max-width:min(340px, calc(100% - 32px)); padding:12px 16px; border-radius:999px; background:rgba(20,20,20,.9); color:#fff; text-align:center; transition:.2s; }
-    .toast.show { transform:translate(-50%, 0); }
+    :root {
+      color-scheme: light;
+      --green: #58bd35;
+      --green-dark: #2f8f1d;
+      --lime: #e8f8d9;
+      --ink: #111817;
+      --muted: #6d756d;
+      --warm: #fbf4e8;
+      --paper: #fffefa;
+      --cream: #f6efdf;
+      --line: #eadfcd;
+      --orange: #ff8a00;
+      --shadow: 0 14px 34px rgba(57, 43, 22, .12);
+    }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      font-family: Arial, "Helvetica Neue", sans-serif;
+      background:
+        radial-gradient(circle at 50% 0%, rgba(88,189,53,.16), transparent 28rem),
+        linear-gradient(180deg, #fffaf1 0%, #f5eddc 100%);
+      color: var(--ink);
+    }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; border: 0; }
+    .app {
+      width: min(420px, 100%);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: 18px 14px 104px;
+      position: relative;
+    }
+    .topbar {
+      display: grid;
+      grid-template-columns: 72px 1fr 48px;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .close { color: #161616; font-size: 14px; background: transparent; padding: 8px 0; text-align: left; }
+    .brand { text-align: center; line-height: 1.05; }
+    .brand b { display: block; font-size: 20px; }
+    .brand small { color: var(--muted); font-size: 12px; }
+    .menu {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      background: #efe8d9;
+      color: #151515;
+      font-weight: 800;
+      font-size: 18px;
+    }
+    .cat-hero {
+      display: grid;
+      grid-template-columns: 1fr 112px;
+      align-items: center;
+      gap: 8px;
+      min-height: 118px;
+      margin: 6px 0 12px;
+      overflow: hidden;
+    }
+    .cat-copy h1 {
+      margin: 0 0 8px;
+      font-size: 25px;
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+    .cat-copy p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.35; }
+    .cat {
+      width: 108px;
+      height: 108px;
+      border-radius: 32px;
+      display: grid;
+      place-items: center;
+      background: #fff9e8;
+      box-shadow: inset 0 0 0 1px #efe1ca, 0 12px 24px rgba(57,43,22,.08);
+      font-size: 66px;
+    }
+    section { display: none; }
+    section.active { display: block; }
+    .card {
+      background: rgba(255,255,255,.94);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 16px;
+      margin: 12px 0;
+      box-shadow: var(--shadow);
+    }
+    .status-card {
+      display: grid;
+      grid-template-columns: 56px 1fr 18px;
+      align-items: center;
+      gap: 12px;
+      min-height: 78px;
+    }
+    .status-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      background: var(--lime);
+      font-size: 30px;
+    }
+    .status-card b { display: block; margin-bottom: 4px; }
+    .muted { color: var(--muted); }
+    .summary .label { color: var(--muted); font-size: 13px; font-weight: 700; }
+    .calories-line { display: flex; align-items: baseline; gap: 7px; margin-top: 5px; }
+    .calories-line strong { font-size: 34px; line-height: 1; }
+    .calories-line span { font-size: 20px; font-weight: 700; }
+    .bar {
+      height: 13px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #ece5d7;
+      margin: 14px 0 12px;
+    }
+    .bar span {
+      display: block;
+      width: 0;
+      height: 100%;
+      background: linear-gradient(90deg, var(--green), #82d444);
+      border-radius: inherit;
+    }
+    .macros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .macro {
+      min-height: 58px;
+      border-radius: 13px;
+      background: var(--cream);
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 8px 4px;
+      font-weight: 800;
+    }
+    .macro small { display: block; margin-top: 2px; color: var(--muted); font-weight: 500; font-size: 12px; }
+    .macro.protein b { color: #178020; }
+    .macro.fat b { color: var(--orange); }
+    .macro.carbs b { color: #e87800; }
+    .quick-add {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: stretch;
+    }
+    textarea {
+      width: 100%;
+      min-height: 52px;
+      resize: vertical;
+      border: 1px solid #e2d5bf;
+      border-radius: 15px;
+      padding: 12px;
+      background: #fffaf0;
+      color: var(--ink);
+      outline: none;
+    }
+    .primary {
+      min-width: 62px;
+      border-radius: 15px;
+      padding: 0 14px;
+      background: var(--green);
+      color: #fff;
+      font-weight: 900;
+      box-shadow: 0 10px 18px rgba(88,189,53,.25);
+    }
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 22px 4px 10px;
+    }
+    .section-title h2 { margin: 0; font-size: 21px; }
+    .pill {
+      border-radius: 999px;
+      background: #efe8d9;
+      color: #333;
+      padding: 8px 12px;
+      font-weight: 800;
+      font-size: 14px;
+    }
+    .entry-list { display: grid; gap: 10px; }
+    .entry {
+      background: rgba(255,255,255,.96);
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      padding: 13px;
+      box-shadow: 0 8px 22px rgba(57, 43, 22, .08);
+    }
+    .entry-head {
+      display: grid;
+      grid-template-columns: 42px 1fr auto;
+      align-items: center;
+      gap: 10px;
+    }
+    .entry-emoji {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: var(--cream);
+      font-size: 25px;
+    }
+    .entry b { display: block; font-size: 15px; }
+    .entry small { color: var(--muted); }
+    .entry strong { color: #178020; white-space: nowrap; }
+    .entry-desc { margin: 10px 0 0; color: #3d453f; font-size: 13px; line-height: 1.35; }
+    .empty {
+      min-height: 172px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      color: var(--muted);
+    }
+    .empty .big { display: block; font-size: 44px; margin-bottom: 8px; }
+    .mission-card {
+      display: grid;
+      grid-template-columns: 54px 1fr;
+      gap: 12px;
+      align-items: center;
+    }
+    .mission-icon {
+      width: 54px;
+      height: 54px;
+      display: grid;
+      place-items: center;
+      border-radius: 17px;
+      background: var(--lime);
+      font-size: 30px;
+    }
+    .profile-head {
+      display: grid;
+      grid-template-columns: 58px 1fr;
+      gap: 12px;
+      align-items: center;
+    }
+    .avatar {
+      width: 58px;
+      height: 58px;
+      display: grid;
+      place-items: center;
+      border-radius: 18px;
+      background: var(--lime);
+      font-size: 34px;
+    }
+    .profile-head h2 { margin: 0 0 4px; font-size: 22px; }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .stat {
+      min-height: 76px;
+      border-radius: 14px;
+      background: var(--cream);
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 8px 4px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .stat b { display: block; margin-top: 3px; color: var(--green-dark); font-size: 18px; }
+    .form-row {
+      display: grid;
+      grid-template-columns: 38px 1fr 116px;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px dashed #eadfcd;
+    }
+    .form-row:last-child { border-bottom: 0; }
+    .form-icon {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      background: var(--lime);
+    }
+    input, select {
+      min-width: 0;
+      width: 100%;
+      border: 1px solid #dccfb8;
+      border-radius: 12px;
+      padding: 9px 10px;
+      background: #fffaf0;
+      color: var(--green-dark);
+      font-weight: 800;
+      outline: none;
+    }
+    .save {
+      width: 100%;
+      margin-top: 12px;
+      border-radius: 15px;
+      padding: 13px;
+      color: #fff;
+      background: var(--green);
+      font-weight: 900;
+    }
+    .bottom-nav {
+      position: fixed;
+      left: 50%;
+      bottom: 10px;
+      transform: translateX(-50%);
+      width: min(392px, calc(100% - 20px));
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(255,255,255,.96);
+      box-shadow: 0 14px 32px rgba(57,43,22,.16);
+      z-index: 5;
+    }
+    .bottom-nav button {
+      min-height: 54px;
+      border-radius: 15px;
+      background: transparent;
+      color: #a1a1a1;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 6px 2px;
+    }
+    .bottom-nav span { display: block; font-size: 22px; line-height: 1; margin-bottom: 4px; }
+    .bottom-nav button.active { color: var(--green-dark); background: #eef9e6; }
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 88px;
+      transform: translate(-50%, 140px);
+      max-width: min(340px, calc(100% - 32px));
+      padding: 12px 18px;
+      border-radius: 999px;
+      background: rgba(20,20,20,.9);
+      color: #fff;
+      text-align: center;
+      transition: .2s ease;
+      z-index: 10;
+    }
+    .toast.show { transform: translate(-50%, 0); }
   </style>
 </head>
 <body>
-<main>
-  <header>
-    <span>Закрыть</span>
-    <div><b>Нямметр</b><small>mini app · nyam-50</small></div>
-    <button class="ghost" type="button">•••</button>
+<main class="app">
+  <header class="topbar">
+    <button class="close" type="button" data-close>Закрыть</button>
+    <div class="brand"><b>Нямметр</b><small>mini app · __WEBAPP_BUILD__</small></div>
+    <button class="menu" type="button">•••</button>
   </header>
 
   <section class="active" data-screen="home">
-    <div class="card hero"><h1>Привет, я Нямметр 🍽</h1><small>Данные подтягиваются из твоего дневника</small></div>
-    <div class="card summary">
-      <small>Калории сегодня</small>
-      <div><strong data-calories>0</strong> <em data-target></em></div>
+    <div class="cat-hero">
+      <div class="cat-copy">
+        <h1>Привет, я Нямметр 🍽</h1>
+        <p>Собираю твой день из дневника и считаю калории без таблиц.</p>
+      </div>
+      <div class="cat" aria-hidden="true">🐱</div>
+    </div>
+
+    <article class="card status-card">
+      <div class="status-icon" data-status-icon>🥗</div>
+      <div><b data-status-title>Данные загружены</b><span class="muted" data-status-text>Можно продолжать день спокойно.</span></div>
+      <b>›</b>
+    </article>
+
+    <article class="card summary">
+      <div class="label">Калории сегодня</div>
+      <div class="calories-line"><strong data-calories>0</strong><span data-target>/ 0 ккал</span></div>
       <div class="bar"><span data-calorie-bar></span></div>
       <div class="macros">
-        <span>Б <b data-protein>0</b><small data-protein-target>г</small></span>
-        <span>Ж <b data-fat>0</b><small>г</small></span>
-        <span>У <b data-carbs>0</b><small>г</small></span>
+        <div class="macro protein"><b>Б <span data-protein>0</span></b><small data-protein-target>г</small></div>
+        <div class="macro fat"><b>Ж <span data-fat>0</span></b><small>г</small></div>
+        <div class="macro carbs"><b>У <span data-carbs>0</span></b><small>г</small></div>
       </div>
-    </div>
+    </article>
+
+    <article class="card">
+      <b>Добавить еду</b>
+      <p class="muted">Напиши, что съел, а Нямметр добавит запись в дневник.</p>
+      <div class="quick-add">
+        <textarea data-food-text placeholder="Например: омлет, кофе и банан"></textarea>
+        <button class="primary" type="button" data-add-text>+</button>
+      </div>
+    </article>
+
+    <article class="card mission-card" data-mission-mini>
+      <div class="mission-icon">🎯</div>
+      <div><b data-mission-title>Миссия дня</b><span class="muted" data-mission-text>Загружаю...</span></div>
+    </article>
   </section>
 
   <section data-screen="diary">
-    <h2>Дневник</h2>
-    <div class="card" data-entries><p>Загружаю данные...</p></div>
+    <div class="section-title"><h2>Дневник</h2><span class="pill" data-entry-count>0 записей</span></div>
+    <div class="entry-list" data-entries></div>
+  </section>
+
+  <section data-screen="missions">
+    <div class="section-title"><h2>Миссии</h2><span class="pill" data-mission-state>Сегодня</span></div>
+    <article class="card mission-card">
+      <div class="mission-icon">🎯</div>
+      <div><b data-mission-title-full>Миссия дня</b><p class="muted" data-mission-text-full>Загружаю...</p></div>
+    </article>
+    <article class="card">
+      <b>Достижения</b>
+      <div class="stats-grid">
+        <div class="stat">Открыто<b data-achievements>0</b></div>
+        <div class="stat">Стрик<b data-current-streak>0</b></div>
+        <div class="stat">Лучший<b data-best-streak>0</b></div>
+      </div>
+    </article>
   </section>
 
   <section data-screen="profile">
-    <h2 data-name>Профиль</h2>
-    <div class="card">
-      <label>Вес, кг<input type="number" min="30" max="300" data-weight /></label>
-      <label>Рост, см<input type="number" min="100" max="230" data-height /></label>
-      <label>Активность<select data-activity><option value="low">Низкая</option><option value="medium">Средняя</option><option value="high">Высокая</option></select></label>
-      <button type="button" data-save>Сохранить профиль</button>
-    </div>
-    <div class="card">
-      <b>Цели</b>
-      <p>Калории: <span data-profile-calories>0</span> ккал</p>
-      <p>Белок: <span data-profile-protein>0</span> г</p>
-    </div>
+    <article class="card">
+      <div class="profile-head">
+        <div class="avatar">👤</div>
+        <div><h2 data-name>Профиль</h2><span class="muted">Цель: <b data-goal>поддерживать форму</b></span></div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat">Ням-стрик<b data-profile-streak>0</b></div>
+        <div class="stat">Активных дней<b data-active-days>0</b></div>
+        <div class="stat">Записей еды<b data-total-entries>0</b></div>
+      </div>
+    </article>
+
+    <article class="card">
+      <b>Мои цели</b>
+      <div class="form-row"><div class="form-icon">🔥</div><span>Дневная норма</span><b><span data-profile-calories>0</span> ккал</b></div>
+      <div class="form-row"><div class="form-icon">🍗</div><span>Белок</span><b><span data-profile-protein>0</span> г</b></div>
+    </article>
+
+    <article class="card">
+      <b>Мои данные</b>
+      <div class="form-row"><div class="form-icon">⚖️</div><span>Вес</span><input type="number" min="30" max="300" data-weight /></div>
+      <div class="form-row"><div class="form-icon">📏</div><span>Рост</span><input type="number" min="100" max="230" data-height /></div>
+      <div class="form-row"><div class="form-icon">🏃</div><span>Активность</span><select data-activity><option value="low">Низкая</option><option value="medium">Средняя</option><option value="high">Высокая</option></select></div>
+      <button class="save" type="button" data-save>Сохранить профиль</button>
+    </article>
   </section>
 </main>
-<nav>
-  <button class="active" type="button" data-tab="home">Главная</button>
-  <button type="button" data-tab="diary">Дневник</button>
-  <button type="button" data-tab="profile">Профиль</button>
+
+<nav class="bottom-nav">
+  <button class="active" type="button" data-tab="home"><span>⌂</span>Главная</button>
+  <button type="button" data-tab="diary"><span>▣</span>Дневник</button>
+  <button type="button" data-tab="missions"><span>◎</span>Миссии</button>
+  <button type="button" data-tab="profile"><span>●</span>Профиль</button>
 </nav>
 <div class="toast" data-toast></div>
+
 <script>
 const tg = window.Telegram?.WebApp;
 tg?.ready?.();
@@ -137,6 +508,39 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[char]));
 }
 
+function pluralEntries(count) {
+  const n = Math.abs(count) % 100;
+  const n1 = n % 10;
+  if (n > 10 && n < 20) return "записей";
+  if (n1 > 1 && n1 < 5) return "записи";
+  if (n1 === 1) return "запись";
+  return "записей";
+}
+
+function goalLabel(goal) {
+  return ({ lose: "похудеть", maintain: "поддерживать форму", support: "поддерживать форму", gain: "набрать" })[goal] || "поддерживать форму";
+}
+
+function renderEntries(entries) {
+  const box = document.querySelector("[data-entries]");
+  document.querySelector("[data-entry-count]").textContent = `${entries.length} ${pluralEntries(entries.length)}`;
+  if (!entries.length) {
+    box.innerHTML = `<article class="card empty"><div><span class="big">🍽</span><b>Пока записей нет</b><p>Добавь еду в боте или прямо здесь текстом.</p></div></article>`;
+    return;
+  }
+  box.innerHTML = entries.map((entry) => `
+    <article class="entry">
+      <div class="entry-head">
+        <div class="entry-emoji">${entry.source === "photo" ? "📸" : "🥗"}</div>
+        <div><b>${escapeHtml(entry.title || "Еда")}</b><small>${escapeHtml(entry.source === "photo" ? "Фото" : "Текст")}</small></div>
+        <strong>${round(entry.calories)} ккал</strong>
+      </div>
+      ${entry.description ? `<p class="entry-desc">${escapeHtml(entry.description)}</p>` : ""}
+      <p class="entry-desc">Б ${round(entry.protein)} г · Ж ${round(entry.fat)} г · У ${round(entry.carbs)} г</p>
+    </article>
+  `).join("");
+}
+
 function render(data) {
   state.data = data;
   const totals = data.today?.totals || {};
@@ -144,6 +548,10 @@ function render(data) {
   const target = round(data.targets?.calories);
   const proteinTarget = round(data.targets?.protein);
   const calories = round(totals.calories);
+  const progress = data.progress || {};
+  const mission = data.mission || {};
+  const user = data.user || {};
+
   document.querySelector("[data-calories]").textContent = calories;
   document.querySelector("[data-target]").textContent = target ? `/ ${target} ккал` : "";
   document.querySelector("[data-calorie-bar]").style.width = target ? `${Math.min(100, Math.round(calories / target * 100))}%` : "0%";
@@ -151,33 +559,43 @@ function render(data) {
   document.querySelector("[data-fat]").textContent = round(totals.fat);
   document.querySelector("[data-carbs]").textContent = round(totals.carbs);
   document.querySelector("[data-protein-target]").textContent = proteinTarget ? `/ ${proteinTarget} г` : "г";
+
+  const left = target ? target - calories : 0;
+  document.querySelector("[data-status-title]").textContent = entries.length ? "Котик доволен" : "День готов к старту";
+  document.querySelector("[data-status-text]").textContent = target ? (left >= 0 ? `Осталось примерно ${left} ккал` : "Норма на сегодня уже закрыта") : "Добавь первую еду, и я соберу дневник.";
+  document.querySelector("[data-status-icon]").textContent = entries.length ? "😺" : "🥣";
+
   document.querySelector("[data-profile-calories]").textContent = target;
   document.querySelector("[data-profile-protein]").textContent = proteinTarget;
-
-  const user = data.user || {};
   document.querySelector("[data-name]").textContent = user.display_name || "Профиль";
+  document.querySelector("[data-goal]").textContent = goalLabel(user.goal);
   document.querySelector("[data-weight]").value = user.weight || "";
   document.querySelector("[data-height]").value = user.height || "";
   document.querySelector("[data-activity]").value = user.activity || "medium";
 
-  const box = document.querySelector("[data-entries]");
-  if (!entries.length) {
-    box.innerHTML = "<p>Пока записей нет. Добавь еду в боте или миниаппе.</p>";
-    return;
-  }
-  box.innerHTML = entries.map((entry) => `
-    <div class="entry">
-      <b>${escapeHtml(entry.title || "Еда")}</b>
-      <small>${escapeHtml(entry.description || "")}</small>
-      <strong>${round(entry.calories)} ккал</strong>
-      <small>Б ${round(entry.protein)} г · Ж ${round(entry.fat)} г · У ${round(entry.carbs)} г</small>
-    </div>
-  `).join("");
+  const currentStreak = round(progress.current_streak);
+  const bestStreak = round(progress.best_streak);
+  document.querySelector("[data-current-streak]").textContent = currentStreak;
+  document.querySelector("[data-best-streak]").textContent = bestStreak;
+  document.querySelector("[data-profile-streak]").textContent = currentStreak;
+  document.querySelector("[data-active-days]").textContent = round(progress.active_days);
+  document.querySelector("[data-total-entries]").textContent = round(progress.total_entries);
+  document.querySelector("[data-achievements]").textContent = (data.achievements || []).length;
+
+  const missionTitle = mission.key ? mission.key.replaceAll("_", " ") : "Миссия дня";
+  const missionText = mission.is_completed ? "Выполнено 💚" : (mission.progress_text || "Можно выполнить без спешки.");
+  document.querySelector("[data-mission-title]").textContent = missionTitle;
+  document.querySelector("[data-mission-title-full]").textContent = missionTitle;
+  document.querySelector("[data-mission-text]").textContent = missionText;
+  document.querySelector("[data-mission-text-full]").textContent = missionText;
+  document.querySelector("[data-mission-state]").textContent = mission.is_completed ? "Готово" : "Сегодня";
+
+  renderEntries(entries);
 }
 
 async function load() {
   if (!initData()) {
-    document.querySelector("[data-entries]").innerHTML = "<p>Открой миниапп через кнопку в Telegram, чтобы увидеть свои данные.</p>";
+    document.querySelector("[data-entries]").innerHTML = `<article class="card empty"><div><span class="big">🔒</span><b>Открой через Telegram</b><p>Так Нямметр сможет подтянуть твой дневник.</p></div></article>`;
     return;
   }
   try {
@@ -201,13 +619,36 @@ async function saveProfile() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     }));
-    showToast("Профиль сохранен");
+    showToast("Профиль сохранён");
   } catch (error) {
     showToast(`Не смог сохранить профиль: ${error.message}`);
   }
 }
 
+async function addFoodText() {
+  const input = document.querySelector("[data-food-text]");
+  const text = input.value.trim();
+  if (!text) {
+    showToast("Напиши, что добавить");
+    return;
+  }
+  try {
+    const result = await request("/api/miniapp/food/text", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    input.value = "";
+    render(result.state);
+    showToast("Записал в дневник");
+  } catch (error) {
+    showToast(`Не смог добавить еду: ${error.message}`);
+  }
+}
+
+document.querySelector("[data-close]").addEventListener("click", () => tg?.close?.());
 document.querySelector("[data-save]").addEventListener("click", saveProfile);
+document.querySelector("[data-add-text]").addEventListener("click", addFoodText);
 document.querySelectorAll("[data-tab]").forEach((tab) => {
   tab.addEventListener("click", () => {
     document.querySelectorAll("[data-tab]").forEach((item) => item.classList.toggle("active", item === tab));
