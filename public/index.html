@@ -1,22 +1,942 @@
 <!doctype html>
 <html lang="ru">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
-  <title>Нямметр</title>
-  <script>
-    const target = new URL("./nyammetr-live.html", window.location.href);
-    for (const [key, value] of new URLSearchParams(window.location.search)) {
-      target.searchParams.set(key, value);
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Нямметр</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="./styles.css?v=nyam-52" />
+  </head>
+  <body>
+    <main class="phone-shell" aria-label="Нямметр mini app">
+      <header class="tg-header">
+        <span>Закрыть</span>
+        <div>
+          <strong>Нямметр</strong>
+          <small>mini app</small>
+        </div>
+        <button class="icon-button" type="button" aria-label="Меню">•••</button>
+      </header>
+
+      <section class="screen active" data-screen="home">
+        <div class="cat-hero">
+          <img class="hero-cat-art" src="./assets/cat-food.png" alt="" />
+        </div>
+
+        <button class="status-row" type="button" data-tab="missions">
+          <img class="status-cat-icon" src="./assets/status-cat.png" alt="" />
+          <div>
+            <strong>Котик доволен</strong>
+            <span>Отличная работа!</span>
+          </div>
+          <b>›</b>
+        </button>
+
+        <article class="calorie-card">
+          <div class="card-top">
+            <div class="round-icon fire"><img src="./assets/fire-icon.png" alt="" /></div>
+            <div>
+              <strong><span data-calories>1450</span> <em data-calorie-goal-label>/ 2100 ккал</em></strong>
+              <div class="progress-line"><span style="width: 69%"></span></div>
+            </div>
+          </div>
+          <div class="macro-grid">
+            <span><b>Б</b><span class="macro-current">92</span><small>/130</small></span>
+            <span><b>Ж</b><span class="macro-current">48</span><small>/70</small></span>
+            <span><b>У</b><span class="macro-current">160</span><small>/250</small></span>
+          </div>
+        </article>
+
+        <button class="primary-action" type="button" data-add-toggle aria-expanded="false">
+          <span class="action-plus" aria-hidden="true">+</span>
+          <span class="action-label">Добавить еду</span>
+        </button>
+
+        <div class="add-food-menu" data-add-menu>
+          <button type="button" data-add-text><span>✎</span>Текстом</button>
+          <button type="button" data-add-photo><span>📷</span>Фото еды</button>
+        </div>
+
+        <aside class="tip-card">
+          <img class="tip-paw" src="./assets/paw.png" alt="" />
+          <div>
+            <strong>Пей больше воды! 💧</strong>
+            <small>Маленькими шагами к большой цели.</small>
+          </div>
+          <img class="tip-cat" src="./assets/cat-peek.png" alt="" />
+        </aside>
+      </section>
+
+      <section class="screen" data-screen="diary">
+        <div class="day-switch">
+          <button class="day-arrow" type="button" data-date-prev aria-label="Предыдущий день">‹</button>
+          <button class="date-label" type="button" data-date-label aria-label="Открыть календарь">Сегодня</button>
+          <button class="day-arrow" type="button" data-date-next aria-label="Следующий день">›</button>
+          <input class="date-picker" type="date" data-date-picker aria-label="Выбрать дату" />
+          <img class="peek-art" src="./assets/cat-peek.png" alt="" />
+        </div>
+
+        <article class="calorie-card diary-summary">
+          <small>Калории</small>
+          <strong><span data-calories>1450</span> <em data-calorie-goal-label>/ 2100 ккал</em></strong>
+          <div class="progress-line"><span style="width: 69%"></span></div>
+          <div class="macro-grid boxed">
+            <span><b>Б</b><span class="macro-current">92</span><small>/130</small><small class="macro-percent">71%</small></span>
+            <span><b>Ж</b><span class="macro-current">48</span><small>/70</small><small class="macro-percent">69%</small></span>
+            <span><b>У</b><span class="macro-current">160</span><small>/250</small><small class="macro-percent">64%</small></span>
+          </div>
+        </article>
+
+        <h2>Приемы пищи</h2>
+        <div class="meal-list">
+          <article class="meal-card open">
+            <button type="button" class="meal-toggle" aria-expanded="true">
+              <span class="meal-emoji"><img src="./assets/meal-snack.png" alt="" /></span>
+              <span><b>&#1047;&#1072;&#1075;&#1088;&#1091;&#1078;&#1072;&#1102; &#1076;&#1072;&#1085;&#1085;&#1099;&#1077;</b><small>&#1057;&#1080;&#1085;&#1093;&#1088;&#1086;&#1085;&#1080;&#1079;&#1080;&#1088;&#1091;&#1102;&#1089;&#1100; &#1089; &#1076;&#1085;&#1077;&#1074;&#1085;&#1080;&#1082;&#1086;&#1084; &#1053;&#1103;&#1084;&#1084;&#1077;&#1090;&#1088;&#1072;</small></span>
+              <strong>0 &#1082;&#1082;&#1072;&#1083;</strong>
+            </button>
+          </article>
+        </div>
+
+        <aside class="tip-card wide">
+          <img class="tip-paw" src="./assets/paw.png" alt="" />
+          <div>
+            <strong>Ты на верном пути!</strong>
+            <small>Продолжай в том же духе.</small>
+          </div>
+          <img class="tip-cat" src="./assets/cat-peek.png" alt="" />
+        </aside>
+      </section>
+
+      <section class="screen" data-screen="missions">
+        <div class="party missions-hero">
+          <span>✦</span><span>✶</span><span>✦</span><span>✶</span>
+          <img class="mission-cat-art" src="./assets/cat-medal-large.png?v=2" alt="" />
+        </div>
+
+        <article class="streak-card">🔥 <strong>Ням-стрик:</strong> <b>5 дней</b></article>
+
+        <article class="mission-card">
+          <span class="mission-icon"><img src="./assets/mission-target.png" alt="" /></span>
+          <div>
+            <strong>Миссия дня:</strong>
+            <small>Запиши 3 приема пищи</small>
+            <div class="progress-line"><span style="width: 66%"></span></div>
+          </div>
+          <b>2/3</b>
+        </article>
+
+        <div class="achievements-title">
+          <h2>Достижения</h2>
+          <small>Собрано 6 из 12</small>
+        </div>
+        <div class="badges">
+          <span><b><img src="./assets/achievement-01-trim.png" alt="" /></b><small>Первые шаги</small></span>
+          <span><b><img src="./assets/achievement-02-trim.png" alt="" /></b><small>5 дней подряд</small></span>
+          <span><b><img src="./assets/achievement-03-trim.png" alt="" /></b><small>Баланс дня</small></span>
+          <span><b><img src="./assets/achievement-04-trim.png" alt="" /></b><small>Мастер цели</small></span>
+          <span class="locked"><b><img src="./assets/achievement-12-trim.png" alt="" /></b><small>Секрет</small></span>
+        </div>
+
+        <button class="primary-action lower" type="button" data-missions-add>
+          <span class="action-plus" aria-hidden="true">+</span>
+          <span class="action-label">Записать еду</span>
+        </button>
+      </section>
+
+      <section class="screen" data-screen="profile">
+        <article class="profile-hero">
+          <div class="avatar"><img src="./assets/profile-avatar.png" alt="" /></div>
+          <div>
+            <h2 data-profile-name>Алексей</h2>
+            <p>Цель: <b data-profile-goal-label>поддерживать форму</b></p>
+          </div>
+          <img class="profile-cat-art" src="./assets/cat-peek.png" alt="" />
+          <span class="profile-heart">♥</span>
+        </article>
+
+        <article class="profile-panel">
+          <h2><span><img src="./assets/profile-goals-symbol.png" alt="" /></span>Мои цели</h2>
+          <button type="button" class="goal-row"><span><img src="./assets/profile-calorie-goal-trim.png" alt="" /></span>Дневная норма<strong data-goal-calories>2100 ккал</strong></button>
+          <button type="button" class="goal-row"><span><img src="./assets/profile-protein-goal-trim.png" alt="" /></span>Белок<strong data-goal-protein>130 г</strong></button>
+        </article>
+
+        <article class="profile-panel">
+          <h2><span><img src="./assets/profile-data-trim.png" alt="" /></span>Мои данные</h2>
+          <div class="profile-field"><span><img src="./assets/profile-weight-trim.png" alt="" /></span><label for="profile-weight">Вес</label><div><input id="profile-weight" type="number" min="35" max="250" value="82" data-profile-weight /> кг</div></div>
+          <div class="profile-field"><span><img src="./assets/profile-height-trim.png" alt="" /></span><label for="profile-height">Рост</label><div><input id="profile-height" type="number" min="120" max="230" value="182" data-profile-height /> см</div></div>
+          <div class="profile-field"><span><img src="./assets/profile-activity-trim.png" alt="" /></span><label for="profile-activity">Активность</label><div><select id="profile-activity" data-profile-activity><option value="low">Низкая</option><option value="medium" selected>Средняя</option><option value="high">Высокая</option></select></div></div>
+        </article>
+
+        <article class="profile-panel reminder-panel">
+          <h2><span><img src="./assets/profile-reminder-trim.png" alt="" /></span>Напоминания</h2>
+          <div>
+            <span>Ежедневно в 9:00</span>
+            <label class="switch">
+              <input type="checkbox" checked />
+              <span></span>
+            </label>
+          </div>
+        </article>
+
+        <article class="profile-panel" data-soon-update role="button" tabindex="0">
+          <h2><span><img src="./assets/profile-progress-trim.png" alt="" /></span>Прогресс</h2>
+          <div class="profile-stats">
+            <span><b><img src="./assets/profile-streak-symbol.png" alt="" /></b><small>Ням-стрик</small><strong>5 дней</strong></span>
+            <span><b><img src="./assets/profile-active-days-symbol.png" alt="" /></b><small>Активных дней</small><strong>14</strong></span>
+            <span><b><img src="./assets/profile-achievements-symbol.png" alt="" /></b><small>Достижений</small><strong>6</strong></span>
+          </div>
+        </article>
+      </section>
+
+      <nav class="tabbar" aria-label="Разделы">
+        <button class="active" type="button" data-tab="home"><img class="tab-icon" src="./assets/tab-home.png" alt="" />Главная</button>
+        <button type="button" data-tab="diary"><img class="tab-icon" src="./assets/tab-diary.png" alt="" />Дневник</button>
+        <button type="button" data-tab="missions"><img class="tab-icon" src="./assets/tab-missions.png" alt="" />Миссии</button>
+        <button type="button" data-tab="profile"><img class="tab-icon" src="./assets/tab-profile.png" alt="" />Профиль</button>
+      </nav>
+    </main>
+
+    <div class="onboarding-modal" data-onboarding hidden>
+      <form class="onboarding-sheet" data-onboarding-form>
+        <div>
+          <strong>Настроим Нямметр</strong>
+          <small>Это нужно, чтобы правильно считать цели.</small>
+        </div>
+        <label>Имя<input type="text" value="Алексей" data-onboarding-name /></label>
+        <label>Пол<select data-onboarding-sex><option value="male">Мужской</option><option value="female">Женский</option></select></label>
+        <div class="onboarding-grid">
+          <label>Вес, кг<input type="number" min="35" max="250" value="82" data-onboarding-weight /></label>
+          <label>Рост, см<input type="number" min="120" max="230" value="182" data-onboarding-height /></label>
+        </div>
+        <label>Активность<select data-onboarding-activity><option value="low">Низкая</option><option value="medium" selected>Средняя</option><option value="high">Высокая</option></select></label>
+        <label>Цель<select data-onboarding-goal><option value="support" selected>Поддерживать форму</option><option value="lose">Снизить вес</option><option value="gain">Набрать массу</option></select></label>
+        <button type="submit">Начать</button>
+      </form>
+    </div>
+
+    <div class="toast" role="status" aria-live="polite"></div>
+    <script>
+const tabs = document.querySelectorAll("[data-tab]");
+const screens = document.querySelectorAll("[data-screen]");
+const toast = document.querySelector(".toast");
+const addToggle = document.querySelector("[data-add-toggle]");
+const addMenu = document.querySelector("[data-add-menu]");
+const dateLabel = document.querySelector("[data-date-label]");
+const datePicker = document.querySelector("[data-date-picker]");
+const datePrev = document.querySelector("[data-date-prev]");
+const dateNext = document.querySelector("[data-date-next]");
+const profileName = document.querySelector("[data-profile-name]");
+const profileGoalLabel = document.querySelector("[data-profile-goal-label]");
+const profileWeight = document.querySelector("[data-profile-weight]");
+const profileHeight = document.querySelector("[data-profile-height]");
+const profileActivity = document.querySelector("[data-profile-activity]");
+const goalCalories = document.querySelector("[data-goal-calories]");
+const goalProtein = document.querySelector("[data-goal-protein]");
+const onboarding = document.querySelector("[data-onboarding]");
+const onboardingForm = document.querySelector("[data-onboarding-form]");
+const onboardingName = document.querySelector("[data-onboarding-name]");
+const onboardingSex = document.querySelector("[data-onboarding-sex]");
+const onboardingWeight = document.querySelector("[data-onboarding-weight]");
+const onboardingHeight = document.querySelector("[data-onboarding-height]");
+const onboardingActivity = document.querySelector("[data-onboarding-activity]");
+const onboardingGoal = document.querySelector("[data-onboarding-goal]");
+let calorieGoal = 2100;
+let profileGoal = "support";
+let profileSex = "male";
+const profileStoreKey = "nyammetr-profile";
+
+const text = {
+  today: "\u0421\u0435\u0433\u043e\u0434\u043d\u044f",
+  yesterday: "\u0412\u0447\u0435\u0440\u0430",
+  tomorrow: "\u0417\u0430\u0432\u0442\u0440\u0430",
+  gram: "\u0433",
+  kcal: "\u043a\u043a\u0430\u043b",
+  textNext: "\u041e\u0442\u043a\u0440\u043e\u0435\u043c \u0432\u0432\u043e\u0434 \u0442\u0435\u043a\u0441\u0442\u043e\u043c \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u043c \u0448\u0430\u0433\u043e\u043c",
+  photoNext: "\u041e\u0442\u043a\u0440\u043e\u0435\u043c \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0443 \u0444\u043e\u0442\u043e \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u043c \u0448\u0430\u0433\u043e\u043c",
+  smaller: "\u041f\u043e\u0440\u0446\u0438\u044f \u0443\u043c\u0435\u043d\u044c\u0448\u0435\u043d\u0430",
+  larger: "\u041f\u043e\u0440\u0446\u0438\u044f \u0443\u0432\u0435\u043b\u0438\u0447\u0435\u043d\u0430",
+  editGrams: "\u0422\u0435\u043f\u0435\u0440\u044c \u0433\u0440\u0430\u043c\u043c\u044b \u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u0443\u044e\u0442\u0441\u044f \u0432 \u0441\u0442\u0440\u043e\u043a\u0430\u0445",
+  save: "\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c",
+  saved: "\u0413\u0440\u0430\u043c\u043c\u044b \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u044b",
+  deleted: "\u0443\u0434\u0430\u043b\u0435\u043d",
+  gramsLabel: "\u0413\u0440\u0430\u043c\u043c\u044b",
+};
+
+const goalLabels = {
+  support: "\u043f\u043e\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0442\u044c \u0444\u043e\u0440\u043c\u0443",
+  lose: "\u0441\u043d\u0438\u0437\u0438\u0442\u044c \u0432\u0435\u0441",
+  gain: "\u043d\u0430\u0431\u0440\u0430\u0442\u044c \u043c\u0430\u0441\u0441\u0443",
+};
+
+const today = startOfDay(new Date());
+let selectedDate = new Date(today);
+
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function toInputDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function fromInputDate(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatDiaryDate(date) {
+  const diffDays = Math.round((startOfDay(date) - today) / 86400000);
+
+  if (diffDays === 0) return text.today;
+  if (diffDays === -1) return text.yesterday;
+  if (diffDays === 1) return text.tomorrow;
+
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: "short",
+  }).format(date);
+}
+
+function updateDiaryDate(date) {
+  selectedDate = startOfDay(date);
+  dateLabel.textContent = formatDiaryDate(selectedDate);
+  datePicker.value = toInputDate(selectedDate);
+}
+
+function shiftDiaryDate(days) {
+  const nextDate = new Date(selectedDate);
+  nextDate.setDate(nextDate.getDate() + days);
+  updateDiaryDate(nextDate);
+}
+
+function showScreen(name) {
+  screens.forEach((screen) => {
+    screen.classList.toggle("active", screen.dataset.screen === name);
+  });
+
+  tabs.forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.tab === name);
+  });
+}
+
+function showToast(message) {
+  toast.textContent = message;
+  toast.classList.add("show");
+  window.clearTimeout(showToast.timer);
+  showToast.timer = window.setTimeout(() => {
+    toast.classList.remove("show");
+  }, 1800);
+}
+
+function parseAmount(value) {
+  const source = "value" in value ? `${value.value} ${value.dataset.unit || text.gram}` : value.textContent;
+  const match = source.trim().match(/^(\d+(?:[.,]\d+)?)\s*(.*)$/);
+
+  if (!match) {
+    return { value: 0, unit: text.gram };
+  }
+
+  return {
+    value: Number(match[1].replace(",", ".")),
+    unit: match[2] || text.gram,
+  };
+}
+
+function parseCalories(value) {
+  return Number(value.replace(/[^\d]/g, "")) || 0;
+}
+
+function formatAmount(value, unit) {
+  return `${Math.max(1, Math.round(value))} ${unit}`;
+}
+
+function formatCalories(value) {
+  return `${Math.max(1, Math.round(value))} ${text.kcal}`;
+}
+
+function getAmountNode(row) {
+  return row.querySelector("input") || row.querySelector("small");
+}
+
+function readDishAmount(row) {
+  return parseAmount(getAmountNode(row));
+}
+
+function readDishCalories(row) {
+  return parseCalories(row.querySelector("strong").textContent);
+}
+
+function getDishRows(card) {
+  return [...card.querySelectorAll(".dish-list span")];
+}
+
+function getMealCalories(card) {
+  return getDishRows(card).reduce((sum, row) => sum + readDishCalories(row), 0);
+}
+
+function updateMealCard(card) {
+  card.querySelector(".meal-toggle strong").textContent = formatCalories(getMealCalories(card));
+}
+
+function updateTotalCalories() {
+  const total = [...document.querySelectorAll(".meal-card")].reduce((sum, card) => sum + getMealCalories(card), 0);
+  const percent = Math.min(100, Math.round((total / calorieGoal) * 100));
+
+  document.querySelectorAll("[data-calories]").forEach((node) => {
+    node.textContent = Math.round(total);
+  });
+
+  document.querySelectorAll(".calorie-card .progress-line span").forEach((bar) => {
+    bar.style.width = `${percent}%`;
+  });
+}
+
+function readProfile() {
+  return {
+    name: profileName.textContent.trim() || "Алексей",
+    sex: profileSex,
+    weight: Number(profileWeight.value) || 82,
+    height: Number(profileHeight.value) || 182,
+    activity: profileActivity.value,
+    goal: profileGoal,
+  };
+}
+
+function applyProfile(profile) {
+  profileGoal = profile.goal || "support";
+  profileSex = profile.sex || "male";
+  profileName.textContent = profile.name || "Алексей";
+  profileGoalLabel.textContent = goalLabels[profileGoal] || goalLabels.support;
+  profileWeight.value = profile.weight || 82;
+  profileHeight.value = profile.height || 182;
+  profileActivity.value = profile.activity || "medium";
+  calculateGoals();
+}
+
+function saveProfile() {
+  localStorage.setItem(profileStoreKey, JSON.stringify(readProfile()));
+}
+
+function loadProfile() {
+  const saved = localStorage.getItem(profileStoreKey);
+
+  if (!saved) {
+    onboarding.hidden = false;
+    return;
+  }
+
+  try {
+    applyProfile(JSON.parse(saved));
+  } catch {
+    onboarding.hidden = false;
+  }
+}
+
+function calculateGoals() {
+  const weight = Math.max(35, Number(profileWeight.value) || 82);
+  const height = Math.max(120, Number(profileHeight.value) || 182);
+  const activityFactors = {
+    low: 1.25,
+    medium: 1.45,
+    high: 1.65,
+  };
+  const goalFactors = {
+    lose: 0.88,
+    support: 1,
+    gain: 1.1,
+  };
+  const factor = activityFactors[profileActivity.value] || activityFactors.medium;
+  const sexOffset = profileSex === "female" ? -161 : 5;
+  const bmr = 10 * weight + 6.25 * height - 5 * 30 + sexOffset;
+
+  calorieGoal = Math.round((bmr * factor * (goalFactors[profileGoal] || 1)) / 50) * 50;
+  const proteinGoal = Math.round(weight * (profileGoal === "gain" ? 1.9 : 1.6));
+
+  goalCalories.textContent = `${calorieGoal} ${text.kcal}`;
+  goalProtein.textContent = `${proteinGoal} ${text.gram}`;
+
+  document.querySelectorAll("[data-calorie-goal-label]").forEach((node) => {
+    node.textContent = `/ ${calorieGoal} ${text.kcal}`;
+  });
+
+  updateTotalCalories();
+}
+
+function scaleMeal(card, factor) {
+  getDishRows(card).forEach((row) => {
+    const amountNode = getAmountNode(row);
+    const amount = readDishAmount(row);
+    const calories = readDishCalories(row);
+
+    amountNode.textContent = formatAmount(amount.value * factor, amount.unit);
+    row.querySelector("strong").textContent = formatCalories(calories * factor);
+  });
+
+  updateMealCard(card);
+  updateTotalCalories();
+}
+
+function deleteMeal(card) {
+  const mealName = card.querySelector(".meal-toggle b").textContent;
+  card.remove();
+  updateTotalCalories();
+  showToast(`${mealName} ${text.deleted}`);
+}
+
+function enterDishEditMode(card) {
+  card.classList.add("editing");
+
+  getDishRows(card).forEach((row) => {
+    if (row.querySelector("input")) return;
+
+    const amountNode = row.querySelector("small");
+    const amount = parseAmount(amountNode);
+    const calories = readDishCalories(row);
+    row.dataset.kcalPerUnit = String(calories / amount.value);
+
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "1";
+    input.step = "1";
+    input.inputMode = "numeric";
+    input.value = String(Math.round(amount.value));
+    input.dataset.unit = amount.unit;
+    input.setAttribute("aria-label", `${text.gramsLabel}: ${row.querySelector("b").textContent}`);
+
+    const unit = document.createElement("small");
+    unit.className = "amount-unit";
+    unit.textContent = amount.unit;
+
+    amountNode.replaceWith(input, unit);
+
+    input.addEventListener("input", () => updateDishAmount(row, input.value));
+    input.addEventListener("blur", () => {
+      if (!input.value || Number(input.value) <= 0) {
+        input.value = "1";
+        updateDishAmount(row, input.value);
+      }
+    });
+  });
+
+  const firstInput = card.querySelector(".dish-list input");
+  if (firstInput) {
+    firstInput.focus();
+    firstInput.select();
+  }
+
+  ensureSaveGramsButton(card);
+  showToast(text.editGrams);
+}
+
+function ensureSaveGramsButton(card) {
+  const actions = card.querySelector(".meal-actions");
+
+  if (actions.querySelector(".save-grams")) return;
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "save-grams";
+  button.textContent = text.save;
+  actions.append(button);
+}
+
+function saveDishEditMode(card) {
+  getDishRows(card).forEach((row) => {
+    const input = row.querySelector("input");
+    const unitNode = row.querySelector(".amount-unit");
+
+    if (!input || !unitNode) return;
+
+    const amount = Math.max(1, Math.round(Number(input.value) || 1));
+    const amountText = document.createElement("small");
+    amountText.textContent = formatAmount(amount, unitNode.textContent);
+    input.replaceWith(amountText);
+    unitNode.remove();
+  });
+
+  card.classList.remove("editing");
+  card.querySelector(".save-grams")?.remove();
+  updateMealCard(card);
+  updateTotalCalories();
+  showToast(text.saved);
+}
+
+function updateDishAmount(row, value) {
+  const nextAmount = Number(String(value).replace(",", "."));
+
+  if (!Number.isFinite(nextAmount) || nextAmount <= 0) return;
+
+  const kcalPerUnit = Number(row.dataset.kcalPerUnit) || 0;
+  row.querySelector("strong").textContent = formatCalories(nextAmount * kcalPerUnit);
+  updateMealCard(row.closest(".meal-card"));
+  updateTotalCalories();
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function roundValue(value) {
+  return Math.round(Number(value) || 0);
+}
+
+function telegramInitData() {
+  return window.Telegram?.WebApp?.initData || "";
+}
+
+async function miniappRequest(path, options = {}) {
+  const initData = telegramInitData();
+  const headers = {
+    ...(options.headers || {}),
+  };
+  if (initData) {
+    headers.Authorization = `TMA ${initData}`;
+  }
+  const response = await fetch(path, {
+    ...options,
+    headers,
+  });
+  if (!response.ok) {
+    throw new Error(`request_failed_${response.status}`);
+  }
+  return response.json();
+}
+
+function entryTime(entry) {
+  if (!entry.created_at) return "";
+  const date = new Date(entry.created_at);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function entryIcon(entry) {
+  return entry.source === "photo" ? "./assets/meal-lunch.png" : "./assets/meal-snack.png";
+}
+
+function renderMessageEntry(title, subtitle) {
+  const mealList = document.querySelector(".meal-list");
+  if (!mealList) return;
+  mealList.innerHTML = `
+    <article class="meal-card open">
+      <button type="button" class="meal-toggle" aria-expanded="true">
+        <span class="meal-emoji"><img src="./assets/meal-snack.png" alt="" /></span>
+        <span><b>${escapeHtml(title)}</b><small>${escapeHtml(subtitle)}</small></span>
+        <strong>0 ${text.kcal}</strong>
+      </button>
+    </article>
+  `;
+}
+
+function resetLiveTotals() {
+  document.querySelectorAll("[data-calories]").forEach((node) => {
+    node.textContent = "0";
+  });
+  document.querySelectorAll(".macro-current").forEach((node) => {
+    node.textContent = "0";
+  });
+  document.querySelectorAll(".macro-percent").forEach((node) => {
+    node.textContent = "";
+  });
+  document.querySelectorAll(".calorie-card .progress-line span").forEach((bar) => {
+    bar.style.width = "0%";
+  });
+}
+
+function showLoadingState() {
+  resetLiveTotals();
+  renderMessageEntry("Загружаю данные", "Синхронизируюсь с дневником Нямметра");
+}
+
+function showLoadError(subtitle) {
+  resetLiveTotals();
+  renderMessageEntry("Не смог загрузить данные", subtitle);
+}
+
+function renderEntries(entries) {
+  const mealList = document.querySelector(".meal-list");
+  if (!mealList) return;
+
+  if (!entries.length) {
+    const debug = window.__nyammetrDebug;
+    const subtitle = debug?.is_admin
+      ? `ID ${debug.telegram_id} · entries ${debug.today_entries} · ${debug.build}`
+      : "Добавь еду в боте или миниаппе";
+    renderMessageEntry("Пока записей нет", subtitle);
+    return;
+  }
+
+  mealList.innerHTML = entries.map((entry) => {
+    const title = escapeHtml(entry.title || "Еда");
+    const description = escapeHtml(entry.description || "Запись Нямметра");
+    const calories = roundValue(entry.calories);
+    const protein = roundValue(entry.protein);
+    const fat = roundValue(entry.fat);
+    const carbs = roundValue(entry.carbs);
+    const timeLabel = entryTime(entry);
+    return `
+      <article class="meal-card">
+        <button type="button" class="meal-toggle" aria-expanded="false">
+          <span class="meal-emoji"><img src="${entryIcon(entry)}" alt="" /></span>
+          <span><b>${title}</b><small>${timeLabel || "Сегодня"} · ${entry.source === "photo" ? "фото" : "текст"}</small></span>
+          <strong>${calories} ккал</strong>
+        </button>
+        <div class="meal-actions">
+          <div class="dish-list">
+            <span><b>${description}</b><small>Б ${protein} · Ж ${fat} · У ${carbs}</small><strong>${calories} ккал</strong></span>
+          </div>
+          <button type="button" data-meal-action="smaller">Порция меньше</button>
+          <button type="button" data-meal-action="larger">Порция больше</button>
+          <button type="button" data-meal-action="grams">Указать граммы</button>
+          <button type="button" class="danger" data-meal-action="delete">Удалить</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  document.querySelectorAll(".meal-card").forEach((card) => {
+    const toggle = card.querySelector(".meal-toggle");
+    toggle?.addEventListener("click", () => {
+      const isOpen = card.classList.toggle("open");
+      toggle.setAttribute("aria-expanded", String(isOpen));
+    });
+  });
+}
+
+function applyServerState(data) {
+  window.__nyammetrDebug = data.debug || null;
+  const targetCalories = Number(data.targets?.calories) || 0;
+  const targetProtein = Number(data.targets?.protein) || 0;
+  const totals = data.today?.totals || {};
+  const entries = data.today?.entries || [];
+  const calories = roundValue(totals.calories);
+  const protein = roundValue(totals.protein);
+  const fat = roundValue(totals.fat);
+  const carbs = roundValue(totals.carbs);
+
+  if (targetCalories > 0) {
+    calorieGoal = targetCalories;
+    goalCalories.textContent = `${roundValue(targetCalories)} ${text.kcal}`;
+  }
+  if (targetProtein > 0) {
+    goalProtein.textContent = `${roundValue(targetProtein)} ${text.gram}`;
+  }
+
+  document.querySelectorAll("[data-calories]").forEach((node) => {
+    node.textContent = calories;
+  });
+  document.querySelectorAll("[data-calorie-goal-label]").forEach((node) => {
+    node.textContent = targetCalories > 0 ? `/ ${roundValue(targetCalories)} ${text.kcal}` : "";
+  });
+
+  const fatTarget = targetCalories > 0 ? Math.round((targetCalories * 0.3) / 9) : 0;
+  const carbTarget = targetCalories > 0 && targetProtein > 0
+    ? Math.max(0, Math.round((targetCalories - targetProtein * 4 - fatTarget * 9) / 4))
+    : 0;
+  document.querySelectorAll(".macro-grid").forEach((grid) => {
+    const cells = grid.querySelectorAll("span");
+    const values = [
+      [protein, targetProtein],
+      [fat, fatTarget],
+      [carbs, carbTarget],
+    ];
+    cells.forEach((cell, index) => {
+      const current = cell.querySelector(".macro-current");
+      const target = cell.querySelector("small:not(.macro-percent)");
+      const percent = cell.querySelector(".macro-percent");
+      if (current) current.textContent = values[index][0];
+      if (target) target.textContent = values[index][1] ? `/${values[index][1]}` : "";
+      if (percent) {
+        percent.textContent = values[index][1] ? `${Math.min(999, Math.round(values[index][0] / values[index][1] * 100))}%` : "";
+      }
+    });
+  });
+
+  document.querySelectorAll(".calorie-card .progress-line span").forEach((bar) => {
+    const percent = targetCalories > 0 ? Math.min(100, Math.round((calories / targetCalories) * 100)) : 0;
+    bar.style.width = `${percent}%`;
+  });
+
+  if (data.user) {
+    profileName.textContent = data.user.display_name || profileName.textContent;
+    profileGoal = data.user.goal || profileGoal;
+    profileSex = data.user.sex || profileSex;
+    profileGoalLabel.textContent = goalLabels[profileGoal] || goalLabels.support;
+    if (data.user.weight) profileWeight.value = data.user.weight;
+    if (data.user.height) profileHeight.value = data.user.height;
+    if (data.user.activity) profileActivity.value = data.user.activity;
+  }
+
+  renderEntries(entries);
+}
+
+async function loadServerState() {
+  const tg = window.Telegram?.WebApp;
+  tg?.ready?.();
+  tg?.expand?.();
+
+  if (!telegramInitData()) {
+    showLoadError("Открой миниапп через кнопку в Telegram");
+    showToast("Открой миниапп через Telegram");
+    return;
+  }
+
+  try {
+    const data = await miniappRequest("/api/miniapp/me");
+    applyServerState(data);
+  } catch (error) {
+    console.error(error);
+    showLoadError("Проверь редеплой и WEBAPP_URL");
+    showToast("Не смог загрузить данные");
+  }
+}
+
+function closeAddMenu() {
+  addMenu.classList.remove("open");
+  addToggle.setAttribute("aria-expanded", "false");
+}
+
+tabs.forEach((tab) => {
+  tab.addEventListener("click", () => {
+    showScreen(tab.dataset.tab);
+    closeAddMenu();
+  });
+});
+
+addToggle.addEventListener("click", () => {
+  const isOpen = addMenu.classList.toggle("open");
+  addToggle.setAttribute("aria-expanded", String(isOpen));
+});
+
+document.querySelector("[data-add-text]").addEventListener("click", () => {
+  closeAddMenu();
+  showToast(text.textNext);
+});
+
+document.querySelector("[data-add-photo]").addEventListener("click", () => {
+  closeAddMenu();
+  showToast(text.photoNext);
+});
+
+document.querySelector("[data-missions-add]").addEventListener("click", () => {
+  showScreen("home");
+  const isOpen = addMenu.classList.toggle("open", true);
+  addToggle.setAttribute("aria-expanded", String(isOpen));
+});
+
+document.querySelectorAll("[data-soon-update]").forEach((node) => {
+  const showSoon = () => showToast("Скоро обновление");
+
+  node.addEventListener("click", showSoon);
+  node.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      showSoon();
     }
-    window.location.replace(target.toString());
-  </script>
-</head>
-<body>
-  <p>Открываю Нямметр...</p>
-  <p><a href="./nyammetr-live.html">Открыть вручную</a></p>
-</body>
+  });
+});
+
+[profileWeight, profileHeight, profileActivity].forEach((control) => {
+  control.addEventListener("input", calculateGoals);
+  control.addEventListener("change", calculateGoals);
+  control.addEventListener("change", saveProfile);
+});
+
+onboardingForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  applyProfile({
+    name: onboardingName.value.trim() || "Алексей",
+    sex: onboardingSex.value,
+    weight: Number(onboardingWeight.value) || 82,
+    height: Number(onboardingHeight.value) || 182,
+    activity: onboardingActivity.value,
+    goal: onboardingGoal.value,
+  });
+  saveProfile();
+  onboarding.hidden = true;
+  showToast("Профиль настроен");
+});
+
+datePrev.addEventListener("click", () => shiftDiaryDate(-1));
+dateNext.addEventListener("click", () => shiftDiaryDate(1));
+
+dateLabel.addEventListener("click", () => {
+  if (typeof datePicker.showPicker === "function") {
+    datePicker.showPicker();
+    return;
+  }
+
+  datePicker.focus();
+  datePicker.click();
+});
+
+datePicker.addEventListener("change", () => {
+  if (datePicker.value) {
+    updateDiaryDate(fromInputDate(datePicker.value));
+  }
+});
+
+document.querySelectorAll(".meal-card").forEach((card) => {
+  const toggle = card.querySelector(".meal-toggle");
+
+  toggle.addEventListener("click", () => {
+    const isOpen = card.classList.toggle("open");
+    toggle.setAttribute("aria-expanded", String(isOpen));
+  });
+});
+
+document.querySelector(".meal-list").addEventListener("click", (event) => {
+  const button = event.target.closest(".meal-actions button");
+
+  if (!button) return;
+
+  const card = button.closest(".meal-card");
+  const action = button.dataset.mealAction;
+
+  if (button.classList.contains("save-grams")) {
+    saveDishEditMode(card);
+    return;
+  }
+
+  if (action === "smaller") {
+    scaleMeal(card, 0.85);
+    showToast(text.smaller);
+    return;
+  }
+
+  if (action === "larger") {
+    scaleMeal(card, 1.15);
+    showToast(text.larger);
+    return;
+  }
+
+  if (action === "grams") {
+    enterDishEditMode(card);
+    return;
+  }
+
+  if (action === "delete") {
+    deleteMeal(card);
+  }
+});
+
+updateDiaryDate(today);
+document.querySelectorAll(".meal-card").forEach(updateMealCard);
+loadProfile();
+calculateGoals();
+showLoadingState();
+loadServerState();
+    </script>
+  </body>
 </html>

@@ -81,7 +81,7 @@ db = Database(
 )
 admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-51"
+WEBAPP_BUILD = "nyam-52"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 
 
@@ -371,7 +371,7 @@ def miniapp_shell_html() -> str:
     except OSError:
         logger.exception("Failed to read mini app html")
         return "<!doctype html><meta charset='utf-8'><title>Нямметр</title><p>Не смог загрузить миниапп.</p>"
-    return html.replace("__WEBAPP_BUILD__", WEBAPP_BUILD)
+    return sanitize_miniapp_html(html).replace("__WEBAPP_BUILD__", WEBAPP_BUILD)
 
 
 class SetupGoal(StatesGroup):
