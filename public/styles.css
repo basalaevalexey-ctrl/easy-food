@@ -1054,8 +1054,8 @@ h2 {
 
 .badges {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 8px;
   align-items: start;
 }
 
@@ -1069,8 +1069,8 @@ h2 {
 }
 
 .badges b {
-  width: 64px;
-  height: 64px;
+  width: 58px;
+  height: 58px;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -1080,15 +1080,15 @@ h2 {
 }
 
 .badges b img {
-  width: 66px;
-  height: 66px;
+  width: 60px;
+  height: 60px;
   display: block;
   object-fit: contain;
 }
 
 .badges small {
   color: #3e3e3e;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
 }
 

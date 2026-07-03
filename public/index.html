@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=nyam-58" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-59" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -129,14 +129,21 @@
 
         <div class="achievements-title">
           <h2>Достижения</h2>
-          <small data-achievements-summary>Собрано 0 из 5</small>
+          <small data-achievements-summary>Собрано 0 из 12</small>
         </div>
         <div class="badges">
           <span data-achievement-key="first_nyam"><b><img src="./assets/achievement-01-trim.png" alt="" /></b><small>Первый ням</small></span>
-          <span data-achievement-key="photo_lunch"><b><img src="./assets/achievement-02-trim.png" alt="" /></b><small>Фото-обед</small></span>
-          <span data-achievement-key="in_rhythm"><b><img src="./assets/achievement-03-trim.png" alt="" /></b><small>Вошел в ритм</small></span>
-          <span data-achievement-key="full_day"><b><img src="./assets/achievement-04-trim.png" alt="" /></b><small>Полный день</small></span>
-          <span data-achievement-key="target_day"><b><img src="./assets/achievement-12-trim.png" alt="" /></b><small>День в цель</small></span>
+          <span data-achievement-key="in_rhythm"><b><img src="./assets/achievement-02-trim.png" alt="" /></b><small>Вошел в ритм</small></span>
+          <span data-achievement-key="full_day"><b><img src="./assets/achievement-03-trim.png" alt="" /></b><small>Полный день</small></span>
+          <span data-achievement-key="target_day"><b><img src="./assets/achievement-04-trim.png" alt="" /></b><small>День в цель</small></span>
+          <span data-achievement-key="five_entries"><b><img src="./assets/achievement-05-trim.png" alt="" /></b><small>5 записей</small></span>
+          <span data-achievement-key="five_day_streak"><b><img src="./assets/achievement-06-trim.png" alt="" /></b><small>5 дней</small></span>
+          <span data-achievement-key="photo_lunch"><b><img src="./assets/achievement-07-trim.png" alt="" /></b><small>Фото-обед</small></span>
+          <span data-achievement-key="ten_entries"><b><img src="./assets/achievement-08-trim.png" alt="" /></b><small>10 записей</small></span>
+          <span data-achievement-key="planner"><b><img src="./assets/achievement-09-trim.png" alt="" /></b><small>Собранный день</small></span>
+          <span data-achievement-key="sweet_control"><b><img src="./assets/achievement-10-trim.png" alt="" /></b><small>Баланс дня</small></span>
+          <span data-achievement-key="breakfast"><b><img src="./assets/achievement-11-trim.png" alt="" /></b><small>Завтрак</small></span>
+          <span data-achievement-key="secret"><b><img src="./assets/achievement-12-trim.png" alt="" /></b><small>Секрет</small></span>
         </div>
 
         <button class="primary-action lower" type="button" data-missions-add>
@@ -283,7 +290,20 @@ const missionTitles = {
   keep_streak: "Сохрани Ням-стрик",
 };
 
-const achievementKeys = ["first_nyam", "photo_lunch", "in_rhythm", "full_day", "target_day"];
+const achievementKeys = [
+  "first_nyam",
+  "in_rhythm",
+  "full_day",
+  "target_day",
+  "five_entries",
+  "five_day_streak",
+  "photo_lunch",
+  "ten_entries",
+  "planner",
+  "sweet_control",
+  "breakfast",
+  "secret",
+];
 
 const today = startOfDay(new Date());
 let selectedDate = new Date(today);

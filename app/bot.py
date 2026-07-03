@@ -81,7 +81,7 @@ db = Database(
 )
 admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-58"
+WEBAPP_BUILD = "nyam-59"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -523,6 +523,7 @@ def build_miniapp_payload(telegram_user: dict, selected_day: str | None = None) 
     entries = db.get_entries_for_day(telegram_id, selected_day) if selected_day else db.get_today_entries(telegram_id)
     totals = today_totals(entries)
     progress = db.get_user_progress_stats(telegram_id)
+    db.unlock_available_achievements(telegram_id)
     achievements = db.get_user_achievements(telegram_id)
     mission_status = db.get_daily_mission_status(telegram_id)
     mission = mission_status["mission"]

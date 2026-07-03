@@ -778,6 +778,7 @@ class Database:
     def achievement_context(self, telegram_id: int) -> dict[str, int | float | None]:
         user = self.get_or_create_user(telegram_id)
         with self.connect() as conn:
+            current_streak, best_streak, last_active_date = self._streaks_for_user(conn, user.id)
             row = conn.execute(
                 """
                 SELECT
@@ -785,21 +786,32 @@ class Database:
                     (SELECT COUNT(*) FROM food_entries WHERE user_id = ? AND source = 'photo') AS photo_entries,
                     (
                         SELECT COUNT(*) FROM food_entries
-                        WHERE user_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')
+                        WHERE user_id = ? AND date(created_at, '+3 hours') = date('now', '+3 hours')
                     ) AS today_entries,
                     (
                         SELECT COALESCE(SUM(calories), 0) FROM food_entries
-                        WHERE user_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')
-                    ) AS today_calories
+                        WHERE user_id = ? AND date(created_at, '+3 hours') = date('now', '+3 hours')
+                    ) AS today_calories,
+                    (
+                        SELECT COUNT(DISTINCT date(created_at, '+3 hours')) FROM food_entries
+                        WHERE user_id = ?
+                    ) AS active_days,
+                    (
+                        SELECT COUNT(*) FROM food_entries
+                        WHERE user_id = ? AND time(created_at, '+3 hours') < '12:00:00'
+                    ) AS breakfast_entries
                 """,
-                (user.id, user.id, user.id, user.id),
+                (user.id, user.id, user.id, user.id, user.id, user.id),
             ).fetchone()
         return {
             "total_entries": int(row["total_entries"] or 0),
             "photo_entries": int(row["photo_entries"] or 0),
             "today_entries": int(row["today_entries"] or 0),
             "today_calories": float(row["today_calories"] or 0),
-            "current_streak": int(user.current_streak or 0),
+            "current_streak": int(current_streak or 0),
+            "best_streak": int(best_streak or 0),
+            "active_days": int(row["active_days"] or 0),
+            "breakfast_entries": int(row["breakfast_entries"] or 0),
             "calorie_target": user.calorie_target,
         }
 
