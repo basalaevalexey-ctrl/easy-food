@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=nyam-57" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-58" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -73,6 +73,7 @@
           <button class="date-label" type="button" data-date-label aria-label="Открыть календарь">Сегодня</button>
           <button class="day-arrow" type="button" data-date-next aria-label="Следующий день">›</button>
           <input class="date-picker" type="date" data-date-picker aria-label="Выбрать дату" />
+          <div class="mini-calendar" data-calendar hidden></div>
           <img class="peek-art" src="./assets/cat-peek.png" alt="" />
         </div>
 
@@ -224,6 +225,7 @@ const addToggle = document.querySelector("[data-add-toggle]");
 const addMenu = document.querySelector("[data-add-menu]");
 const dateLabel = document.querySelector("[data-date-label]");
 const datePicker = document.querySelector("[data-date-picker]");
+const dateCalendar = document.querySelector("[data-calendar]");
 const datePrev = document.querySelector("[data-date-prev]");
 const dateNext = document.querySelector("[data-date-next]");
 const profileName = document.querySelector("[data-profile-name]");
@@ -285,6 +287,7 @@ const achievementKeys = ["first_nyam", "photo_lunch", "in_rhythm", "full_day", "
 
 const today = startOfDay(new Date());
 let selectedDate = new Date(today);
+let activeEntryDates = new Set();
 
 function startOfDay(date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -325,6 +328,55 @@ function shiftDiaryDate(days) {
   const nextDate = new Date(selectedDate);
   nextDate.setDate(nextDate.getDate() + days);
   updateDiaryDate(nextDate);
+}
+
+function streakFromActiveDates() {
+  let cursor = startOfDay(today);
+  let streak = 0;
+  if (!activeEntryDates.has(toInputDate(cursor))) {
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  while (activeEntryDates.has(toInputDate(cursor))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
+function renderCalendar() {
+  if (!dateCalendar) return;
+  const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+  const monthEnd = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
+  const gridStart = new Date(monthStart);
+  gridStart.setDate(monthStart.getDate() - ((monthStart.getDay() + 6) % 7));
+  const monthLabel = new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" }).format(monthStart);
+  const days = [];
+  for (let index = 0; index < 42; index += 1) {
+    const day = new Date(gridStart);
+    day.setDate(gridStart.getDate() + index);
+    const iso = toInputDate(day);
+    const classes = [
+      day.getMonth() === selectedDate.getMonth() ? "" : "muted",
+      iso === toInputDate(selectedDate) ? "selected" : "",
+      activeEntryDates.has(iso) ? "has-data" : "",
+    ].filter(Boolean).join(" ");
+    days.push(`<button type="button" class="${classes}" data-calendar-day="${iso}">${day.getDate()}</button>`);
+  }
+  dateCalendar.innerHTML = `
+    <div class="calendar-head">
+      <button type="button" data-calendar-month="-1">‹</button>
+      <strong>${monthLabel}</strong>
+      <button type="button" data-calendar-month="1">›</button>
+    </div>
+    <div class="calendar-week"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div>
+    <div class="calendar-grid">${days.join("")}</div>
+  `;
+}
+
+async function setDiaryDateAndLoad(date) {
+  updateDiaryDate(date);
+  renderCalendar();
+  await loadServerState();
 }
 
 function showScreen(name) {
@@ -826,7 +878,7 @@ function applyServerState(data) {
   }
 
   document.querySelectorAll("[data-current-streak]").forEach((node) => {
-    node.textContent = roundValue(progress.current_streak);
+    node.textContent = Math.max(roundValue(progress.current_streak), streakFromActiveDates());
   });
   document.querySelectorAll("[data-active-days]").forEach((node) => {
     node.textContent = roundValue(progress.active_days ?? progress.days_with_nyammetr);
@@ -867,8 +919,10 @@ async function loadServerState() {
   }
 
   try {
-    const data = await miniappRequest("/api/miniapp/me");
+    const data = await miniappRequest(`/api/miniapp/me?date=${toInputDate(selectedDate)}`);
+    activeEntryDates = new Set(data.calendar?.active_dates || []);
     applyServerState(data);
+    renderCalendar();
   } catch (error) {
     console.error(error);
     showLoadError(error.message || "Проверь редеплой и WEBAPP_URL");
@@ -942,23 +996,34 @@ onboardingForm.addEventListener("submit", (event) => {
   showToast("Профиль настроен");
 });
 
-datePrev.addEventListener("click", () => shiftDiaryDate(-1));
-dateNext.addEventListener("click", () => shiftDiaryDate(1));
+datePrev.addEventListener("click", () => setDiaryDateAndLoad(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate() - 1)));
+dateNext.addEventListener("click", () => setDiaryDateAndLoad(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate() + 1)));
 
 dateLabel.addEventListener("click", () => {
-  if (typeof datePicker.showPicker === "function") {
-    datePicker.showPicker();
-    return;
-  }
-
-  datePicker.focus();
-  datePicker.click();
+  dateCalendar.hidden = !dateCalendar.hidden;
+  renderCalendar();
 });
 
 datePicker.addEventListener("change", () => {
   if (datePicker.value) {
-    updateDiaryDate(fromInputDate(datePicker.value));
+    setDiaryDateAndLoad(fromInputDate(datePicker.value));
   }
+});
+
+dateCalendar?.addEventListener("click", (event) => {
+  const monthButton = event.target.closest("[data-calendar-month]");
+  if (monthButton) {
+    const nextDate = new Date(selectedDate);
+    nextDate.setMonth(nextDate.getMonth() + Number(monthButton.dataset.calendarMonth || 0));
+    updateDiaryDate(nextDate);
+    renderCalendar();
+    return;
+  }
+
+  const dayButton = event.target.closest("[data-calendar-day]");
+  if (!dayButton) return;
+  dateCalendar.hidden = true;
+  setDiaryDateAndLoad(fromInputDate(dayButton.dataset.calendarDay));
 });
 
 document.querySelectorAll(".meal-card").forEach((card) => {

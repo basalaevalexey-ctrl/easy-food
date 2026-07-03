@@ -13,7 +13,7 @@ from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import threading
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, parse_qsl, urlencode, urlparse, urlunparse
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
@@ -81,8 +81,9 @@ db = Database(
 )
 admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-57"
+WEBAPP_BUILD = "nyam-58"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def webapp_url_with_build() -> str:
@@ -119,7 +120,12 @@ def sanitize_miniapp_html(html: str) -> str:
     html = re.sub(r'<small class="macro-percent">\d+%</small>', '<small class="macro-percent"></small>', html)
     html = re.sub(r"<strong data-goal-calories>.*?</strong>", '<strong data-goal-calories>0 ккал</strong>', html)
     html = re.sub(r"<strong data-goal-protein>.*?</strong>", '<strong data-goal-protein>0 г</strong>', html)
-    html = re.sub(r"<article class=\"streak-card\">.*?</article>", '<article class="streak-card">🔥 <strong>Ням-стрик:</strong> <b>0 дней</b></article>', html, flags=re.S)
+    html = re.sub(
+        r"<article class=\"streak-card\">.*?</article>",
+        '<article class="streak-card">🔥 <strong>Ням-стрик:</strong> <b><span data-current-streak>0</span> дней</b></article>',
+        html,
+        flags=re.S,
+    )
     html = re.sub(r"<small>Собрано \d+ из 12</small>", "<small>Собрано 0 из 12</small>", html)
     html = re.sub(r"<strong>\d+ дней</strong>", "<strong>0 дней</strong>", html)
 
@@ -504,15 +510,23 @@ def parse_telegram_init_data(init_data: str) -> dict | None:
     return user_data
 
 
-def build_miniapp_payload(telegram_user: dict) -> dict:
+def _valid_miniapp_day(value: str | None) -> str | None:
+    if not value or not DATE_RE.fullmatch(value):
+        return None
+    return value
+
+
+def build_miniapp_payload(telegram_user: dict, selected_day: str | None = None) -> dict:
     telegram_id = int(telegram_user["id"])
     user = db.get_or_create_user(telegram_id)
-    entries = db.get_today_entries(telegram_id)
+    selected_day = _valid_miniapp_day(selected_day)
+    entries = db.get_entries_for_day(telegram_id, selected_day) if selected_day else db.get_today_entries(telegram_id)
     totals = today_totals(entries)
     progress = db.get_user_progress_stats(telegram_id)
     achievements = db.get_user_achievements(telegram_id)
     mission_status = db.get_daily_mission_status(telegram_id)
     mission = mission_status["mission"]
+    active_dates = db.get_food_entry_days(telegram_id)
 
     return {
         "user": {
@@ -530,6 +544,7 @@ def build_miniapp_payload(telegram_user: dict) -> dict:
             "protein": user.protein_target,
         },
         "today": {
+            "date": selected_day,
             "totals": {key: round_num(value) for key, value in totals.items()},
             "entries": [
                 {
@@ -545,6 +560,9 @@ def build_miniapp_payload(telegram_user: dict) -> dict:
                 }
                 for entry in entries
             ],
+        },
+        "calendar": {
+            "active_dates": active_dates,
         },
         "progress": progress,
         "mission": {
@@ -743,7 +761,9 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             self._send_json(401, {"error": "invalid_init_data"})
             return
 
-        self._send_json(200, build_miniapp_payload(telegram_user))
+        query = parse_qs(parsed.query)
+        selected_day = _valid_miniapp_day((query.get("date") or [None])[0])
+        self._send_json(200, build_miniapp_payload(telegram_user, selected_day=selected_day))
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)

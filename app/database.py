@@ -606,12 +606,39 @@ class Database:
             rows = conn.execute(
                 """
                 SELECT * FROM food_entries
-                WHERE user_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')
+                WHERE user_id = ? AND date(created_at, '+3 hours') = date('now', '+3 hours')
                 ORDER BY created_at ASC
                 """,
                 (user.id,),
             ).fetchall()
             return [self._entry_from_row(row) for row in rows]
+
+    def get_entries_for_day(self, telegram_id: int, day: str) -> list[FoodEntry]:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM food_entries
+                WHERE user_id = ? AND date(created_at, '+3 hours') = ?
+                ORDER BY created_at ASC
+                """,
+                (user.id, day),
+            ).fetchall()
+            return [self._entry_from_row(row) for row in rows]
+
+    def get_food_entry_days(self, telegram_id: int) -> list[str]:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT date(created_at, '+3 hours') AS day
+                FROM food_entries
+                WHERE user_id = ?
+                ORDER BY day ASC
+                """,
+                (user.id,),
+            ).fetchall()
+            return [row["day"] for row in rows if row["day"]]
 
     def get_entries_between(self, telegram_id: int, start: str, end: str) -> list[FoodEntry]:
         user = self.get_or_create_user(telegram_id)
