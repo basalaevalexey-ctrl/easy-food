@@ -1096,6 +1096,10 @@ h2 {
   text-align: center;
 }
 
+.badges span[hidden] {
+  display: none;
+}
+
 .badges b {
   width: 58px;
   height: 58px;
