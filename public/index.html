@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=nyam-60" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-61" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -313,6 +313,7 @@ const achievementKeys = [
 const today = startOfDay(new Date());
 let selectedDate = new Date(today);
 let activeEntryDates = new Set();
+let unlockedAchievementKeys = new Set();
 let achievementPage = 0;
 const achievementsPerPage = 4;
 
@@ -401,15 +402,19 @@ function renderCalendar() {
 }
 
 function renderAchievementPage() {
-  const pages = Math.max(1, Math.ceil(achievementKeys.length / achievementsPerPage));
+  const visibleAchievementKeys = achievementKeys.filter((key) => unlockedAchievementKeys.has(key));
+  const pages = Math.max(1, Math.ceil(visibleAchievementKeys.length / achievementsPerPage));
   achievementPage = ((achievementPage % pages) + pages) % pages;
   const start = achievementPage * achievementsPerPage;
-  const visibleKeys = new Set(achievementKeys.slice(start, start + achievementsPerPage));
+  const pageKeys = new Set(visibleAchievementKeys.slice(start, start + achievementsPerPage));
   document.querySelectorAll("[data-achievement-key]").forEach((node) => {
-    node.hidden = !visibleKeys.has(node.dataset.achievementKey);
+    node.hidden = !pageKeys.has(node.dataset.achievementKey);
   });
   document.querySelectorAll("[data-achievements-page]").forEach((node) => {
-    node.textContent = `${achievementPage + 1}/${pages}`;
+    node.textContent = visibleAchievementKeys.length ? `${achievementPage + 1}/${pages}` : "0/0";
+  });
+  document.querySelectorAll(".achievement-pager button").forEach((button) => {
+    button.disabled = visibleAchievementKeys.length <= achievementsPerPage;
   });
 }
 
@@ -930,8 +935,12 @@ function applyServerState(data) {
     node.textContent = `Собрано ${unlockedAchievements.size} из ${achievementKeys.length}`;
   });
   document.querySelectorAll("[data-achievement-key]").forEach((node) => {
-    node.classList.toggle("locked", !unlockedAchievements.has(node.dataset.achievementKey));
+    node.classList.toggle("locked", false);
   });
+  unlockedAchievementKeys = unlockedAchievements;
+  if (achievementPage * achievementsPerPage >= unlockedAchievementKeys.size) {
+    achievementPage = 0;
+  }
   renderAchievementPage();
 
   const missionState = missionProgress(data);
