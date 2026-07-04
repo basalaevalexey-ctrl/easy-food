@@ -1025,6 +1025,12 @@ h2 {
   column-gap: 18px;
   padding: 14px 16px;
   background: #f7f9e8;
+  cursor: pointer;
+}
+
+.mission-card:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 3px;
 }
 
 .mission-icon {
@@ -1050,6 +1056,18 @@ h2 {
 
 .achievements-title small {
   color: var(--muted);
+}
+
+.mission-card p {
+  margin: 5px 0 0;
+  color: #5f6a4f;
+  font-size: 12px;
+  line-height: 1.28;
+  font-weight: 600;
+}
+
+.mission-card p[hidden] {
+  display: none;
 }
 
 .achievement-pager {

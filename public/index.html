@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=nyam-66" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-67" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -117,11 +117,12 @@
 
         <article class="streak-card">🔥 <strong>Ням-стрик:</strong> <b><span data-current-streak>0</span> дней</b></article>
 
-        <article class="mission-card">
+        <article class="mission-card" data-mission-card role="button" tabindex="0" aria-expanded="false">
           <span class="mission-icon"><img src="./assets/mission-target.png" alt="" /></span>
           <div>
             <strong>Миссия дня:</strong>
             <small data-mission-title>Загружаю миссию</small>
+            <p data-mission-description hidden>Нажми, чтобы посмотреть подробности миссии.</p>
             <div class="progress-line"><span data-mission-progress-bar style="width: 0%"></span></div>
           </div>
           <b data-mission-progress-value>0/1</b>
@@ -293,6 +294,18 @@ const missionTitles = {
   evening_summary: "Закрой день",
   adjust_portion: "Уточни порцию",
   keep_streak: "Сохрани Ням-стрик",
+};
+
+const missionDescriptions = {
+  photo_food: "Добавь хотя бы одну еду через фото. Можно сфотографировать тарелку или упаковку.",
+  text_food: "Добавь хотя бы одну еду текстом. Например: творог, банан и кофе.",
+  full_day: "Запиши 3 приема пищи за день. Подойдут завтрак, обед, ужин или перекусы.",
+  calorie_range: "Попади в 90-110% от дневной нормы калорий. Норма берется из твоей цели.",
+  protein_day: "Добери хотя бы 80% дневной цели по белку.",
+  breakfast: "Добавь первую еду до 12:00 по московскому времени.",
+  evening_summary: "Открой дневной итог после 18:00.",
+  adjust_portion: "Поправь размер хотя бы одной порции: меньше, больше или граммы.",
+  keep_streak: "Добавь хотя бы одну еду сегодня, чтобы сохранить Ням-стрик.",
 };
 
 const achievementKeys = [
@@ -947,6 +960,9 @@ function applyServerState(data) {
   document.querySelectorAll("[data-mission-title]").forEach((node) => {
     node.textContent = missionTitles[mission.key] || mission.progress_text || "Миссия дня";
   });
+  document.querySelectorAll("[data-mission-description]").forEach((node) => {
+    node.textContent = missionDescriptions[mission.key] || mission.progress_text || "Выполни действие миссии дня.";
+  });
   document.querySelectorAll("[data-mission-progress-value]").forEach((node) => {
     node.textContent = mission.is_completed ? "✓" : missionState.label;
   });
@@ -1052,6 +1068,21 @@ dateNext.addEventListener("click", () => setDiaryDateAndLoad(new Date(selectedDa
 dateLabel.addEventListener("click", () => {
   dateCalendar.hidden = !dateCalendar.hidden;
   renderCalendar();
+});
+
+document.querySelector("[data-mission-card]")?.addEventListener("click", () => {
+  const card = document.querySelector("[data-mission-card]");
+  const description = document.querySelector("[data-mission-description]");
+  if (!card || !description) return;
+  const isOpen = card.getAttribute("aria-expanded") === "true";
+  card.setAttribute("aria-expanded", String(!isOpen));
+  description.hidden = isOpen;
+});
+
+document.querySelector("[data-mission-card]")?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  event.currentTarget.click();
 });
 
 datePicker.addEventListener("change", () => {
