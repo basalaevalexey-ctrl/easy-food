@@ -1055,18 +1055,18 @@ h2 {
 .achievement-pager {
   width: fit-content;
   display: grid;
-  grid-template-columns: 32px auto 32px;
+  grid-template-columns: 28px auto 28px;
   align-items: center;
-  gap: 8px;
-  margin: 6px auto 12px;
+  gap: 7px;
+  margin: 2px auto 10px;
   color: var(--muted);
   font-size: 13px;
   font-weight: 800;
 }
 
 .achievement-pager button {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: 0;
   border-radius: 50%;
   background: #f1eadc;
@@ -1083,8 +1083,8 @@ h2 {
 .badges {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px 8px;
-  align-items: start;
+  gap: 0 8px;
+  align-items: stretch;
 }
 
 .badges span {
@@ -1092,7 +1092,9 @@ h2 {
   display: grid;
   justify-items: center;
   align-content: start;
-  gap: 5px;
+  grid-template-rows: 76px 28px;
+  gap: 4px;
+  min-height: 108px;
   text-align: center;
 }
 
@@ -1101,8 +1103,8 @@ h2 {
 }
 
 .badges b {
-  width: 68px;
-  height: 68px;
+  width: 74px;
+  height: 74px;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -1121,7 +1123,10 @@ h2 {
 .badges small {
   color: #3e3e3e;
   font-size: 10px;
+  line-height: 1.15;
   font-weight: 700;
+  display: grid;
+  align-items: start;
 }
 
 .badges span.locked b {
@@ -1630,12 +1635,12 @@ h2 {
   }
 
   .badges {
-    gap: 5px;
+    gap: 0 5px;
   }
 
   .badges b {
-    width: 68px;
-    height: 68px;
+    width: 74px;
+    height: 74px;
   }
 
   .badges b img {
