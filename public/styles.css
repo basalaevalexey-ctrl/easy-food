@@ -1112,8 +1112,8 @@ h2 {
 }
 
 .badges b img {
-  width: 70px;
-  height: 70px;
+  width: 86px;
+  height: 86px;
   display: block;
   object-fit: contain;
 }
@@ -1639,7 +1639,7 @@ h2 {
   }
 
   .badges b img {
-    width: 70px;
-    height: 70px;
+    width: 86px;
+    height: 86px;
   }
 }
