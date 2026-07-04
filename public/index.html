@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=nyam-59" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-60" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -130,6 +130,11 @@
         <div class="achievements-title">
           <h2>Достижения</h2>
           <small data-achievements-summary>Собрано 0 из 12</small>
+        </div>
+        <div class="achievement-pager" aria-label="Листать достижения">
+          <button type="button" data-achievements-prev aria-label="Предыдущие достижения">‹</button>
+          <span data-achievements-page>1/3</span>
+          <button type="button" data-achievements-next aria-label="Следующие достижения">›</button>
         </div>
         <div class="badges">
           <span data-achievement-key="first_nyam"><b><img src="./assets/achievement-01-trim.png" alt="" /></b><small>Первый ням</small></span>
@@ -308,6 +313,8 @@ const achievementKeys = [
 const today = startOfDay(new Date());
 let selectedDate = new Date(today);
 let activeEntryDates = new Set();
+let achievementPage = 0;
+const achievementsPerPage = 4;
 
 function startOfDay(date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -391,6 +398,19 @@ function renderCalendar() {
     <div class="calendar-week"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div>
     <div class="calendar-grid">${days.join("")}</div>
   `;
+}
+
+function renderAchievementPage() {
+  const pages = Math.max(1, Math.ceil(achievementKeys.length / achievementsPerPage));
+  achievementPage = ((achievementPage % pages) + pages) % pages;
+  const start = achievementPage * achievementsPerPage;
+  const visibleKeys = new Set(achievementKeys.slice(start, start + achievementsPerPage));
+  document.querySelectorAll("[data-achievement-key]").forEach((node) => {
+    node.hidden = !visibleKeys.has(node.dataset.achievementKey);
+  });
+  document.querySelectorAll("[data-achievements-page]").forEach((node) => {
+    node.textContent = `${achievementPage + 1}/${pages}`;
+  });
 }
 
 async function setDiaryDateAndLoad(date) {
@@ -912,6 +932,7 @@ function applyServerState(data) {
   document.querySelectorAll("[data-achievement-key]").forEach((node) => {
     node.classList.toggle("locked", !unlockedAchievements.has(node.dataset.achievementKey));
   });
+  renderAchievementPage();
 
   const missionState = missionProgress(data);
   document.querySelectorAll("[data-mission-title]").forEach((node) => {
@@ -1044,6 +1065,16 @@ dateCalendar?.addEventListener("click", (event) => {
   if (!dayButton) return;
   dateCalendar.hidden = true;
   setDiaryDateAndLoad(fromInputDate(dayButton.dataset.calendarDay));
+});
+
+document.querySelector("[data-achievements-prev]")?.addEventListener("click", () => {
+  achievementPage -= 1;
+  renderAchievementPage();
+});
+
+document.querySelector("[data-achievements-next]")?.addEventListener("click", () => {
+  achievementPage += 1;
+  renderAchievementPage();
 });
 
 document.querySelectorAll(".meal-card").forEach((card) => {
