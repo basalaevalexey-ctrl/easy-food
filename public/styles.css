@@ -42,35 +42,7 @@ button {
   border: 1px solid #d8d1c1;
   border-radius: 34px;
   box-shadow: 0 22px 60px rgba(41, 32, 15, 0.24);
-  padding: 18px 18px 116px;
-}
-
-.tg-header {
-  height: 70px;
-  display: grid;
-  grid-template-columns: 1fr;
-  align-items: center;
-  justify-items: center;
-}
-
-.tg-header > span,
-.tg-header > .icon-button {
-  display: none;
-}
-
-.tg-header div {
-  display: grid;
-  justify-items: center;
-  line-height: 1.05;
-}
-
-.tg-header strong {
-  font-size: 18px;
-}
-
-.tg-header small {
-  color: var(--muted);
-  font-size: 12px;
+  padding: 8px 18px 116px;
 }
 
 .icon-button {
@@ -105,7 +77,7 @@ button {
 
 .cat-hero {
   position: relative;
-  height: 292px;
+  height: 286px;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -1720,7 +1692,7 @@ h2 {
   }
 
   .cat-hero {
-    height: 286px;
+    height: 280px;
   }
 
   .party {
