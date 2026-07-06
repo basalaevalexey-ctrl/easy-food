@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=nyam-67" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-68" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -323,6 +323,57 @@ const achievementKeys = [
   "secret",
 ];
 
+const achievementDetails = {
+  first_nyam: {
+    title: "Первый ням",
+    description: "Первая запись еды в дневнике. С этого начинается твой учет.",
+  },
+  in_rhythm: {
+    title: "Вошел в ритм",
+    description: "Ням-стрик дошел до 3 дней подряд.",
+  },
+  full_day: {
+    title: "Полный день",
+    description: "За день добавлено 3 или больше записей еды.",
+  },
+  target_day: {
+    title: "День в цель",
+    description: "Калории за день попали в 90-110% от твоей дневной нормы.",
+  },
+  five_entries: {
+    title: "5 записей",
+    description: "В дневнике уже есть 5 записей еды.",
+  },
+  five_day_streak: {
+    title: "5 дней",
+    description: "Ням-стрик дошел до 5 активных дней подряд.",
+  },
+  photo_lunch: {
+    title: "Фото-обед",
+    description: "Ты впервые добавил еду через фото.",
+  },
+  ten_entries: {
+    title: "10 записей",
+    description: "В дневнике уже есть 10 записей еды.",
+  },
+  planner: {
+    title: "Собранный день",
+    description: "У тебя уже 5 активных дней с Нямметром.",
+  },
+  sweet_control: {
+    title: "Баланс дня",
+    description: "В дневнике уже есть 15 записей еды.",
+  },
+  breakfast: {
+    title: "Завтрак",
+    description: "Первая запись еды за день была добавлена до 12:00.",
+  },
+  secret: {
+    title: "Секрет",
+    description: "Секретная ачивка откроется, когда в дневнике будет 50 записей еды.",
+  },
+};
+
 const today = startOfDay(new Date());
 let selectedDate = new Date(today);
 let activeEntryDates = new Set();
@@ -447,13 +498,13 @@ function showScreen(name) {
   });
 }
 
-function showToast(message) {
+function showToast(message, timeout = 1800) {
   toast.textContent = message;
   toast.classList.add("show");
   window.clearTimeout(showToast.timer);
   showToast.timer = window.setTimeout(() => {
     toast.classList.remove("show");
-  }, 1800);
+  }, timeout);
 }
 
 function parseAmount(value) {
@@ -1115,6 +1166,14 @@ document.querySelector("[data-achievements-prev]")?.addEventListener("click", ()
 document.querySelector("[data-achievements-next]")?.addEventListener("click", () => {
   achievementPage += 1;
   renderAchievementPage();
+});
+
+document.querySelector(".badges")?.addEventListener("click", (event) => {
+  const badge = event.target.closest("[data-achievement-key]");
+  if (!badge || badge.hidden || badge.classList.contains("locked")) return;
+  const detail = achievementDetails[badge.dataset.achievementKey];
+  if (!detail) return;
+  showToast(`${detail.title}\n${detail.description}`, 3600);
 });
 
 document.querySelectorAll(".meal-card").forEach((card) => {

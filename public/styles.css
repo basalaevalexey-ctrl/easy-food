@@ -1114,6 +1114,8 @@ h2 {
   gap: 4px;
   min-height: 108px;
   text-align: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .badges span[hidden] {
@@ -1523,16 +1525,19 @@ h2 {
   left: 50%;
   bottom: 28px;
   min-width: 230px;
-  max-width: min(320px, calc(100vw - 40px));
+  max-width: min(340px, calc(100vw - 32px));
   padding: 14px 18px;
-  border-radius: 999px;
+  border-radius: 22px;
   color: white;
   background: rgba(25, 25, 25, 0.9);
   text-align: center;
+  white-space: pre-line;
+  line-height: 1.32;
   overflow-wrap: anywhere;
   transform: translate(-50%, 120px);
   transition: transform 0.22s ease;
   pointer-events: none;
+  z-index: 40;
 }
 
 .toast.show {
