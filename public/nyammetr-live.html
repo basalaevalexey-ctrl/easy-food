@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=nyam-72" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-73" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -994,8 +994,19 @@ function entryTime(entry) {
   }).format(date);
 }
 
+function entryHour(entry) {
+  if (!entry.created_at) return null;
+  const date = new Date(entry.created_at);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.getHours();
+}
+
 function entryIcon(entry) {
-  return entry.source === "photo" ? "./assets/meal-lunch.png" : "./assets/meal-snack.png";
+  const hour = entryHour(entry);
+  if (hour !== null && hour < 11) return "./assets/meal-breakfast.png";
+  if (hour !== null && hour < 16) return "./assets/meal-lunch.png";
+  if (hour !== null && hour < 18) return "./assets/meal-snack.png";
+  return "./assets/meal-lunch.png";
 }
 
 function renderMessageEntry(title, subtitle) {
