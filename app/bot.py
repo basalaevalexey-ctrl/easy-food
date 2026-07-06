@@ -108,11 +108,11 @@ def sanitize_miniapp_html(html: str) -> str:
         html = html.replace("<head>", '<head>\n    <base href="/" />', 1)
     html = re.sub(
         r"<small>mini app(?:\s*[·В]\s*nyam-\d+)?</small>",
-        f"<small>mini app · {WEBAPP_BUILD}</small>",
+        "<small>mini app</small>",
         html,
     )
     html = re.sub(r"styles\.css\?v=nyam-\d+", f"styles.css?v={WEBAPP_BUILD}", html)
-    html = re.sub(r"<small data-build-label>nyam-\d+</small>", f"<small data-build-label>{WEBAPP_BUILD}</small>", html)
+    html = re.sub(r"<small data-build-label>nyam-\d+</small>", "<small data-build-label></small>", html)
     html = re.sub(r"<span data-calories>\d+</span>", "<span data-calories>0</span>", html)
     html = re.sub(r"<em data-calorie-goal-label>.*?</em>", "<em data-calorie-goal-label></em>", html)
     html = re.sub(r'style="width:\s*\d+%"', 'style="width: 0%"', html)
@@ -198,7 +198,7 @@ def miniapp_shell_html() -> str:
 <main>
   <header>
     <span>Закрыть</span>
-    <div><b>Нямметр</b><small>mini app · {WEBAPP_BUILD}</small></div>
+    <div><b>Нямметр</b><small>mini app</small></div>
     <button class="ghost" type="button">•••</button>
   </header>
 
