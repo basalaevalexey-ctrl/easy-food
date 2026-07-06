@@ -82,7 +82,7 @@ db = Database(
 )
 admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-73"
+WEBAPP_BUILD = "nyam-74"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -678,16 +678,22 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args) -> None:
         logger.debug("Mini app API: " + format, *args)
 
-    def _send_headers(self, status: int, content_type: str = "application/json") -> None:
+    def _send_headers(
+        self,
+        status: int,
+        content_type: str = "application/json",
+        cache_control: str = "no-store, no-cache, must-revalidate, max-age=0",
+    ) -> None:
         origin = self.headers.get("Origin") or "*"
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Access-Control-Allow-Origin", origin)
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
-        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-        self.send_header("Pragma", "no-cache")
-        self.send_header("Expires", "0")
+        self.send_header("Cache-Control", cache_control)
+        if "no-store" in cache_control:
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
         self.end_headers()
 
     def _send_json(self, status: int, payload: dict) -> None:
@@ -708,7 +714,12 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             content_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
             if content_type.startswith("text/"):
                 content_type += "; charset=utf-8"
-            self._send_headers(200, content_type)
+            cache_control = (
+                "no-store, no-cache, must-revalidate, max-age=0"
+                if file_path.suffix.lower() in {".html", ".htm"}
+                else "public, max-age=86400"
+            )
+            self._send_headers(200, content_type, cache_control=cache_control)
             if relative_path == "index.html":
                 html = file_path.read_text(encoding="utf-8", errors="replace")
                 self.wfile.write(sanitize_miniapp_html(html).encode("utf-8"))

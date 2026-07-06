@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=nyam-73" />
+    <link rel="preload" as="image" href="./assets/cat-food.png" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-74" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -20,7 +21,7 @@
 
       <section class="screen active" data-screen="home">
         <div class="cat-hero">
-          <img class="hero-cat-art" src="./assets/cat-food.png" alt="" />
+          <img class="hero-cat-art" src="./assets/cat-food.png" alt="" fetchpriority="high" decoding="async" />
         </div>
 
         <button class="status-row" type="button" data-tab="missions">
@@ -74,7 +75,7 @@
           <button class="day-arrow" type="button" data-date-next aria-label="Следующий день">›</button>
           <input class="date-picker" type="date" data-date-picker aria-label="Выбрать дату" />
           <div class="mini-calendar" data-calendar hidden></div>
-          <img class="peek-art" src="./assets/cat-peek.png" alt="" />
+          <img loading="lazy" class="peek-art" src="./assets/cat-peek.png" alt="" />
         </div>
 
         <article class="calorie-card diary-summary">
@@ -92,7 +93,7 @@
         <div class="meal-list">
           <article class="meal-card open">
             <button type="button" class="meal-toggle" aria-expanded="true">
-              <span class="meal-emoji"><img src="./assets/meal-snack.png" alt="" /></span>
+              <span class="meal-emoji"><img loading="lazy" src="./assets/meal-snack.png" alt="" /></span>
               <span><b>&#1047;&#1072;&#1075;&#1088;&#1091;&#1078;&#1072;&#1102; &#1076;&#1072;&#1085;&#1085;&#1099;&#1077;</b><small>&#1057;&#1080;&#1085;&#1093;&#1088;&#1086;&#1085;&#1080;&#1079;&#1080;&#1088;&#1091;&#1102;&#1089;&#1100; &#1089; &#1076;&#1085;&#1077;&#1074;&#1085;&#1080;&#1082;&#1086;&#1084; &#1053;&#1103;&#1084;&#1084;&#1077;&#1090;&#1088;&#1072;</small></span>
               <strong>0 &#1082;&#1082;&#1072;&#1083;</strong>
             </button>
@@ -100,25 +101,25 @@
         </div>
 
         <aside class="tip-card wide">
-          <img class="tip-paw" src="./assets/paw.png" alt="" />
+          <img loading="lazy" class="tip-paw" src="./assets/paw.png" alt="" />
           <div>
             <strong>Ты на верном пути!</strong>
             <small>Продолжай в том же духе.</small>
           </div>
-          <img class="tip-cat" src="./assets/cat-peek.png" alt="" />
+          <img loading="lazy" class="tip-cat" src="./assets/cat-peek.png" alt="" />
         </aside>
       </section>
 
       <section class="screen" data-screen="missions">
         <div class="party missions-hero">
           <span>✦</span><span>✶</span><span>✦</span><span>✶</span>
-          <img class="mission-cat-art" src="./assets/cat-medal-large.png?v=2" alt="" />
+          <img loading="lazy" class="mission-cat-art" src="./assets/cat-medal-large.png?v=2" alt="" />
         </div>
 
         <article class="streak-card">🔥 <strong>Ням-стрик:</strong> <b><span data-current-streak>0</span> дней</b></article>
 
         <article class="mission-card" data-mission-card role="button" tabindex="0" aria-expanded="false">
-          <span class="mission-icon"><img src="./assets/mission-target.png" alt="" /></span>
+          <span class="mission-icon"><img loading="lazy" src="./assets/mission-target.png" alt="" /></span>
           <div>
             <strong>Миссия дня:</strong>
             <small data-mission-title>Загружаю миссию</small>
@@ -138,18 +139,18 @@
           <button type="button" data-achievements-next aria-label="Следующие достижения">›</button>
         </div>
         <div class="badges">
-          <span data-achievement-key="first_nyam"><b><img src="./assets/achievement-01-trim.png" alt="" /></b><small>Первый ням</small></span>
-          <span data-achievement-key="in_rhythm"><b><img src="./assets/achievement-02-trim.png" alt="" /></b><small>Вошел в ритм</small></span>
-          <span data-achievement-key="full_day"><b><img src="./assets/achievement-03-trim.png" alt="" /></b><small>Полный день</small></span>
-          <span data-achievement-key="target_day"><b><img src="./assets/achievement-04-trim.png" alt="" /></b><small>День в цель</small></span>
-          <span data-achievement-key="five_entries"><b><img src="./assets/achievement-05-trim.png" alt="" /></b><small>5 записей</small></span>
-          <span data-achievement-key="five_day_streak"><b><img src="./assets/achievement-06-trim.png" alt="" /></b><small>5 дней</small></span>
-          <span data-achievement-key="photo_lunch"><b><img src="./assets/achievement-07-trim.png" alt="" /></b><small>Фото-обед</small></span>
-          <span data-achievement-key="ten_entries"><b><img src="./assets/achievement-08-trim.png" alt="" /></b><small>10 записей</small></span>
-          <span data-achievement-key="planner"><b><img src="./assets/achievement-09-trim.png" alt="" /></b><small>Собранный день</small></span>
-          <span data-achievement-key="sweet_control"><b><img src="./assets/achievement-10-trim.png" alt="" /></b><small>Баланс дня</small></span>
-          <span data-achievement-key="breakfast"><b><img src="./assets/achievement-11-trim.png" alt="" /></b><small>Завтрак</small></span>
-          <span data-achievement-key="secret"><b><img src="./assets/achievement-12-trim.png" alt="" /></b><small>Секрет</small></span>
+          <span data-achievement-key="first_nyam"><b><img loading="lazy" src="./assets/achievement-01-trim.png" alt="" /></b><small>Первый ням</small></span>
+          <span data-achievement-key="in_rhythm"><b><img loading="lazy" src="./assets/achievement-02-trim.png" alt="" /></b><small>Вошел в ритм</small></span>
+          <span data-achievement-key="full_day"><b><img loading="lazy" src="./assets/achievement-03-trim.png" alt="" /></b><small>Полный день</small></span>
+          <span data-achievement-key="target_day"><b><img loading="lazy" src="./assets/achievement-04-trim.png" alt="" /></b><small>День в цель</small></span>
+          <span data-achievement-key="five_entries"><b><img loading="lazy" src="./assets/achievement-05-trim.png" alt="" /></b><small>5 записей</small></span>
+          <span data-achievement-key="five_day_streak"><b><img loading="lazy" src="./assets/achievement-06-trim.png" alt="" /></b><small>5 дней</small></span>
+          <span data-achievement-key="photo_lunch"><b><img loading="lazy" src="./assets/achievement-07-trim.png" alt="" /></b><small>Фото-обед</small></span>
+          <span data-achievement-key="ten_entries"><b><img loading="lazy" src="./assets/achievement-08-trim.png" alt="" /></b><small>10 записей</small></span>
+          <span data-achievement-key="planner"><b><img loading="lazy" src="./assets/achievement-09-trim.png" alt="" /></b><small>Собранный день</small></span>
+          <span data-achievement-key="sweet_control"><b><img loading="lazy" src="./assets/achievement-10-trim.png" alt="" /></b><small>Баланс дня</small></span>
+          <span data-achievement-key="breakfast"><b><img loading="lazy" src="./assets/achievement-11-trim.png" alt="" /></b><small>Завтрак</small></span>
+          <span data-achievement-key="secret"><b><img loading="lazy" src="./assets/achievement-12-trim.png" alt="" /></b><small>Секрет</small></span>
         </div>
 
         <button class="primary-action lower" type="button" data-missions-add>
@@ -160,30 +161,30 @@
 
       <section class="screen" data-screen="profile">
         <article class="profile-hero">
-          <div class="avatar"><img src="./assets/profile-avatar.png" alt="" /></div>
+          <div class="avatar"><img loading="lazy" src="./assets/profile-avatar.png" alt="" /></div>
           <div>
             <h2 data-profile-name>Алексей</h2>
             <p>Цель: <b data-profile-goal-label>поддерживать форму</b></p>
           </div>
-          <img class="profile-cat-art" src="./assets/cat-peek.png" alt="" />
+          <img loading="lazy" class="profile-cat-art" src="./assets/cat-peek.png" alt="" />
           <span class="profile-heart">♥</span>
         </article>
 
         <article class="profile-panel">
-          <h2><span><img src="./assets/profile-goals-symbol.png" alt="" /></span>Мои цели</h2>
-          <button type="button" class="goal-row"><span><img src="./assets/profile-calorie-goal-trim.png" alt="" /></span>Дневная норма<strong data-goal-calories>2100 ккал</strong></button>
-          <button type="button" class="goal-row"><span><img src="./assets/profile-protein-goal-trim.png" alt="" /></span>Белок<strong data-goal-protein>130 г</strong></button>
+          <h2><span><img loading="lazy" src="./assets/profile-goals-symbol.png" alt="" /></span>Мои цели</h2>
+          <button type="button" class="goal-row"><span><img loading="lazy" src="./assets/profile-calorie-goal-trim.png" alt="" /></span>Дневная норма<strong data-goal-calories>2100 ккал</strong></button>
+          <button type="button" class="goal-row"><span><img loading="lazy" src="./assets/profile-protein-goal-trim.png" alt="" /></span>Белок<strong data-goal-protein>130 г</strong></button>
         </article>
 
         <article class="profile-panel">
-          <h2><span><img src="./assets/profile-data-trim.png" alt="" /></span>Мои данные</h2>
-          <div class="profile-field"><span><img src="./assets/profile-weight-trim.png" alt="" /></span><label for="profile-weight">Вес</label><div><input id="profile-weight" type="number" min="35" max="250" value="82" data-profile-weight /> кг</div></div>
-          <div class="profile-field"><span><img src="./assets/profile-height-trim.png" alt="" /></span><label for="profile-height">Рост</label><div><input id="profile-height" type="number" min="120" max="230" value="182" data-profile-height /> см</div></div>
-          <div class="profile-field"><span><img src="./assets/profile-activity-trim.png" alt="" /></span><label for="profile-activity">Активность</label><div><select id="profile-activity" data-profile-activity><option value="low">Низкая</option><option value="medium" selected>Средняя</option><option value="high">Высокая</option></select></div></div>
+          <h2><span><img loading="lazy" src="./assets/profile-data-trim.png" alt="" /></span>Мои данные</h2>
+          <div class="profile-field"><span><img loading="lazy" src="./assets/profile-weight-trim.png" alt="" /></span><label for="profile-weight">Вес</label><div><input id="profile-weight" type="number" min="35" max="250" value="82" data-profile-weight /> кг</div></div>
+          <div class="profile-field"><span><img loading="lazy" src="./assets/profile-height-trim.png" alt="" /></span><label for="profile-height">Рост</label><div><input id="profile-height" type="number" min="120" max="230" value="182" data-profile-height /> см</div></div>
+          <div class="profile-field"><span><img loading="lazy" src="./assets/profile-activity-trim.png" alt="" /></span><label for="profile-activity">Активность</label><div><select id="profile-activity" data-profile-activity><option value="low">Низкая</option><option value="medium" selected>Средняя</option><option value="high">Высокая</option></select></div></div>
         </article>
 
         <article class="profile-panel reminder-panel">
-          <h2><span><img src="./assets/profile-reminder-trim.png" alt="" /></span>Напоминания</h2>
+          <h2><span><img loading="lazy" src="./assets/profile-reminder-trim.png" alt="" /></span>Напоминания</h2>
           <div class="reminder-row">
             <span data-reminder-label>Ежедневно в 9:00 МСК</span>
             <label class="switch">
@@ -197,11 +198,11 @@
         </article>
 
         <article class="profile-panel">
-          <h2><span><img src="./assets/profile-progress-trim.png" alt="" /></span>Прогресс</h2>
+          <h2><span><img loading="lazy" src="./assets/profile-progress-trim.png" alt="" /></span>Прогресс</h2>
           <div class="profile-stats">
-            <span><b><img src="./assets/profile-streak-symbol.png" alt="" /></b><small>Ням-стрик</small><strong><span data-current-streak>0</span> дней</strong></span>
-            <span><b><img src="./assets/profile-active-days-symbol.png" alt="" /></b><small>Активных дней</small><strong data-active-days>0</strong></span>
-            <span><b><img src="./assets/profile-achievements-symbol.png" alt="" /></b><small>Достиже-<br>ний</small><strong data-achievements-count>0</strong></span>
+            <span><b><img loading="lazy" src="./assets/profile-streak-symbol.png" alt="" /></b><small>Ням-стрик</small><strong><span data-current-streak>0</span> дней</strong></span>
+            <span><b><img loading="lazy" src="./assets/profile-active-days-symbol.png" alt="" /></b><small>Активных дней</small><strong data-active-days>0</strong></span>
+            <span><b><img loading="lazy" src="./assets/profile-achievements-symbol.png" alt="" /></b><small>Достиже-<br>ний</small><strong data-achievements-count>0</strong></span>
           </div>
         </article>
       </section>
@@ -1072,7 +1073,7 @@ function renderEntries(entries) {
     return `
       <article class="meal-card">
         <button type="button" class="meal-toggle" aria-expanded="false">
-          <span class="meal-emoji"><img src="${entryIcon(entry)}" alt="" /></span>
+          <span class="meal-emoji"><img loading="lazy" src="${entryIcon(entry)}" alt="" /></span>
           <span><b>${title}</b><small>${timeLabel || "Сегодня"} · ${entry.source === "photo" ? "фото" : "текст"}</small></span>
           <strong>${calories} ккал</strong>
         </button>
