@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=nyam-71" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-72" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -184,13 +184,16 @@
 
         <article class="profile-panel reminder-panel">
           <h2><span><img src="./assets/profile-reminder-trim.png" alt="" /></span>Напоминания</h2>
-          <div>
-            <span>Ежедневно в 9:00</span>
+          <div class="reminder-row">
+            <span data-reminder-label>Ежедневно в 9:00 МСК</span>
             <label class="switch">
-              <input type="checkbox" checked />
+              <input type="checkbox" checked data-reminder-enabled />
               <span></span>
             </label>
           </div>
+          <label class="reminder-time-row">Время по МСК
+            <input type="time" value="09:00" data-reminder-time />
+          </label>
         </article>
 
         <article class="profile-panel">
@@ -279,6 +282,9 @@ const foodTextForm = document.querySelector("[data-food-text-form]");
 const foodTextInput = document.querySelector("[data-food-text-input]");
 const foodPhotoInput = document.querySelector("[data-food-photo-input]");
 const foodSubmit = document.querySelector("[data-food-submit]");
+const reminderEnabled = document.querySelector("[data-reminder-enabled]");
+const reminderTime = document.querySelector("[data-reminder-time]");
+const reminderLabel = document.querySelector("[data-reminder-label]");
 let calorieGoal = 2100;
 let profileGoal = "support";
 let profileSex = "male";
@@ -296,6 +302,8 @@ const text = {
   added: "Записал в дневник",
   notFood: "Похоже, это не еда. Можно посмотреть инструкцию в боте.",
   updateSoon: "Следующее обновление скоро!",
+  reminderSaved: "Напоминания сохранены",
+  reminderSaveFailed: "Не смог сохранить напоминание",
   smaller: "\u041f\u043e\u0440\u0446\u0438\u044f \u0443\u043c\u0435\u043d\u044c\u0448\u0435\u043d\u0430",
   larger: "\u041f\u043e\u0440\u0446\u0438\u044f \u0443\u0432\u0435\u043b\u0438\u0447\u0435\u043d\u0430",
   editGrams: "\u0422\u0435\u043f\u0435\u0440\u044c \u0433\u0440\u0430\u043c\u043c\u044b \u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u0443\u044e\u0442\u0441\u044f \u0432 \u0441\u0442\u0440\u043e\u043a\u0430\u0445",
@@ -881,6 +889,42 @@ function applyFoodResponse(data) {
   }
 }
 
+function normalizeTimeValue(value) {
+  const match = String(value || "").match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+  return match ? `${match[1]}:${match[2]}` : "09:00";
+}
+
+function updateReminderControls(reminder = {}) {
+  const time = normalizeTimeValue(reminder.time || reminderTime?.value || "09:00");
+  const enabled = reminder.enabled !== false;
+  if (reminderTime) {
+    reminderTime.value = time;
+    reminderTime.disabled = !enabled;
+  }
+  if (reminderEnabled) reminderEnabled.checked = enabled;
+  if (reminderLabel) {
+    reminderLabel.textContent = enabled ? `Ежедневно в ${time} МСК` : "Напоминания выключены";
+  }
+}
+
+async function saveReminderSettings() {
+  const enabled = Boolean(reminderEnabled?.checked);
+  const time = normalizeTimeValue(reminderTime?.value || "09:00");
+  updateReminderControls({ enabled, time });
+  try {
+    const data = await miniappRequest("/api/miniapp/reminder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled, time }),
+    });
+    if (data) applyServerState(data);
+    showToast(text.reminderSaved);
+  } catch (error) {
+    showToast(text.reminderSaveFailed);
+    await loadServerState();
+  }
+}
+
 function showFoodError(error) {
   const code = error?.message || "";
   if (code === "not_food") {
@@ -1110,6 +1154,7 @@ function applyServerState(data) {
     if (data.user.height) profileHeight.value = data.user.height;
     if (data.user.activity) profileActivity.value = data.user.activity;
   }
+  updateReminderControls(data.reminder || {});
 
   document.querySelectorAll("[data-current-streak]").forEach((node) => {
     node.textContent = Math.max(roundValue(progress.current_streak), streakFromActiveDates());
@@ -1213,6 +1258,9 @@ foodTextForm?.addEventListener("submit", (event) => {
 foodPhotoInput?.addEventListener("change", () => {
   submitFoodPhoto(foodPhotoInput.files?.[0]);
 });
+
+reminderEnabled?.addEventListener("change", saveReminderSettings);
+reminderTime?.addEventListener("change", saveReminderSettings);
 
 document.querySelector("[data-missions-add]").addEventListener("click", () => {
   showScreen("home");

@@ -7,7 +7,7 @@ import json
 import logging
 import mimetypes
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
@@ -71,6 +71,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+MOSCOW_TZ = timezone(timedelta(hours=3))
 
 router = Router()
 config = load_config()
@@ -81,7 +82,7 @@ db = Database(
 )
 admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-71"
+WEBAPP_BUILD = "nyam-72"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -540,6 +541,11 @@ def build_miniapp_payload(telegram_user: dict, selected_day: str | None = None) 
             "goal": {"maintain": "support"}.get(user.goal, user.goal),
             "activity": user.activity,
         },
+        "reminder": {
+            "enabled": user.reminder_time is not None,
+            "time": user.reminder_time or "09:00",
+            "timezone": "МСК",
+        },
         "targets": {
             "calories": user.calorie_target,
             "protein": user.protein_target,
@@ -634,6 +640,15 @@ def update_miniapp_profile(telegram_user: dict, payload: dict) -> dict:
         },
     )
     db.record_user_event(telegram_id, "miniapp_profile_updated")
+    return build_miniapp_payload(telegram_user)
+
+
+def update_miniapp_reminder(telegram_user: dict, payload: dict) -> dict:
+    telegram_id = int(telegram_user["id"])
+    enabled = bool(payload.get("enabled"))
+    reminder_time = normalize_reminder_time(str(payload.get("time") or "09:00")) or "09:00"
+    db.set_reminder_time(telegram_id, reminder_time if enabled else None)
+    db.record_user_event(telegram_id, "miniapp_reminder_updated" if enabled else "miniapp_reminder_disabled")
     return build_miniapp_payload(telegram_user)
 
 
@@ -768,7 +783,12 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path not in {"/api/miniapp/food/text", "/api/miniapp/food/photo", "/api/miniapp/profile"}:
+        if parsed.path not in {
+            "/api/miniapp/food/text",
+            "/api/miniapp/food/photo",
+            "/api/miniapp/profile",
+            "/api/miniapp/reminder",
+        }:
             self._send_json(404, {"error": "not_found"})
             return
 
@@ -794,6 +814,10 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
                     logger.exception("Failed to save mini app profile")
                     self._send_json(500, {"error": "profile_save_failed"})
                     return
+                self._send_json(200, result)
+                return
+            if parsed.path == "/api/miniapp/reminder":
+                result = update_miniapp_reminder(telegram_user, payload)
                 self._send_json(200, result)
                 return
             if parsed.path == "/api/miniapp/food/text":
@@ -1381,7 +1405,7 @@ async def help_command(message: Message) -> None:
 @router.message(F.text == "Сегодня")
 async def today_command(message: Message) -> None:
     db.record_user_event(message.from_user.id, "today_opened")
-    if datetime.now().hour >= 18:
+    if datetime.now(MOSCOW_TZ).hour >= 18:
         db.record_user_event(message.from_user.id, "today_opened_evening")
     user = db.get_or_create_user(message.from_user.id)
     entries = db.get_today_entries(message.from_user.id)
@@ -1962,7 +1986,7 @@ async def configure_bot_ui(bot: Bot) -> None:
 
 async def reminder_loop(bot: Bot) -> None:
     while True:
-        now = datetime.now()
+        now = datetime.now(MOSCOW_TZ)
         current_time = now.strftime("%H:%M")
         today_date = now.date()
         today = today_date.isoformat()

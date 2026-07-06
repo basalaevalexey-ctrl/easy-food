@@ -1389,6 +1389,48 @@ h2 {
   font-size: 15px;
 }
 
+.reminder-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.reminder-row {
+  gap: 12px;
+}
+
+.reminder-row > span {
+  line-height: 1.25;
+}
+
+.reminder-time-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed #eadfcb;
+  color: #333;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.reminder-time-row input {
+  width: 112px;
+  height: 36px;
+  border: 1px solid #ded4bf;
+  border-radius: 12px;
+  padding: 0 8px;
+  background: #fbf7eb;
+  color: var(--green-dark);
+  font: inherit;
+  font-weight: 800;
+  text-align: center;
+}
+
+.reminder-time-row input:disabled {
+  opacity: 0.45;
+}
+
 .switch input {
   position: absolute;
   opacity: 0;
