@@ -105,7 +105,7 @@ button {
 
 .cat-hero {
   position: relative;
-  height: 334px;
+  height: 292px;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -118,11 +118,10 @@ button {
   height: 342px;
   object-fit: contain;
   object-position: center;
-  transform: translateY(6px);
+  transform: translateY(-4px);
   filter: drop-shadow(0 10px 18px rgba(55, 42, 20, 0.08));
 }
 
-.cat-hero::before,
 .party::before {
   content: "";
   position: absolute;
@@ -131,6 +130,17 @@ button {
   border-radius: 50%;
   background: #f4f0d6;
   opacity: 0.8;
+}
+
+.cat-hero::before {
+  content: "";
+  position: absolute;
+  width: 218px;
+  height: 218px;
+  border-radius: 50%;
+  background: #f7f3df;
+  opacity: 0.42;
+  transform: translateY(12px);
 }
 
 .heart-bubble {
@@ -1668,7 +1678,7 @@ h2 {
   }
 
   .cat-hero {
-    height: 322px;
+    height: 286px;
   }
 
   .party {
@@ -1678,7 +1688,7 @@ h2 {
   .hero-cat-art {
     width: 310px;
     height: 310px;
-    transform: translateY(8px);
+    transform: translateY(-2px);
   }
 
   .mission-cat-art {
