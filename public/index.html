@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=nyam-68" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-69" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -57,7 +57,7 @@
           <button type="button" data-add-photo><span>📷</span>Фото еды</button>
         </div>
 
-        <aside class="tip-card">
+        <aside class="tip-card" data-soon-update role="button" tabindex="0">
           <img class="tip-paw" src="./assets/paw.png" alt="" />
           <div>
             <strong>Пей больше воды! 💧</strong>
@@ -229,6 +229,24 @@
       </form>
     </div>
 
+    <div class="onboarding-modal food-modal" data-food-modal hidden>
+      <form class="onboarding-sheet food-sheet" data-food-text-form>
+        <div>
+          <strong>Добавить еду</strong>
+          <small>Напиши, что съел, а Нямметр примерно посчитает калории и БЖУ.</small>
+        </div>
+        <label>Что было на тарелке?
+          <textarea data-food-text-input rows="4" placeholder="Например: творог с йогуртом и протеином"></textarea>
+        </label>
+        <div class="food-sheet-actions">
+          <button type="button" class="secondary" data-food-cancel>Отмена</button>
+          <button type="submit" data-food-submit>Записать</button>
+        </div>
+      </form>
+    </div>
+
+    <input class="visually-hidden-file" type="file" accept="image/*" data-food-photo-input />
+
     <div class="toast" role="status" aria-live="polite"></div>
     <script>
 const tabs = document.querySelectorAll("[data-tab]");
@@ -256,6 +274,11 @@ const onboardingWeight = document.querySelector("[data-onboarding-weight]");
 const onboardingHeight = document.querySelector("[data-onboarding-height]");
 const onboardingActivity = document.querySelector("[data-onboarding-activity]");
 const onboardingGoal = document.querySelector("[data-onboarding-goal]");
+const foodModal = document.querySelector("[data-food-modal]");
+const foodTextForm = document.querySelector("[data-food-text-form]");
+const foodTextInput = document.querySelector("[data-food-text-input]");
+const foodPhotoInput = document.querySelector("[data-food-photo-input]");
+const foodSubmit = document.querySelector("[data-food-submit]");
 let calorieGoal = 2100;
 let profileGoal = "support";
 let profileSex = "male";
@@ -267,8 +290,12 @@ const text = {
   tomorrow: "\u0417\u0430\u0432\u0442\u0440\u0430",
   gram: "\u0433",
   kcal: "\u043a\u043a\u0430\u043b",
-  textNext: "\u041e\u0442\u043a\u0440\u043e\u0435\u043c \u0432\u0432\u043e\u0434 \u0442\u0435\u043a\u0441\u0442\u043e\u043c \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u043c \u0448\u0430\u0433\u043e\u043c",
-  photoNext: "\u041e\u0442\u043a\u0440\u043e\u0435\u043c \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0443 \u0444\u043e\u0442\u043e \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u043c \u0448\u0430\u0433\u043e\u043c",
+  textNext: "Напиши еду текстом",
+  photoNext: "Выбери фото еды",
+  recognizing: "Считаю примерные калории...",
+  added: "Записал в дневник",
+  notFood: "Похоже, это не еда. Можно посмотреть инструкцию в боте.",
+  updateSoon: "Следующее обновление скоро!",
   smaller: "\u041f\u043e\u0440\u0446\u0438\u044f \u0443\u043c\u0435\u043d\u044c\u0448\u0435\u043d\u0430",
   larger: "\u041f\u043e\u0440\u0446\u0438\u044f \u0443\u0432\u0435\u043b\u0438\u0447\u0435\u043d\u0430",
   editGrams: "\u0422\u0435\u043f\u0435\u0440\u044c \u0433\u0440\u0430\u043c\u043c\u044b \u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u0443\u044e\u0442\u0441\u044f \u0432 \u0441\u0442\u0440\u043e\u043a\u0430\u0445",
@@ -810,9 +837,107 @@ async function miniappRequest(path, options = {}) {
     headers,
   });
   if (!response.ok) {
-    throw new Error(`request_failed_${response.status}`);
+    let error = `request_failed_${response.status}`;
+    try {
+      const payload = await response.json();
+      error = payload.error || error;
+    } catch {
+      // Keep the generic request error.
+    }
+    throw new Error(error);
   }
   return response.json();
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result || "")));
+    reader.addEventListener("error", () => reject(reader.error || new Error("file_read_failed")));
+    reader.readAsDataURL(file);
+  });
+}
+
+function openFoodModal() {
+  foodModal.hidden = false;
+  foodTextInput.value = "";
+  window.setTimeout(() => foodTextInput.focus(), 60);
+}
+
+function closeFoodModal() {
+  foodModal.hidden = true;
+}
+
+function setFoodSubmitting(isSubmitting) {
+  if (foodSubmit) foodSubmit.disabled = isSubmitting;
+  if (foodTextInput) foodTextInput.disabled = isSubmitting;
+}
+
+function applyFoodResponse(data) {
+  if (data?.state) {
+    activeEntryDates = new Set(data.state.calendar?.active_dates || []);
+    applyServerState(data.state);
+    renderCalendar();
+  }
+}
+
+function showFoodError(error) {
+  const code = error?.message || "";
+  if (code === "not_food") {
+    showToast(text.notFood, 3600);
+    return;
+  }
+  if (code === "empty_text") {
+    showToast("Напиши, что ты съел");
+    return;
+  }
+  showToast("Не смог распознать, попробуй еще раз", 3200);
+}
+
+async function submitFoodText(value) {
+  const foodText = value.trim();
+  if (!foodText) {
+    showToast("Напиши, что ты съел");
+    return;
+  }
+  setFoodSubmitting(true);
+  showToast(text.recognizing, 2400);
+  try {
+    const data = await miniappRequest("/api/miniapp/food/text", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: foodText }),
+    });
+    closeFoodModal();
+    applyFoodResponse(data);
+    showToast(text.added);
+  } catch (error) {
+    showFoodError(error);
+  } finally {
+    setFoodSubmitting(false);
+  }
+}
+
+async function submitFoodPhoto(file) {
+  if (!file) return;
+  showToast(text.recognizing, 2400);
+  try {
+    const imageBase64 = await fileToDataUrl(file);
+    const data = await miniappRequest("/api/miniapp/food/photo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        imageBase64,
+        mimeType: file.type || "image/jpeg",
+      }),
+    });
+    applyFoodResponse(data);
+    showToast(text.added);
+  } catch (error) {
+    showFoodError(error);
+  } finally {
+    foodPhotoInput.value = "";
+  }
 }
 
 function entryTime(entry) {
@@ -1066,12 +1191,27 @@ addToggle.addEventListener("click", () => {
 
 document.querySelector("[data-add-text]").addEventListener("click", () => {
   closeAddMenu();
-  showToast(text.textNext);
+  openFoodModal();
 });
 
 document.querySelector("[data-add-photo]").addEventListener("click", () => {
   closeAddMenu();
-  showToast(text.photoNext);
+  foodPhotoInput.click();
+});
+
+document.querySelector("[data-food-cancel]")?.addEventListener("click", closeFoodModal);
+
+foodModal?.addEventListener("click", (event) => {
+  if (event.target === foodModal) closeFoodModal();
+});
+
+foodTextForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  submitFoodText(foodTextInput.value);
+});
+
+foodPhotoInput?.addEventListener("change", () => {
+  submitFoodPhoto(foodPhotoInput.files?.[0]);
 });
 
 document.querySelector("[data-missions-add]").addEventListener("click", () => {
@@ -1081,7 +1221,7 @@ document.querySelector("[data-missions-add]").addEventListener("click", () => {
 });
 
 document.querySelectorAll("[data-soon-update]").forEach((node) => {
-  const showSoon = () => showToast("Скоро обновление");
+  const showSoon = () => showToast(text.updateSoon);
 
   node.addEventListener("click", showSoon);
   node.addEventListener("keydown", (event) => {
