@@ -82,7 +82,7 @@ db = Database(
 )
 admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-76"
+WEBAPP_BUILD = "nyam-77"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -98,7 +98,7 @@ def webapp_url_with_build() -> str:
 
 
 def webapp_url_for_user(user_id: int | None) -> str:
-    if not user_id or not config.webapp_url or user_id not in config.admin_ids:
+    if not user_id or not config.webapp_url:
         return ""
     return webapp_url_with_build()
 
@@ -1969,24 +1969,10 @@ async def start_miniapp_server() -> ThreadingHTTPServer:
 
 
 async def configure_bot_ui(bot: Bot) -> None:
-    await bot.set_chat_menu_button(menu_button=MenuButtonDefault())
-    if config.webapp_url and config.admin_ids:
-        for admin_id in config.admin_ids:
-            try:
-                await bot.set_chat_menu_button(
-                    chat_id=admin_id,
-                    menu_button=MenuButtonWebApp(
-                        text="Нямметр",
-                        web_app=WebAppInfo(url=webapp_url_with_build()),
-                    ),
-                )
-            except TelegramBadRequest as exc:
-                logger.warning("Could not set mini app menu button for admin %s: %s", admin_id, exc)
-    return
-
     if not config.webapp_url:
         await bot.set_chat_menu_button(menu_button=MenuButtonDefault())
         return
+
     await bot.set_chat_menu_button(
         menu_button=MenuButtonWebApp(
             text="Нямметр",

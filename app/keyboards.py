@@ -1,4 +1,4 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
 
 
 def main_menu(has_goal: bool = False, webapp_url: str = "") -> ReplyKeyboardMarkup:
@@ -8,6 +8,8 @@ def main_menu(has_goal: bool = False, webapp_url: str = "") -> ReplyKeyboardMark
         [KeyboardButton(text="Сегодня"), KeyboardButton(text="Дневник")],
         [KeyboardButton(text="Инструкция")],
     ]
+    if webapp_url:
+        keyboard.insert(1, [KeyboardButton(text="Нямметр", web_app=WebAppInfo(url=webapp_url))])
     return ReplyKeyboardMarkup(
         keyboard=keyboard,
         resize_keyboard=True,
