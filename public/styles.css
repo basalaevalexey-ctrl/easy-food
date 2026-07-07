@@ -35,14 +35,14 @@ button {
   width: min(100vw, 430px);
   min-height: min(100vh, 860px);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   background:
     radial-gradient(circle at 50% 2%, rgba(255, 255, 255, 0.98), transparent 44%),
     linear-gradient(180deg, #fff 0%, #fbf7ec 100%);
   border: 1px solid #d8d1c1;
   border-radius: 34px;
   box-shadow: 0 22px 60px rgba(41, 32, 15, 0.24);
-  padding: 8px 18px 116px;
+  padding: 8px 18px calc(124px + env(safe-area-inset-bottom, 0px));
 }
 
 .icon-button {
@@ -1504,11 +1504,14 @@ h2 {
 }
 
 .tabbar {
-  position: absolute;
-  left: 18px;
-  right: 18px;
-  bottom: 16px;
+  position: fixed;
+  left: 50%;
+  right: auto;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  width: calc(min(100vw, 430px) - 36px);
   min-height: 80px;
+  transform: translateX(-50%);
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
