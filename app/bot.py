@@ -1499,6 +1499,59 @@ async def stats_command(message: Message) -> None:
     await admin_command(message)
 
 
+@router.message(Command("broadcast"))
+async def broadcast_command(message: Message) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Команда только для админа.")
+        return
+
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        users_count = len(db.get_users_who_started())
+        await message.answer(
+            "Рассылка всем, кто нажимал /start.\n\n"
+            "Формат:\n"
+            "/broadcast текст сообщения\n\n"
+            f"Сейчас в аудитории: {users_count} пользователей."
+        )
+        return
+
+    broadcast_text = parts[1].strip()
+    if len(broadcast_text) > 4000:
+        await message.answer("Сообщение слишком длинное. Лучше уложиться до 4000 символов.")
+        return
+
+    users = db.get_users_who_started()
+    if not users:
+        await message.answer("Пока некому отправлять: нет пользователей с /start.")
+        return
+
+    await message.answer(f"Начинаю рассылку по {len(users)} пользователям.")
+
+    sent = 0
+    blocked = 0
+    failed = 0
+    for user in users:
+        try:
+            await message.bot.send_message(user.telegram_id, broadcast_text)
+            sent += 1
+        except TelegramForbiddenError:
+            blocked += 1
+            logger.info("Broadcast skipped blocked user %s", user.telegram_id)
+        except Exception:
+            failed += 1
+            logger.exception("Broadcast failed for user %s", user.telegram_id)
+        await asyncio.sleep(0.05)
+
+    db.record_user_event(message.from_user.id, "broadcast_sent")
+    await message.answer(
+        "Рассылка завершена.\n\n"
+        f"Отправлено: {sent}\n"
+        f"Заблокировали бота: {blocked}\n"
+        f"Ошибок: {failed}"
+    )
+
+
 @router.message(Command("miniapp_debug"))
 async def miniapp_debug_command(message: Message) -> None:
     if not is_admin(message.from_user.id):

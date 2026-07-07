@@ -354,6 +354,19 @@ class Database:
     def record_start(self, telegram_id: int) -> User:
         return self.record_user_event(telegram_id, "start")
 
+    def get_users_who_started(self) -> list[User]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT users.*
+                FROM users
+                JOIN user_events ON user_events.user_id = users.id
+                WHERE user_events.event_type = 'start'
+                ORDER BY users.id ASC
+                """
+            ).fetchall()
+            return [self._user_from_row(row) for row in rows]
+
     def record_useful_action(self, telegram_id: int, event_type: str) -> User:
         return self.record_user_event(telegram_id, event_type)
 
