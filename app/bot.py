@@ -1315,9 +1315,7 @@ async def start(message: Message, state: FSMContext) -> None:
     user = db.record_start(message.from_user.id)
     await message.answer(
         "Привет, я Нямметр 🍽\n\n"
-        "Помогаю считать калории без весов и таблиц.\n\n"
-        "Просто отправь фото еды или напиши, что съел — я примерно посчитаю калории, белки, жиры и углеводы.\n\n"
-        "Важно: это примерная оценка, не медицинская рекомендация.",
+        "Помогаю считать калории без весов и таблиц. Начни в приложении или прямо здесь",
         reply_markup=main_menu(has_goal=bool(user.calorie_target), webapp_url=webapp_url_for_user(message.from_user.id)),
     )
     await answer_clean(
