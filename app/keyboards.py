@@ -96,7 +96,10 @@ def admin_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="Retention", callback_data="admin:retention"),
             ],
             [
+                InlineKeyboardButton(text="Каналы", callback_data="admin:channels"),
                 InlineKeyboardButton(text="Напоминания", callback_data="admin:reminders"),
+            ],
+            [
                 InlineKeyboardButton(text="Деньги", callback_data="admin:revenue"),
             ],
             [

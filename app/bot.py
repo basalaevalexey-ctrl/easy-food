@@ -37,6 +37,7 @@ from app.admin_stats import (
     AdminStatsService,
     format_30d_stats,
     format_7d_stats,
+    format_channel_stats,
     format_daily_stats,
     format_funnel_stats,
     format_reminders_stats,
@@ -657,6 +658,7 @@ async def add_miniapp_food_text(telegram_user: dict, text: str) -> dict:
     estimate = await food_ai.estimate_text(text)
     entry = db.add_food_entry(telegram_id, estimate, source="text")
     db.record_useful_action(telegram_id, "food_text_added")
+    db.record_user_event(telegram_id, "miniapp_food_text")
     db.unlock_available_achievements(telegram_id)
     db.complete_daily_mission_if_ready(telegram_id)
     return {"entry": entry, "state": build_miniapp_payload(telegram_user)}
@@ -667,6 +669,7 @@ async def add_miniapp_food_photo(telegram_user: dict, image_bytes: bytes, mime_t
     estimate = await food_ai.estimate_image(image_bytes, mime_type=mime_type)
     entry = db.add_food_entry(telegram_id, estimate, source="photo")
     db.record_useful_action(telegram_id, "food_photo_added")
+    db.record_user_event(telegram_id, "miniapp_food_photo")
     db.unlock_available_achievements(telegram_id)
     db.complete_daily_mission_if_ready(telegram_id)
     return {"entry": entry, "state": build_miniapp_payload(telegram_user)}
@@ -790,6 +793,7 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
 
         query = parse_qs(parsed.query)
         selected_day = _valid_miniapp_day((query.get("date") or [None])[0])
+        db.record_user_event(int(telegram_user["id"]), "miniapp_opened")
         self._send_json(200, build_miniapp_payload(telegram_user, selected_day=selected_day))
 
     def do_POST(self) -> None:
@@ -1121,6 +1125,8 @@ def format_admin_dashboard(screen: str) -> str:
         return format_funnel_stats(admin_stats_service.get_funnel_stats(7))
     if screen == "retention":
         return format_retention_stats(admin_stats_service.get_retention_stats())
+    if screen == "channels":
+        return format_channel_stats(admin_stats_service.get_channel_stats())
     if screen == "reminders":
         return format_reminders_stats(admin_stats_service.get_reminders_stats(7))
     if screen == "revenue":
@@ -1167,6 +1173,8 @@ def detect_admin_screen(text: str | None) -> str:
         return "funnel"
     if "RETENTION" in source:
         return "retention"
+    if "КАНАЛЫ" in source:
+        return "channels"
     if "НАПОМИНАНИЯ" in source:
         return "reminders"
     if "ДЕНЬГИ" in source:

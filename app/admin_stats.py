@@ -22,6 +22,7 @@ ADMIN_SCREENS = {
     "daily": "По дням",
     "funnel": "Воронка",
     "retention": "Retention",
+    "channels": "Каналы",
     "reminders": "Напоминания",
     "revenue": "Деньги",
 }
@@ -94,6 +95,124 @@ class AdminStatsService:
 
     def get_retention_stats(self) -> dict[str, Any]:
         return self._retention_stats(None)
+
+    def get_channel_stats(self) -> dict[str, Any]:
+        with self.db.connect() as conn:
+            rows = conn.execute(
+                """
+                WITH bot AS (
+                    SELECT user_id, MIN(created_at) AS first_at
+                    FROM user_events
+                    WHERE event_type IN (
+                        'text_input',
+                        'photo_recognition',
+                        'today_opened',
+                        'history_opened',
+                        'mission_opened',
+                        'portion_adjustment'
+                    )
+                    GROUP BY user_id
+                ),
+                miniapp AS (
+                    SELECT user_id, MIN(created_at) AS first_at
+                    FROM user_events
+                    WHERE event_type LIKE 'miniapp_%'
+                       OR event_type IN ('food_text_added', 'food_photo_added')
+                    GROUP BY user_id
+                ),
+                channels AS (
+                    SELECT u.id AS user_id,
+                           CASE
+                               WHEN bot.user_id IS NOT NULL AND miniapp.user_id IS NOT NULL THEN 'mixed'
+                               WHEN miniapp.user_id IS NOT NULL THEN 'miniapp_only'
+                               WHEN bot.user_id IS NOT NULL THEN 'bot_only'
+                               ELSE 'no_channel'
+                           END AS channel,
+                           CASE
+                               WHEN bot.first_at IS NOT NULL AND miniapp.first_at IS NOT NULL
+                                    THEN MIN(bot.first_at, miniapp.first_at)
+                               ELSE COALESCE(bot.first_at, miniapp.first_at)
+                           END AS first_at
+                    FROM users u
+                    LEFT JOIN bot ON bot.user_id = u.id
+                    LEFT JOIN miniapp ON miniapp.user_id = u.id
+                ),
+                activity AS (
+                    SELECT user_id, date(created_at, '+3 hours') AS day FROM user_events
+                    UNION
+                    SELECT user_id, date(created_at, '+3 hours') AS day FROM food_entries
+                ),
+                food_counts AS (
+                    SELECT user_id, COUNT(*) AS logs
+                    FROM food_entries
+                    GROUP BY user_id
+                )
+                SELECT channel,
+                       COUNT(*) AS users,
+                       SUM(CASE WHEN EXISTS (
+                           SELECT 1 FROM activity
+                           WHERE activity.user_id = channels.user_id
+                             AND activity.day = date(channels.first_at, '+3 hours', '+1 day')
+                       ) THEN 1 ELSE 0 END) AS d1_users,
+                       SUM(CASE WHEN EXISTS (
+                           SELECT 1 FROM activity
+                           WHERE activity.user_id = channels.user_id
+                             AND activity.day = date(channels.first_at, '+3 hours', '+3 day')
+                       ) THEN 1 ELSE 0 END) AS d3_users,
+                       SUM(CASE WHEN EXISTS (
+                           SELECT 1 FROM activity
+                           WHERE activity.user_id = channels.user_id
+                             AND activity.day = date(channels.first_at, '+3 hours', '+7 day')
+                       ) THEN 1 ELSE 0 END) AS d7_users,
+                       SUM(CASE WHEN COALESCE(food_counts.logs, 0) >= 1 THEN 1 ELSE 0 END) AS users_with_food,
+                       SUM(CASE WHEN COALESCE(food_counts.logs, 0) >= 3 THEN 1 ELSE 0 END) AS users_3plus_food,
+                       COALESCE(SUM(food_counts.logs), 0) AS meal_logs
+                FROM channels
+                LEFT JOIN food_counts ON food_counts.user_id = channels.user_id
+                WHERE channel != 'no_channel'
+                  AND first_at IS NOT NULL
+                GROUP BY channel
+                """
+            ).fetchall()
+
+        result: dict[str, Any] = {"channels": {}}
+        for channel in ("bot_only", "miniapp_only", "mixed"):
+            result["channels"][channel] = {
+                "users": 0,
+                "d1_users": 0,
+                "d1_retention": 0.0,
+                "d3_users": 0,
+                "d3_retention": 0.0,
+                "d7_users": 0,
+                "d7_retention": 0.0,
+                "users_with_food": 0,
+                "first_log_conv": 0.0,
+                "users_3plus_food": 0,
+                "users_3plus_conv": 0.0,
+                "meal_logs": 0,
+                "avg_logs_per_user": 0.0,
+            }
+
+        for row in rows:
+            users = int(row["users"] or 0)
+            channel = row["channel"]
+            result["channels"][channel] = {
+                "users": users,
+                "d1_users": int(row["d1_users"] or 0),
+                "d1_retention": percent(row["d1_users"], users),
+                "d3_users": int(row["d3_users"] or 0),
+                "d3_retention": percent(row["d3_users"], users),
+                "d7_users": int(row["d7_users"] or 0),
+                "d7_retention": percent(row["d7_users"], users),
+                "users_with_food": int(row["users_with_food"] or 0),
+                "first_log_conv": percent(row["users_with_food"], users),
+                "users_3plus_food": int(row["users_3plus_food"] or 0),
+                "users_3plus_conv": percent(row["users_3plus_food"], users),
+                "meal_logs": int(row["meal_logs"] or 0),
+                "avg_logs_per_user": safe_div(row["meal_logs"], users),
+            }
+
+        return result
 
     def get_reminders_stats(self, days: int = 7) -> dict[str, Any]:
         return self._reminders_stats(days)
@@ -526,6 +645,37 @@ def format_retention_stats(stats: dict[str, Any]) -> str:
     )
 
 
+def format_channel_stats(stats: dict[str, Any]) -> str:
+    channels = stats["channels"]
+
+    def block(title: str, key: str) -> list[str]:
+        row = channels[key]
+        return [
+            title,
+            f"Пользователей: {row['users']}",
+            f"D1: {fmt_percent(row['d1_retention'])} ({row['d1_users']})",
+            f"D3: {fmt_percent(row['d3_retention'])} ({row['d3_users']})",
+            f"D7: {fmt_percent(row['d7_retention'])} ({row['d7_users']})",
+            f"Сделали лог еды: {row['users_with_food']} ({fmt_percent(row['first_log_conv'])})",
+            f"Сделали 3+ лога: {row['users_3plus_food']} ({fmt_percent(row['users_3plus_conv'])})",
+            f"Среднее логов на пользователя: {fmt_float(row['avg_logs_per_user'])}",
+        ]
+
+    lines = [
+        "📱 НЯММЕТР — КАНАЛЫ",
+        "",
+        "Сравнение удержания по тому, где человек реально пользовался Нямметром.",
+        "",
+        "━━━━━━━━━━━━",
+    ]
+    lines.extend(block("🤖 ТОЛЬКО БОТ", "bot_only"))
+    lines.extend(["", "━━━━━━━━━━━━"])
+    lines.extend(block("📱 ТОЛЬКО МИНИАПП", "miniapp_only"))
+    lines.extend(["", "━━━━━━━━━━━━"])
+    lines.extend(block("🔁 БОТ + МИНИАПП", "mixed"))
+    return "\n".join(lines)
+
+
 def format_reminders_stats(stats: dict[str, Any]) -> str:
     return "\n".join(
         [
@@ -584,6 +734,11 @@ def format_revenue_stats(stats: dict[str, Any]) -> str:
 def ratio(numerator: Any, denominator: Any) -> float:
     denominator = float(denominator or 0)
     return round(float(numerator or 0) / denominator, 1) if denominator else 0.0
+
+
+def safe_div(numerator: Any, denominator: Any) -> float:
+    denominator = float(denominator or 0)
+    return round(float(numerator or 0) / denominator, 2) if denominator else 0.0
 
 
 def percent(numerator: Any, denominator: Any) -> float:
