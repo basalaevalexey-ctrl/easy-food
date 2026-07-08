@@ -1534,17 +1534,21 @@ async def broadcast_command(message: Message) -> None:
 
     await message.answer(f"Начинаю рассылку по {len(users)} пользователям.")
 
+    campaign_id = f"broadcast:{datetime.now(MOSCOW_TZ).strftime('%Y%m%d%H%M%S')}"
     sent = 0
     blocked = 0
     failed = 0
     for user in users:
         try:
             await message.bot.send_message(user.telegram_id, broadcast_text)
+            db.log_broadcast(user.telegram_id, campaign_id, "sent")
             sent += 1
         except TelegramForbiddenError:
+            db.log_broadcast(user.telegram_id, campaign_id, "blocked", "bot_blocked")
             blocked += 1
             logger.info("Broadcast skipped blocked user %s", user.telegram_id)
-        except Exception:
+        except Exception as exc:
+            db.log_broadcast(user.telegram_id, campaign_id, "failed", str(exc))
             failed += 1
             logger.exception("Broadcast failed for user %s", user.telegram_id)
         await asyncio.sleep(0.05)
@@ -1552,6 +1556,7 @@ async def broadcast_command(message: Message) -> None:
     db.record_user_event(message.from_user.id, "broadcast_sent")
     await message.answer(
         "Рассылка завершена.\n\n"
+        f"ID рассылки: {campaign_id}\n"
         f"Отправлено: {sent}\n"
         f"Заблокировали бота: {blocked}\n"
         f"Ошибок: {failed}"

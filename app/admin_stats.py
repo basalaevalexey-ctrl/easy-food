@@ -215,7 +215,9 @@ class AdminStatsService:
         return result
 
     def get_reminders_stats(self, days: int = 7) -> dict[str, Any]:
-        return self._reminders_stats(days)
+        stats = self._reminders_stats(days)
+        stats.update(self._broadcast_stats(days))
+        return stats
 
     def get_revenue_stats(self) -> dict[str, Any]:
         return {
@@ -401,6 +403,94 @@ class AdminStatsService:
             "evening_cvr": format_slot_cvr(slot_cvr, "evening", has_data),
             "best_slot": best_slot if has_data else "нет данных",
             "worst_slot": worst_slot if has_data else "нет данных",
+        }
+
+    def _broadcast_stats(self, days: int | None) -> dict[str, Any]:
+        log_filter = self._date_filter("sent_at", days)
+        conversion_log_filter = self._date_filter("l.sent_at", days)
+        with self.db.connect() as conn:
+            total_logs = conn.execute("SELECT COUNT(*) FROM broadcast_logs").fetchone()[0]
+            sent = conn.execute(
+                f"SELECT COUNT(*) FROM broadcast_logs WHERE status = 'sent' AND {log_filter}",
+            ).fetchone()[0]
+            failed = conn.execute(
+                f"SELECT COUNT(*) FROM broadcast_logs WHERE status != 'sent' AND {log_filter}",
+            ).fetchone()[0]
+            sent_users = conn.execute(
+                f"SELECT COUNT(DISTINCT user_id) FROM broadcast_logs WHERE status = 'sent' AND {log_filter}",
+            ).fetchone()[0]
+            converted_users = conn.execute(
+                f"""
+                SELECT COUNT(DISTINCT l.user_id)
+                FROM broadcast_logs l
+                WHERE l.status = 'sent'
+                  AND {conversion_log_filter}
+                  AND EXISTS (
+                      SELECT 1
+                      FROM food_entries f
+                      WHERE f.user_id = l.user_id
+                        AND datetime(f.created_at) >= datetime(l.sent_at)
+                        AND datetime(f.created_at) <= datetime(l.sent_at, '+24 hours')
+                  )
+                """,
+            ).fetchone()[0]
+            latest = conn.execute(
+                """
+                SELECT campaign_id, MAX(sent_at) AS sent_at
+                FROM broadcast_logs
+                GROUP BY campaign_id
+                ORDER BY sent_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+            latest_campaign = latest["campaign_id"] if latest else ""
+            latest_sent_at = latest["sent_at"] if latest else ""
+            latest_sent = latest_failed = latest_sent_users = latest_converted = 0
+            if latest_campaign:
+                latest_sent = conn.execute(
+                    "SELECT COUNT(*) FROM broadcast_logs WHERE campaign_id = ? AND status = 'sent'",
+                    (latest_campaign,),
+                ).fetchone()[0]
+                latest_failed = conn.execute(
+                    "SELECT COUNT(*) FROM broadcast_logs WHERE campaign_id = ? AND status != 'sent'",
+                    (latest_campaign,),
+                ).fetchone()[0]
+                latest_sent_users = conn.execute(
+                    "SELECT COUNT(DISTINCT user_id) FROM broadcast_logs WHERE campaign_id = ? AND status = 'sent'",
+                    (latest_campaign,),
+                ).fetchone()[0]
+                latest_converted = conn.execute(
+                    """
+                    SELECT COUNT(DISTINCT l.user_id)
+                    FROM broadcast_logs l
+                    WHERE l.campaign_id = ?
+                      AND l.status = 'sent'
+                      AND EXISTS (
+                          SELECT 1
+                          FROM food_entries f
+                          WHERE f.user_id = l.user_id
+                            AND datetime(f.created_at) >= datetime(l.sent_at)
+                            AND datetime(f.created_at) <= datetime(l.sent_at, '+24 hours')
+                      )
+                    """,
+                    (latest_campaign,),
+                ).fetchone()[0]
+
+        has_data = int(total_logs or 0) > 0
+        return {
+            "broadcasts_has_data": has_data,
+            "broadcast_sent": int(sent or 0),
+            "broadcast_failed": int(failed or 0),
+            "broadcast_sent_users": int(sent_users or 0),
+            "broadcast_converted_users": int(converted_users or 0),
+            "broadcast_cvr": percent(converted_users, sent_users),
+            "latest_broadcast_id": latest_campaign,
+            "latest_broadcast_at": latest_sent_at,
+            "latest_broadcast_sent": int(latest_sent or 0),
+            "latest_broadcast_failed": int(latest_failed or 0),
+            "latest_broadcast_sent_users": int(latest_sent_users or 0),
+            "latest_broadcast_converted_users": int(latest_converted or 0),
+            "latest_broadcast_cvr": percent(latest_converted, latest_sent_users),
         }
 
     def _retention_for_day(self, conn: Any, offset: int, days: int | None) -> dict[str, Any]:
@@ -696,6 +786,22 @@ def format_reminders_stats(stats: dict[str, Any]) -> str:
             "",
             f"Лучший слот: {stats['best_slot']}",
             f"Худший слот: {stats['worst_slot']}",
+            "",
+            "━━━━━━━━━━━━",
+            "📣 ПУШИ",
+            "",
+            "За 7 дней:",
+            f"Отправлено: {fmt_broadcast_count(stats, 'broadcast_sent')}",
+            f"Не отправилось: {fmt_broadcast_count(stats, 'broadcast_failed')}",
+            f"Добавили еду за 24ч: {fmt_broadcast_count(stats, 'broadcast_converted_users')}",
+            f"CVR: {fmt_broadcast_percent(stats, 'broadcast_cvr')}",
+            "",
+            "Последняя рассылка:",
+            f"ID: {stats['latest_broadcast_id'] or 'нет данных'}",
+            f"Отправлено: {fmt_broadcast_count(stats, 'latest_broadcast_sent')}",
+            f"Не отправилось: {fmt_broadcast_count(stats, 'latest_broadcast_failed')}",
+            f"Добавили еду за 24ч: {fmt_broadcast_count(stats, 'latest_broadcast_converted_users')}",
+            f"CVR: {fmt_broadcast_percent(stats, 'latest_broadcast_cvr')}",
         ]
     )
 
@@ -765,6 +871,18 @@ def fmt_reminder_count(stats: dict[str, Any], key: str) -> str:
 
 def fmt_reminder_percent(stats: dict[str, Any], key: str) -> str:
     if not stats.get("reminders_has_data"):
+        return "нет данных"
+    return fmt_percent(stats.get(key, 0))
+
+
+def fmt_broadcast_count(stats: dict[str, Any], key: str) -> str:
+    if not stats.get("broadcasts_has_data"):
+        return "нет данных"
+    return str(int(stats.get(key, 0) or 0))
+
+
+def fmt_broadcast_percent(stats: dict[str, Any], key: str) -> str:
+    if not stats.get("broadcasts_has_data"):
         return "нет данных"
     return fmt_percent(stats.get(key, 0))
 
