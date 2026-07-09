@@ -1573,23 +1573,27 @@ async def broadcast_segment_command(message: Message) -> None:
     segments = {
         "no_food": db.get_started_users_without_food,
         "started_no_food": db.get_started_users_without_food,
+        "one_food_no_return": db.get_users_with_one_food_no_return,
     }
 
     if len(parts) < 3 or not parts[1].strip() or not parts[2].strip():
         no_food_count = len(db.get_started_users_without_food())
+        one_food_no_return_count = len(db.get_users_with_one_food_no_return())
         await message.answer(
             "Рассылка по сегменту.\n\n"
             "Формат:\n"
             "/broadcast_segment no_food текст сообщения\n\n"
             "Доступные сегменты:\n"
-            f"no_food — нажали /start, но еще не добавляли еду: {no_food_count}"
+            f"no_food — нажали /start, но еще не добавляли еду: {no_food_count}\n"
+            "one_food_no_return — добавили еду 1 раз и не возвращались минимум 2 дня: "
+            f"{one_food_no_return_count}"
         )
         return
 
     segment = parts[1].strip().lower()
     broadcast_text = parts[2].strip()
     if segment not in segments:
-        await message.answer("Не знаю такой сегмент. Сейчас доступен: no_food.")
+        await message.answer("Не знаю такой сегмент. Сейчас доступны: no_food, one_food_no_return.")
         return
     if len(broadcast_text) > 4000:
         await message.answer("Сообщение слишком длинное. Лучше уложиться до 4000 символов.")

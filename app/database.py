@@ -401,6 +401,37 @@ class Database:
             ).fetchall()
             return [self._user_from_row(row) for row in rows]
 
+    def get_users_with_one_food_no_return(self) -> list[User]:
+        ignored_event_types = (
+            "broadcast_received",
+            "reminder_sent",
+            "duolingo_push_sent",
+        )
+        placeholders = ", ".join("?" for _ in ignored_event_types)
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"""
+                WITH user_activity AS (
+                    SELECT user_id, created_at
+                    FROM food_entries
+                    UNION ALL
+                    SELECT user_id, created_at
+                    FROM user_events
+                    WHERE event_type NOT IN ({placeholders})
+                )
+                SELECT users.*
+                FROM users
+                JOIN food_entries ON food_entries.user_id = users.id
+                LEFT JOIN user_activity ON user_activity.user_id = users.id
+                GROUP BY users.id
+                HAVING COUNT(DISTINCT food_entries.id) = 1
+                   AND datetime(MAX(user_activity.created_at), 'localtime') <= datetime('now', 'localtime', '-2 days')
+                ORDER BY users.id ASC
+                """,
+                ignored_event_types,
+            ).fetchall()
+            return [self._user_from_row(row) for row in rows]
+
     def record_useful_action(self, telegram_id: int, event_type: str) -> User:
         return self.record_user_event(telegram_id, event_type)
 
