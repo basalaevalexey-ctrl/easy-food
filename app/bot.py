@@ -1563,6 +1563,75 @@ async def broadcast_command(message: Message) -> None:
     )
 
 
+@router.message(Command("broadcast_segment"))
+async def broadcast_segment_command(message: Message) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Команда только для админа.")
+        return
+
+    parts = (message.text or "").split(maxsplit=2)
+    segments = {
+        "no_food": db.get_started_users_without_food,
+        "started_no_food": db.get_started_users_without_food,
+    }
+
+    if len(parts) < 3 or not parts[1].strip() or not parts[2].strip():
+        no_food_count = len(db.get_started_users_without_food())
+        await message.answer(
+            "Рассылка по сегменту.\n\n"
+            "Формат:\n"
+            "/broadcast_segment no_food текст сообщения\n\n"
+            "Доступные сегменты:\n"
+            f"no_food — нажали /start, но еще не добавляли еду: {no_food_count}"
+        )
+        return
+
+    segment = parts[1].strip().lower()
+    broadcast_text = parts[2].strip()
+    if segment not in segments:
+        await message.answer("Не знаю такой сегмент. Сейчас доступен: no_food.")
+        return
+    if len(broadcast_text) > 4000:
+        await message.answer("Сообщение слишком длинное. Лучше уложиться до 4000 символов.")
+        return
+
+    users = segments[segment]()
+    if not users:
+        await message.answer("В этом сегменте пока никого нет.")
+        return
+
+    await message.answer(f"Начинаю рассылку по сегменту {segment}: {len(users)} пользователей.")
+
+    campaign_id = f"broadcast_segment:{segment}:{datetime.now(MOSCOW_TZ).strftime('%Y%m%d%H%M%S')}"
+    sent = 0
+    blocked = 0
+    failed = 0
+    for user in users:
+        try:
+            await message.bot.send_message(user.telegram_id, broadcast_text)
+            db.log_broadcast(user.telegram_id, campaign_id, "sent")
+            sent += 1
+        except TelegramForbiddenError:
+            db.log_broadcast(user.telegram_id, campaign_id, "blocked", "bot_blocked")
+            blocked += 1
+            logger.info("Segment broadcast skipped blocked user %s", user.telegram_id)
+        except Exception as exc:
+            db.log_broadcast(user.telegram_id, campaign_id, "failed", str(exc))
+            failed += 1
+            logger.exception("Segment broadcast failed for user %s", user.telegram_id)
+        await asyncio.sleep(0.05)
+
+    db.record_user_event(message.from_user.id, "broadcast_segment_sent")
+    await message.answer(
+        "Рассылка по сегменту завершена.\n\n"
+        f"ID рассылки: {campaign_id}\n"
+        f"Сегмент: {segment}\n"
+        f"Отправлено: {sent}\n"
+        f"Заблокировали бота: {blocked}\n"
+        f"Ошибок: {failed}"
+    )
+
+
 @router.message(Command("miniapp_debug"))
 async def miniapp_debug_command(message: Message) -> None:
     if not is_admin(message.from_user.id):

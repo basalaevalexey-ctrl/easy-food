@@ -383,6 +383,24 @@ class Database:
             ).fetchall()
             return [self._user_from_row(row) for row in rows]
 
+    def get_started_users_without_food(self) -> list[User]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT users.*
+                FROM users
+                JOIN user_events ON user_events.user_id = users.id
+                WHERE user_events.event_type = 'start'
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM food_entries
+                      WHERE food_entries.user_id = users.id
+                  )
+                ORDER BY users.id ASC
+                """
+            ).fetchall()
+            return [self._user_from_row(row) for row in rows]
+
     def record_useful_action(self, telegram_id: int, event_type: str) -> User:
         return self.record_user_event(telegram_id, event_type)
 
