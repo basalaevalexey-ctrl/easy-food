@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-78" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-79" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -212,14 +212,14 @@
           <strong>Настроим Нямметр</strong>
           <small>Это нужно, чтобы правильно считать цели.</small>
         </div>
-        <label>Имя<input type="text" value="Алексей" data-onboarding-name /></label>
-        <label>Пол<select data-onboarding-sex><option value="male">Мужской</option><option value="female">Женский</option></select></label>
+        <label>Имя<input type="text" placeholder="Как тебя зовут?" autocomplete="name" data-onboarding-name /></label>
+        <label>Пол<select data-onboarding-sex><option value="" selected disabled>Выбери пол</option><option value="male">Мужской</option><option value="female">Женский</option></select></label>
         <div class="onboarding-grid">
-          <label>Вес, кг<input type="number" min="35" max="250" value="82" data-onboarding-weight /></label>
-          <label>Рост, см<input type="number" min="120" max="230" value="182" data-onboarding-height /></label>
+          <label>Вес, кг<input type="number" min="35" max="250" placeholder="Например, 70" inputmode="decimal" data-onboarding-weight /></label>
+          <label>Рост, см<input type="number" min="120" max="230" placeholder="Например, 175" inputmode="numeric" data-onboarding-height /></label>
         </div>
-        <label>Активность<select data-onboarding-activity><option value="low">Низкая</option><option value="medium" selected>Средняя</option><option value="high">Высокая</option></select></label>
-        <label>Цель<select data-onboarding-goal><option value="support" selected>Поддерживать форму</option><option value="lose">Снизить вес</option><option value="gain">Набрать массу</option></select></label>
+        <label>Активность<select data-onboarding-activity><option value="" selected disabled>Выбери активность</option><option value="low">Низкая</option><option value="medium">Средняя</option><option value="high">Высокая</option></select></label>
+        <label>Цель<select data-onboarding-goal><option value="" selected disabled>Выбери цель</option><option value="support">Поддерживать форму</option><option value="lose">Снизить вес</option><option value="gain">Набрать массу</option></select></label>
         <button type="submit">Начать</button>
       </form>
     </div>
@@ -1309,17 +1309,62 @@ document.querySelectorAll("[data-soon-update]").forEach((node) => {
 
 onboardingForm.addEventListener("submit", (event) => {
   event.preventDefault();
+  const requiredFields = [
+    [onboardingName, "Укажи имя"],
+    [onboardingSex, "Выбери пол"],
+    [onboardingWeight, "Укажи вес от 35 до 250 кг"],
+    [onboardingHeight, "Укажи рост от 120 до 230 см"],
+    [onboardingActivity, "Выбери активность"],
+    [onboardingGoal, "Выбери цель"],
+  ];
+  let firstInvalid = null;
+
+  requiredFields.forEach(([field, message]) => {
+    const numberOutOfRange = field.type === "number" && field.value !== "" && !field.checkValidity();
+    const isInvalid = !String(field.value).trim() || numberOutOfRange;
+    field.classList.toggle("onboarding-field-error", isInvalid);
+    field.setAttribute("aria-invalid", String(isInvalid));
+    let error = field.parentElement.querySelector(".onboarding-error");
+    if (isInvalid) {
+      if (!error) {
+        error = document.createElement("span");
+        error.className = "onboarding-error";
+        field.insertAdjacentElement("afterend", error);
+      }
+      error.textContent = message;
+      firstInvalid ||= field;
+    } else {
+      error?.remove();
+    }
+  });
+
+  if (firstInvalid) {
+    firstInvalid.focus({ preventScroll: true });
+    firstInvalid.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
+
   applyProfile({
-    name: onboardingName.value.trim() || "Алексей",
+    name: onboardingName.value.trim(),
     sex: onboardingSex.value,
-    weight: Number(onboardingWeight.value) || 82,
-    height: Number(onboardingHeight.value) || 182,
+    weight: Number(onboardingWeight.value),
+    height: Number(onboardingHeight.value),
     activity: onboardingActivity.value,
     goal: onboardingGoal.value,
   });
   saveProfile();
   onboarding.hidden = true;
   showToast("Профиль настроен");
+});
+
+[onboardingName, onboardingSex, onboardingWeight, onboardingHeight, onboardingActivity, onboardingGoal].forEach((field) => {
+  const clearError = () => {
+    field.classList.remove("onboarding-field-error");
+    field.removeAttribute("aria-invalid");
+    field.parentElement.querySelector(".onboarding-error")?.remove();
+  };
+  field.addEventListener("input", clearError);
+  field.addEventListener("change", clearError);
 });
 
 datePrev.addEventListener("click", () => setDiaryDateAndLoad(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate() - 1)));
