@@ -17,6 +17,17 @@ from app.missions import (
 )
 from app.models import FoodEntry, FoodEstimate, User
 
+SERVICE_EVENT_TYPES = (
+    "broadcast_received",
+    "reminder_sent",
+    "duolingo_push_sent",
+    "lifecycle:one_food_no_return_sent",
+    "lifecycle:goal_no_food_sent",
+    "broadcast_sent",
+    "broadcast_segment_sent",
+    "database_backup_requested",
+)
+
 
 class Database:
     def __init__(
@@ -171,6 +182,21 @@ class Database:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS lifecycle_pushes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    segment TEXT NOT NULL,
+                    step INTEGER NOT NULL,
+                    sent_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    status TEXT NOT NULL,
+                    error TEXT,
+                    UNIQUE(user_id, segment, step),
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+                """
+            )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_user_events_type_date ON user_events(event_type, created_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_food_entries_user_date ON food_entries(user_id, created_at)")
             conn.execute(
@@ -182,6 +208,7 @@ class Database:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_broadcast_logs_sent_at ON broadcast_logs(sent_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_broadcast_logs_user_sent ON broadcast_logs(user_id, sent_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_broadcast_logs_campaign ON broadcast_logs(campaign_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_lifecycle_pushes_user_segment ON lifecycle_pushes(user_id, segment, sent_at)")
             self._rebuild_user_streaks(conn)
 
     def _restore_best_database(self) -> None:
@@ -223,7 +250,14 @@ class Database:
                     for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
                 }
                 total = 0
-                for table in ("users", "food_entries", "user_events", "user_achievements", "daily_missions"):
+                for table in (
+                    "users",
+                    "food_entries",
+                    "user_events",
+                    "user_achievements",
+                    "daily_missions",
+                    "lifecycle_pushes",
+                ):
                     if table in tables:
                         total += int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
                 size = path.stat().st_size
@@ -402,12 +436,7 @@ class Database:
             return [self._user_from_row(row) for row in rows]
 
     def get_users_with_one_food_no_return(self) -> list[User]:
-        ignored_event_types = (
-            "broadcast_received",
-            "reminder_sent",
-            "duolingo_push_sent",
-        )
-        placeholders = ", ".join("?" for _ in ignored_event_types)
+        placeholders = ", ".join("?" for _ in SERVICE_EVENT_TYPES)
         with self.connect() as conn:
             rows = conn.execute(
                 f"""
@@ -428,7 +457,32 @@ class Database:
                    AND datetime(MAX(user_activity.created_at), 'localtime') <= datetime('now', 'localtime', '-2 days')
                 ORDER BY users.id ASC
                 """,
-                ignored_event_types,
+                SERVICE_EVENT_TYPES,
+            ).fetchall()
+            return [self._user_from_row(row) for row in rows]
+
+    def get_users_with_goal_no_food_no_return(self) -> list[User]:
+        placeholders = ", ".join("?" for _ in SERVICE_EVENT_TYPES)
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"""
+                WITH user_activity AS (
+                    SELECT user_id, created_at
+                    FROM user_events
+                    WHERE event_type NOT IN ({placeholders})
+                )
+                SELECT users.*
+                FROM users
+                LEFT JOIN food_entries ON food_entries.user_id = users.id
+                LEFT JOIN user_activity ON user_activity.user_id = users.id
+                WHERE users.calorie_target IS NOT NULL
+                  AND users.goal_set_at IS NOT NULL
+                GROUP BY users.id
+                HAVING COUNT(DISTINCT food_entries.id) = 0
+                   AND datetime(MAX(user_activity.created_at), 'localtime') <= datetime('now', 'localtime', '-2 days')
+                ORDER BY users.id ASC
+                """,
+                SERVICE_EVENT_TYPES,
             ).fetchall()
             return [self._user_from_row(row) for row in rows]
 
@@ -616,6 +670,89 @@ class Database:
                     "INSERT INTO user_events (user_id, event_type) VALUES (?, ?)",
                     (user.id, "broadcast_received"),
                 )
+
+    def get_users_for_lifecycle_push(self, segment: str, max_steps: int = 3) -> list[tuple[User, int]]:
+        if segment == "one_food_no_return":
+            candidates = self.get_users_with_one_food_no_return()
+        elif segment == "goal_no_food":
+            candidates = self.get_users_with_goal_no_food_no_return()
+        else:
+            return []
+
+        result: list[tuple[User, int]] = []
+        with self.connect() as conn:
+            for user in candidates:
+                row = conn.execute(
+                    """
+                    SELECT
+                        COALESCE(MAX(CASE WHEN status = 'sent' THEN step END), 0) AS last_sent_step,
+                        MAX(CASE WHEN status = 'sent' THEN sent_at END) AS last_sent_at,
+                        (
+                            SELECT sent_at
+                            FROM lifecycle_pushes latest
+                            WHERE latest.user_id = lifecycle_pushes.user_id
+                              AND latest.segment = lifecycle_pushes.segment
+                            ORDER BY latest.sent_at DESC
+                            LIMIT 1
+                        ) AS last_attempt_at,
+                        (
+                            SELECT status
+                            FROM lifecycle_pushes latest
+                            WHERE latest.user_id = lifecycle_pushes.user_id
+                              AND latest.segment = lifecycle_pushes.segment
+                            ORDER BY latest.sent_at DESC
+                            LIMIT 1
+                        ) AS last_attempt_status
+                    FROM lifecycle_pushes
+                    WHERE user_id = ? AND segment = ?
+                    """,
+                    (user.id, segment),
+                ).fetchone()
+                last_step = int(row["last_sent_step"] or 0)
+                if last_step >= max_steps:
+                    continue
+                if row["last_attempt_status"] == "blocked":
+                    continue
+                last_attempt_at = row["last_attempt_at"]
+                if last_step == 0 and last_attempt_at:
+                    retry_is_over = conn.execute(
+                        """
+                        SELECT datetime(?, 'localtime', '+2 days') <= datetime('now', 'localtime')
+                        """,
+                        (last_attempt_at,),
+                    ).fetchone()[0]
+                    if not retry_is_over:
+                        continue
+                last_sent_at = row["last_sent_at"]
+                if last_step > 0 and last_sent_at:
+                    wait_is_over = conn.execute(
+                        """
+                        SELECT datetime(?, 'localtime', '+2 days') <= datetime('now', 'localtime')
+                        """,
+                        (last_sent_at,),
+                    ).fetchone()[0]
+                    if not wait_is_over:
+                        continue
+                result.append((user, last_step + 1))
+        return result
+
+    def log_lifecycle_push(
+        self,
+        telegram_id: int,
+        segment: str,
+        step: int,
+        status: str,
+        error: str | None = None,
+    ) -> None:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO lifecycle_pushes (user_id, segment, step, sent_at, status, error)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
+                """,
+                (user.id, segment, step, status, error[:500] if error else None),
+            )
 
     def add_food_entry(self, telegram_id: int, estimate: FoodEstimate, source: str) -> FoodEntry:
         user = self.get_or_create_user(telegram_id)

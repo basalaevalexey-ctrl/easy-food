@@ -461,6 +461,37 @@ ACTIVATION_TEXTS = {
     ),
 }
 
+LIFECYCLE_PUSH_TEXTS = {
+    "one_food_no_return": {
+        1: (
+            "Ты уже сделал первый шаг 🍽\n\n"
+            "Привычка формируется легче, когда действие маленькое. Просто запиши одну еду сегодня — фото или текстом."
+        ),
+        2: (
+            "Нямметр помнит твой первый лог 💚\n\n"
+            "Не нужно вести дневник идеально. Даже одна запись в день помогает лучше понимать, что ты ешь."
+        ),
+        3: (
+            "Вернуться можно без давления 👋\n\n"
+            "Начни с самого простого: отправь фото еды или напиши пару слов. Я примерно посчитаю калории и БЖУ."
+        ),
+    },
+    "goal_no_food": {
+        1: (
+            "Цель уже настроена 🎯\n\n"
+            "Остался маленький тест: добавь одну еду, и Нямметр покажет калории, БЖУ и остаток на день."
+        ),
+        2: (
+            "Можно начать без весов и таблиц 🍽\n\n"
+            "Просто отправь фото блюда или напиши, что съел. Я разложу это на калории, белки, жиры и углеводы."
+        ),
+        3: (
+            "Твоя дневная норма уже ждет тебя 💚\n\n"
+            "Одна запись еды — и станет видно, сколько осталось на сегодня. Без строгих правил и чувства вины."
+        ),
+    },
+}
+
 
 def is_activation_window(now: datetime) -> bool:
     current = now.time()
@@ -1574,11 +1605,13 @@ async def broadcast_segment_command(message: Message) -> None:
         "no_food": db.get_started_users_without_food,
         "started_no_food": db.get_started_users_without_food,
         "one_food_no_return": db.get_users_with_one_food_no_return,
+        "goal_no_food": db.get_users_with_goal_no_food_no_return,
     }
 
     if len(parts) < 3 or not parts[1].strip() or not parts[2].strip():
         no_food_count = len(db.get_started_users_without_food())
         one_food_no_return_count = len(db.get_users_with_one_food_no_return())
+        goal_no_food_count = len(db.get_users_with_goal_no_food_no_return())
         await message.answer(
             "Рассылка по сегменту.\n\n"
             "Формат:\n"
@@ -1586,14 +1619,16 @@ async def broadcast_segment_command(message: Message) -> None:
             "Доступные сегменты:\n"
             f"no_food — нажали /start, но еще не добавляли еду: {no_food_count}\n"
             "one_food_no_return — добавили еду 1 раз и не возвращались минимум 2 дня: "
-            f"{one_food_no_return_count}"
+            f"{one_food_no_return_count}\n"
+            "goal_no_food — поставили цель, но не добавили еду и не возвращались минимум 2 дня: "
+            f"{goal_no_food_count}"
         )
         return
 
     segment = parts[1].strip().lower()
     broadcast_text = parts[2].strip()
     if segment not in segments:
-        await message.answer("Не знаю такой сегмент. Сейчас доступны: no_food, one_food_no_return.")
+        await message.answer("Не знаю такой сегмент. Сейчас доступны: no_food, one_food_no_return, goal_no_food.")
         return
     if len(broadcast_text) > 4000:
         await message.answer("Сообщение слишком длинное. Лучше уложиться до 4000 символов.")
@@ -2173,6 +2208,24 @@ async def reminder_loop(bot: Bot) -> None:
                     logger.info("User %s blocked bot, activation disabled", user.telegram_id)
                 except Exception:
                     logger.exception("Failed to send activation message to user %s", user.telegram_id)
+            for segment, texts in LIFECYCLE_PUSH_TEXTS.items():
+                for user, step in db.get_users_for_lifecycle_push(segment, max_steps=len(texts)):
+                    text = texts.get(step)
+                    if not text:
+                        continue
+                    try:
+                        await bot.send_message(user.telegram_id, text)
+                        db.log_lifecycle_push(user.telegram_id, segment, step, "sent")
+                        db.log_reminder(user.telegram_id, f"lifecycle:{segment}", f"step:{step}", "sent")
+                    except TelegramForbiddenError:
+                        db.log_lifecycle_push(user.telegram_id, segment, step, "blocked", "bot_blocked")
+                        db.log_reminder(user.telegram_id, f"lifecycle:{segment}", f"step:{step}", "failed", "bot_blocked")
+                        logger.info("Lifecycle push skipped blocked user %s", user.telegram_id)
+                    except Exception as exc:
+                        db.log_lifecycle_push(user.telegram_id, segment, step, "failed", str(exc))
+                        db.log_reminder(user.telegram_id, f"lifecycle:{segment}", f"step:{step}", "failed", str(exc))
+                        logger.exception("Failed to send lifecycle push %s step %s to user %s", segment, step, user.telegram_id)
+                    await asyncio.sleep(0.05)
         if current_time == config.auto_push_time:
             yesterday = (today_date - timedelta(days=1)).isoformat()
             day_before_yesterday = (today_date - timedelta(days=2)).isoformat()
