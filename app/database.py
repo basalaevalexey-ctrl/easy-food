@@ -501,6 +501,22 @@ class Database:
             ).fetchall()
             return [self._user_from_row(row) for row in rows]
 
+    def get_loyal_users(self) -> list[User]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT users.*
+                FROM users
+                JOIN food_entries ON food_entries.user_id = users.id
+                GROUP BY users.id
+                HAVING COUNT(food_entries.id) >= 5
+                   AND COUNT(DISTINCT date(food_entries.created_at, '+3 hours')) >= 3
+                   AND datetime(MAX(food_entries.created_at), '+3 hours') >= datetime('now', '+3 hours', '-7 days')
+                ORDER BY users.id ASC
+                """
+            ).fetchall()
+            return [self._user_from_row(row) for row in rows]
+
     def record_useful_action(self, telegram_id: int, event_type: str) -> User:
         return self.record_user_event(telegram_id, event_type)
 
