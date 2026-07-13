@@ -83,9 +83,10 @@ db = Database(
 )
 admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-80"
+WEBAPP_BUILD = "nyam-81"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+BOT_USERNAME = ""
 
 
 def webapp_url_with_build() -> str:
@@ -102,6 +103,22 @@ def webapp_url_for_user(user_id: int | None) -> str:
     if not user_id or not config.webapp_url:
         return ""
     return webapp_url_with_build()
+
+
+def referral_links(telegram_id: int) -> dict[str, str]:
+    if not BOT_USERNAME:
+        return {"invite_url": "", "share_url": ""}
+    invite_url = f"https://t.me/{BOT_USERNAME}?start=ref_{telegram_id}"
+    share_query = urlencode(
+        {
+            "url": invite_url,
+            "text": "Попробуй Нямметр 🍽 Он считает калории и БЖУ по фото или описанию еды.",
+        }
+    )
+    return {
+        "invite_url": invite_url,
+        "share_url": f"https://t.me/share/url?{share_query}",
+    }
 
 
 def sanitize_miniapp_html(html: str) -> str:
@@ -561,6 +578,7 @@ def build_miniapp_payload(telegram_user: dict, selected_day: str | None = None) 
     mission_status = db.get_daily_mission_status(telegram_id)
     mission = mission_status["mission"]
     active_dates = db.get_food_entry_days(telegram_id)
+    referral_progress = db.get_referral_progress(telegram_id)
 
     return {
         "user": {
@@ -617,6 +635,11 @@ def build_miniapp_payload(telegram_user: dict, selected_day: str | None = None) 
             }
             for row in achievements
         ],
+        "referral": {
+            **referral_progress,
+            **referral_links(telegram_id),
+            "target": 10,
+        },
         "debug": {
             "build": WEBAPP_BUILD,
             "is_admin": telegram_id in config.admin_ids,
@@ -671,6 +694,7 @@ def update_miniapp_profile(telegram_user: dict, payload: dict) -> dict:
             "protein_target": protein_target,
         },
     )
+    db.activate_referral(telegram_id)
     db.record_user_event(telegram_id, "miniapp_profile_updated")
     return build_miniapp_payload(telegram_user)
 
@@ -689,6 +713,7 @@ async def add_miniapp_food_text(telegram_user: dict, text: str) -> dict:
     estimate = await food_ai.estimate_text(text)
     entry = db.add_food_entry(telegram_id, estimate, source="text")
     db.record_useful_action(telegram_id, "food_text_added")
+    db.activate_referral(telegram_id)
     db.record_user_event(telegram_id, "miniapp_food_text")
     db.unlock_available_achievements(telegram_id)
     db.complete_daily_mission_if_ready(telegram_id)
@@ -700,6 +725,7 @@ async def add_miniapp_food_photo(telegram_user: dict, image_bytes: bytes, mime_t
     estimate = await food_ai.estimate_image(image_bytes, mime_type=mime_type)
     entry = db.add_food_entry(telegram_id, estimate, source="photo")
     db.record_useful_action(telegram_id, "food_photo_added")
+    db.activate_referral(telegram_id)
     db.record_user_event(telegram_id, "miniapp_food_photo")
     db.unlock_available_achievements(telegram_id)
     db.complete_daily_mission_if_ready(telegram_id)
@@ -1348,6 +1374,14 @@ def format_admin_users() -> str:
 
 @router.message(Command("start"))
 async def start(message: Message, state: FSMContext) -> None:
+    start_parts = (message.text or "").split(maxsplit=1)
+    if len(start_parts) == 2 and start_parts[1].startswith("ref_"):
+        try:
+            inviter_telegram_id = int(start_parts[1].removeprefix("ref_"))
+        except ValueError:
+            inviter_telegram_id = 0
+        if inviter_telegram_id:
+            db.register_referral(message.from_user.id, inviter_telegram_id)
     await cleanup_flow_messages(state, message.chat.id, message.bot)
     await state.clear()
     await safe_delete_message(message)
@@ -1933,6 +1967,7 @@ async def setup_activity(callback: CallbackQuery, state: FSMContext) -> None:
     data["calorie_target"] = calorie_target
     data["protein_target"] = protein_target
     db.update_user_goal(callback.from_user.id, data)
+    db.activate_referral(callback.from_user.id)
     await cleanup_flow_messages(state, callback.message.chat.id, callback.bot)
     await state.clear()
     await callback.message.answer(
@@ -2080,6 +2115,7 @@ async def photo_food(message: Message, bot: Bot) -> None:
         return
     entry = db.add_food_entry(message.from_user.id, estimate, source="photo")
     db.record_useful_action(message.from_user.id, "food_photo_added")
+    db.activate_referral(message.from_user.id)
     await send_food_entry(message, entry, is_photo=True)
     await maybe_send_nyam_streak(message)
     await maybe_send_achievements(message)
@@ -2103,6 +2139,7 @@ async def text_food(message: Message) -> None:
         return
     entry = db.add_food_entry(message.from_user.id, estimate, source="text")
     db.record_useful_action(message.from_user.id, "food_text_added")
+    db.activate_referral(message.from_user.id)
     await send_food_entry(message, entry)
     await maybe_send_nyam_streak(message)
     await maybe_send_achievements(message)
@@ -2110,6 +2147,7 @@ async def text_food(message: Message) -> None:
 
 
 async def main() -> None:
+    global BOT_USERNAME
     if not config.bot_token:
         raise RuntimeError("BOT_TOKEN is not set")
     if not config.openai_api_key:
@@ -2117,6 +2155,8 @@ async def main() -> None:
 
     db.init()
     bot = Bot(token=config.bot_token)
+    bot_info = await bot.get_me()
+    BOT_USERNAME = bot_info.username or ""
     dispatcher = Dispatcher(storage=MemoryStorage())
     dispatcher.include_router(router)
     logger.info("Bot started with database: %s, timezone: %s", config.database_path, config.timezone)

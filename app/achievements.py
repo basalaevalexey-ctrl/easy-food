@@ -149,6 +149,24 @@ ACHIEVEMENTS = {
         emoji="✨",
         description="50 записей еды в дневнике. Это уже настоящий опыт Нямметра.",
     ),
+    "referral_one": Achievement(
+        key="referral_one",
+        title="Позвал к столу",
+        emoji="💚",
+        description="Первый друг начал пользоваться Нямметром по твоему приглашению.",
+    ),
+    "referral_five": Achievement(
+        key="referral_five",
+        title="Ням-компания",
+        emoji="🍽",
+        description="Пять друзей начали пользоваться Нямметром по твоему приглашению.",
+    ),
+    "referral_ten": Achievement(
+        key="referral_ten",
+        title="Большой стол",
+        emoji="🏆",
+        description="Десять друзей присоединились к Нямметру по твоему приглашению.",
+    ),
 }
 
 ACHIEVEMENT_ORDER = tuple(ACHIEVEMENTS)
@@ -166,6 +184,7 @@ def available_achievements(context: dict[str, Any]) -> list[Achievement]:
     breakfast_entries = int(context.get("breakfast_entries") or 0)
     vegetable_entries_today = int(context.get("vegetable_entries_today") or 0)
     sweet_entries_today = int(context.get("sweet_entries_today") or 0)
+    referral_count = int(context.get("referral_count") or 0)
 
     if total_entries >= 1:
         result.append(ACHIEVEMENTS["first_nyam"])
@@ -198,5 +217,11 @@ def available_achievements(context: dict[str, Any]) -> list[Achievement]:
         result.append(ACHIEVEMENTS["breakfast"])
     if total_entries >= 50:
         result.append(ACHIEVEMENTS["secret"])
+    if referral_count >= 1:
+        result.append(ACHIEVEMENTS["referral_one"])
+    if referral_count >= 5:
+        result.append(ACHIEVEMENTS["referral_five"])
+    if referral_count >= 10:
+        result.append(ACHIEVEMENTS["referral_ten"])
 
     return result

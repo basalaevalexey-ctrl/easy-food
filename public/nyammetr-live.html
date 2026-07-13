@@ -120,9 +120,19 @@
           <b data-mission-progress-value>0/1</b>
         </article>
 
+        <article class="mission-card referral-card" data-referral-card role="button" tabindex="0" aria-label="Пригласить друзей">
+          <span class="mission-icon referral-icon"><img loading="lazy" src="./assets/achievement-referral-one-friend-mascot.png" alt="" /></span>
+          <div>
+            <strong>Пригласить друзей</strong>
+            <small><span data-referral-count>0</span> из 10 уже с Нямметром</small>
+            <div class="progress-line"><span data-referral-progress-bar style="width: 0%"></span></div>
+          </div>
+          <b data-referral-progress-value>0/10</b>
+        </article>
+
         <div class="achievements-title">
           <h2>Достижения</h2>
-          <small data-achievements-summary>Собрано 0 из 14</small>
+          <small data-achievements-summary>Собрано 0 из 17</small>
         </div>
         <div class="achievement-pager" aria-label="Листать достижения">
           <button type="button" data-achievements-prev aria-label="Предыдущие достижения">‹</button>
@@ -144,6 +154,9 @@
           <span data-achievement-key="no_sweets_day"><b><img loading="lazy" src="./assets/achievement-no-sweets.png" alt="" /></b><small>Без сладкого</small></span>
           <span data-achievement-key="vegetable_day"><b><img loading="lazy" src="./assets/achievement-vegetable-day.png" alt="" /></b><small>Овощной день</small></span>
           <span data-achievement-key="secret"><b><img loading="lazy" src="./assets/achievement-12-trim.png" alt="" /></b><small>Секрет</small></span>
+          <span data-achievement-key="referral_one"><b><img loading="lazy" src="./assets/achievement-referral-one-friend-mascot.png" alt="" /></b><small>Позвал к столу</small></span>
+          <span data-achievement-key="referral_five"><b><img loading="lazy" src="./assets/achievement-referral-five-friends-mascot.png" alt="" /></b><small>Ням-компания</small></span>
+          <span data-achievement-key="referral_ten"><b><img loading="lazy" src="./assets/achievement-referral-ten-friends-mascot.png" alt="" /></b><small>Большой стол</small></span>
         </div>
 
         <button class="primary-action lower" type="button" data-missions-add>
@@ -279,11 +292,14 @@ const foodSubmit = document.querySelector("[data-food-submit]");
 const reminderEnabled = document.querySelector("[data-reminder-enabled]");
 const reminderTime = document.querySelector("[data-reminder-time]");
 const reminderLabel = document.querySelector("[data-reminder-label]");
+const referralCard = document.querySelector("[data-referral-card]");
 let calorieGoal = 2100;
 let profileGoal = "support";
 let profileSex = "male";
 const profileStoreKey = "nyammetr-profile";
 let hasLocalProfile = false;
+let referralInviteUrl = "";
+let referralShareUrl = "";
 
 const text = {
   today: "\u0421\u0435\u0433\u043e\u0434\u043d\u044f",
@@ -353,6 +369,9 @@ const achievementKeys = [
   "no_sweets_day",
   "vegetable_day",
   "secret",
+  "referral_one",
+  "referral_five",
+  "referral_ten",
 ];
 
 const achievementDetails = {
@@ -411,6 +430,18 @@ const achievementDetails = {
   secret: {
     title: "Секрет",
     description: "Секретная ачивка откроется, когда в дневнике будет 50 записей еды.",
+  },
+  referral_one: {
+    title: "Позвал к столу",
+    description: "Первый друг начал пользоваться Нямметром по твоему приглашению.",
+  },
+  referral_five: {
+    title: "Ням-компания",
+    description: "Пять друзей начали пользоваться Нямметром по твоему приглашению.",
+  },
+  referral_ten: {
+    title: "Большой стол",
+    description: "Десять друзей присоединились к Нямметру по твоему приглашению.",
   },
 };
 
@@ -1113,6 +1144,7 @@ function applyServerState(data) {
   const entries = data.today?.entries || [];
   const progress = data.progress || {};
   const mission = data.mission || {};
+  const referral = data.referral || {};
   const unlockedAchievements = new Set((data.achievements || []).map((item) => item.key));
   const calories = roundValue(totals.calories);
   const protein = roundValue(totals.protein);
@@ -1222,6 +1254,20 @@ function applyServerState(data) {
   });
   document.querySelectorAll("[data-mission-progress-bar]").forEach((bar) => {
     bar.style.width = `${Math.max(0, Math.min(100, Math.round(missionState.percent)))}%`;
+  });
+
+  const referralCount = Math.max(0, roundValue(referral.activated));
+  const referralTarget = Math.max(1, roundValue(referral.target) || 10);
+  referralInviteUrl = referral.invite_url || "";
+  referralShareUrl = referral.share_url || "";
+  document.querySelectorAll("[data-referral-count]").forEach((node) => {
+    node.textContent = referralCount;
+  });
+  document.querySelectorAll("[data-referral-progress-value]").forEach((node) => {
+    node.textContent = `${Math.min(referralCount, referralTarget)}/${referralTarget}`;
+  });
+  document.querySelectorAll("[data-referral-progress-bar]").forEach((bar) => {
+    bar.style.width = `${Math.min(100, Math.round((referralCount / referralTarget) * 100))}%`;
   });
 
   renderEntries(entries);
@@ -1400,6 +1446,38 @@ document.querySelector("[data-mission-card]")?.addEventListener("keydown", (even
   if (event.key !== "Enter" && event.key !== " ") return;
   event.preventDefault();
   event.currentTarget.click();
+});
+
+async function shareReferral() {
+  if (!referralInviteUrl) {
+    showToast("Ссылка пока не загрузилась. Открой экран еще раз.");
+    return;
+  }
+  const tg = window.Telegram?.WebApp;
+  if (tg?.openTelegramLink && referralShareUrl) {
+    tg.openTelegramLink(referralShareUrl);
+    return;
+  }
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: "Нямметр",
+        text: "Попробуй Нямметр — он считает калории и БЖУ по фото или описанию еды.",
+        url: referralInviteUrl,
+      });
+      return;
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+    }
+  }
+  window.open(referralShareUrl || referralInviteUrl, "_blank", "noopener,noreferrer");
+}
+
+referralCard?.addEventListener("click", shareReferral);
+referralCard?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  shareReferral();
 });
 
 datePicker.addEventListener("change", () => {

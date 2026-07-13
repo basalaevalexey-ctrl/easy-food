@@ -984,7 +984,7 @@ h2 {
   position: relative;
   z-index: 5;
   width: min(324px, calc(100% - 56px));
-  margin: -46px auto 0;
+  margin: -38px auto 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1002,13 +1002,13 @@ h2 {
 }
 
 .mission-card {
-  margin-top: 14px;
-  min-height: 104px;
+  margin-top: 10px;
+  min-height: 84px;
   display: grid;
-  grid-template-columns: 64px 1fr auto;
+  grid-template-columns: 52px 1fr auto;
   align-items: center;
-  column-gap: 18px;
-  padding: 14px 16px;
+  column-gap: 12px;
+  padding: 10px 14px;
   background: #f7f9e8;
   cursor: pointer;
 }
@@ -1019,15 +1019,15 @@ h2 {
 }
 
 .mission-icon {
-  width: 60px;
-  height: 50px;
+  width: 50px;
+  height: 48px;
   display: grid;
   place-items: center start;
 }
 
 .mission-icon img {
-  width: 58px;
-  height: 58px;
+  width: 50px;
+  height: 50px;
   display: block;
   object-fit: contain;
 }
@@ -1041,6 +1041,19 @@ h2 {
 
 .achievements-title small {
   color: var(--muted);
+}
+
+.referral-card {
+  background: #f3f8e9;
+}
+
+.referral-icon {
+  overflow: hidden;
+  border-radius: 50%;
+}
+
+.referral-icon img {
+  transform: scale(1.12);
 }
 
 .mission-card p {
@@ -1149,7 +1162,13 @@ h2 {
 }
 
 .missions-hero {
+  height: 215px;
+}
+
+.missions-hero .mission-cat-art {
+  width: 315px;
   height: 260px;
+  transform: translateY(12px);
 }
 
 .profile-hero,
@@ -1729,6 +1748,16 @@ h2 {
   .mission-cat-art {
     width: 368px;
     height: 310px;
+  }
+
+  .missions-hero {
+    height: 215px;
+  }
+
+  .missions-hero .mission-cat-art {
+    width: 315px;
+    height: 260px;
+    transform: translateY(12px);
   }
 
   .add-food-menu {

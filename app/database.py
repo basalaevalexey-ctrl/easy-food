@@ -197,6 +197,20 @@ class Database:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS referrals (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    inviter_user_id INTEGER NOT NULL,
+                    invited_user_id INTEGER NOT NULL UNIQUE,
+                    activated_at TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CHECK(inviter_user_id != invited_user_id),
+                    FOREIGN KEY (inviter_user_id) REFERENCES users(id) ON DELETE CASCADE,
+                    FOREIGN KEY (invited_user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+                """
+            )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_user_events_type_date ON user_events(event_type, created_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_food_entries_user_date ON food_entries(user_id, created_at)")
             conn.execute(
@@ -209,6 +223,7 @@ class Database:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_broadcast_logs_user_sent ON broadcast_logs(user_id, sent_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_broadcast_logs_campaign ON broadcast_logs(campaign_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_lifecycle_pushes_user_segment ON lifecycle_pushes(user_id, segment, sent_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_referrals_inviter ON referrals(inviter_user_id, activated_at)")
             self._rebuild_user_streaks(conn)
 
     def _restore_best_database(self) -> None:
@@ -1062,7 +1077,78 @@ class Database:
             "breakfast_entries": int(row["breakfast_entries"] or 0),
             "vegetable_entries_today": vegetable_entries_today,
             "sweet_entries_today": sweet_entries_today,
+            "referral_count": self.get_referral_progress(telegram_id)["activated"],
             "calorie_target": user.calorie_target,
+        }
+
+    def register_referral(self, invited_telegram_id: int, inviter_telegram_id: int) -> bool:
+        if invited_telegram_id == inviter_telegram_id:
+            return False
+        invited = self.get_or_create_user(invited_telegram_id)
+        inviter = self.get_or_create_user(inviter_telegram_id)
+        with self.connect() as conn:
+            already_active = conn.execute(
+                """
+                SELECT EXISTS(SELECT 1 FROM food_entries WHERE user_id = ?)
+                       OR EXISTS(SELECT 1 FROM users WHERE id = ? AND calorie_target IS NOT NULL)
+                """,
+                (invited.id, invited.id),
+            ).fetchone()[0]
+            if already_active:
+                return False
+            cursor = conn.execute(
+                """
+                INSERT OR IGNORE INTO referrals (inviter_user_id, invited_user_id)
+                VALUES (?, ?)
+                """,
+                (inviter.id, invited.id),
+            )
+            return bool(cursor.rowcount)
+
+    def activate_referral(self, invited_telegram_id: int) -> bool:
+        invited = self.get_or_create_user(invited_telegram_id)
+        inviter_telegram_id: int | None = None
+        with self.connect() as conn:
+            referral = conn.execute(
+                """
+                SELECT inviter.telegram_id
+                FROM referrals
+                JOIN users AS inviter ON inviter.id = referrals.inviter_user_id
+                WHERE referrals.invited_user_id = ? AND referrals.activated_at IS NULL
+                """,
+                (invited.id,),
+            ).fetchone()
+            if referral is None:
+                return False
+            inviter_telegram_id = int(referral["telegram_id"])
+            cursor = conn.execute(
+                """
+                UPDATE referrals
+                SET activated_at = CURRENT_TIMESTAMP
+                WHERE invited_user_id = ? AND activated_at IS NULL
+                """,
+                (invited.id,),
+            )
+            activated = bool(cursor.rowcount)
+        if activated and inviter_telegram_id is not None:
+            self.unlock_available_achievements(inviter_telegram_id)
+        return activated
+
+    def get_referral_progress(self, telegram_id: int) -> dict[str, int]:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS invited,
+                       SUM(CASE WHEN activated_at IS NOT NULL THEN 1 ELSE 0 END) AS activated
+                FROM referrals
+                WHERE inviter_user_id = ?
+                """,
+                (user.id,),
+            ).fetchone()
+        return {
+            "invited": int(row["invited"] or 0),
+            "activated": int(row["activated"] or 0),
         }
 
     def unlock_available_achievements(self, telegram_id: int) -> list[Achievement]:
