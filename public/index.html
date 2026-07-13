@@ -15,11 +15,11 @@
           <img class="hero-cat-art" src="./assets/cat-food.png" alt="" fetchpriority="high" decoding="async" />
         </div>
 
-        <button class="status-row" type="button" data-tab="missions">
-          <img class="status-cat-icon" src="./assets/status-cat.png" alt="" />
+        <button class="status-row referral-status-row" type="button" data-referral-share aria-label="Пригласить друзей">
+          <img class="status-cat-icon" src="./assets/achievement-referral-one-friend-mascot.png" alt="" />
           <div>
             <strong>Котик доволен</strong>
-            <span>Отличная работа!</span>
+            <span>Приглашай друзей и получай дополнительные ачивки</span>
           </div>
           <b>›</b>
         </button>
@@ -120,7 +120,7 @@
           <b data-mission-progress-value>0/1</b>
         </article>
 
-        <article class="mission-card referral-card" data-referral-card role="button" tabindex="0" aria-label="Пригласить друзей">
+        <article class="mission-card referral-card" data-referral-card data-referral-share role="button" tabindex="0" aria-label="Пригласить друзей">
           <span class="mission-icon referral-icon"><img loading="lazy" src="./assets/achievement-referral-one-friend-mascot.png" alt="" /></span>
           <div>
             <strong>Пригласить друзей</strong>
@@ -292,7 +292,7 @@ const foodSubmit = document.querySelector("[data-food-submit]");
 const reminderEnabled = document.querySelector("[data-reminder-enabled]");
 const reminderTime = document.querySelector("[data-reminder-time]");
 const reminderLabel = document.querySelector("[data-reminder-label]");
-const referralCard = document.querySelector("[data-referral-card]");
+const referralShareButtons = document.querySelectorAll("[data-referral-share]");
 let calorieGoal = 2100;
 let profileGoal = "support";
 let profileSex = "male";
@@ -1473,11 +1473,13 @@ async function shareReferral() {
   window.open(referralShareUrl || referralInviteUrl, "_blank", "noopener,noreferrer");
 }
 
-referralCard?.addEventListener("click", shareReferral);
-referralCard?.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter" && event.key !== " ") return;
-  event.preventDefault();
-  shareReferral();
+referralShareButtons.forEach((button) => {
+  button.addEventListener("click", shareReferral);
+  button.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    shareReferral();
+  });
 });
 
 datePicker.addEventListener("change", () => {

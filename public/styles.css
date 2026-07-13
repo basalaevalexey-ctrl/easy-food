@@ -572,6 +572,21 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
+.referral-status-row {
+  min-height: 86px;
+}
+
+.referral-status-row .status-cat-icon {
+  width: 62px;
+  height: 62px;
+  transform: scale(1.25);
+}
+
+.referral-status-row span {
+  max-width: 220px;
+  line-height: 1.28;
+}
+
 .tip-paw {
   width: 31px;
   height: 31px;
@@ -1168,7 +1183,7 @@ h2 {
 .missions-hero .mission-cat-art {
   width: 315px;
   height: 260px;
-  transform: translateY(12px);
+  transform: translateY(-18px);
 }
 
 .profile-hero,
@@ -1757,7 +1772,7 @@ h2 {
   .missions-hero .mission-cat-art {
     width: 315px;
     height: 260px;
-    transform: translateY(12px);
+    transform: translateY(-18px);
   }
 
   .add-food-menu {
