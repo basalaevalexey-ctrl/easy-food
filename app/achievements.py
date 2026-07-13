@@ -2,6 +2,60 @@ from dataclasses import dataclass
 from typing import Any
 
 
+VEGETABLE_MARKERS = (
+    "овощ",
+    "салат",
+    "помидор",
+    "томат",
+    "огур",
+    "морков",
+    "капуст",
+    "броккол",
+    "перец",
+    "кабач",
+    "баклаж",
+    "свек",
+    "тыкв",
+    "редис",
+    "зелень",
+    "шпинат",
+)
+
+SWEET_MARKERS = (
+    "сахар",
+    "конфет",
+    "шоколад",
+    "печенье",
+    "печенья",
+    "торт",
+    "пирож",
+    "морож",
+    "десерт",
+    "зефир",
+    "мармелад",
+    "вафл",
+    "пончик",
+    "донат",
+    "булоч",
+    "кекс",
+    "варень",
+    "сироп",
+)
+
+
+def daily_food_signals(entries: list[tuple[str, str]]) -> tuple[int, int]:
+    vegetable_entries = 0
+    sweet_entries = 0
+    for title, description in entries:
+        text = f"{title or ''} {description or ''}".lower().replace("ё", "е")
+        text = text.replace("сладкий перец", "перец")
+        for phrase in ("без сахара", "без сахар", "без сладкого"):
+            text = text.replace(phrase, " ")
+        vegetable_entries += int(any(marker in text for marker in VEGETABLE_MARKERS))
+        sweet_entries += int(any(marker in text for marker in SWEET_MARKERS))
+    return vegetable_entries, sweet_entries
+
+
 @dataclass(frozen=True)
 class Achievement:
     key: str
@@ -38,7 +92,7 @@ ACHIEVEMENTS = {
     "five_entries": Achievement(
         key="five_entries",
         title="Пять записей",
-        emoji="💧",
+        emoji="📝",
         description="В дневнике уже 5 записей еды. Маленькими шагами получается легче.",
     ),
     "five_day_streak": Achievement(
@@ -56,7 +110,7 @@ ACHIEVEMENTS = {
     "ten_entries": Achievement(
         key="ten_entries",
         title="10 записей",
-        emoji="🥦",
+        emoji="📚",
         description="В дневнике уже 10 записей еды. Нямметр начинает знать твой ритм.",
     ),
     "planner": Achievement(
@@ -68,8 +122,20 @@ ACHIEVEMENTS = {
     "sweet_control": Achievement(
         key="sweet_control",
         title="Баланс дня",
-        emoji="🍬",
+        emoji="⚖️",
         description="15 записей еды в дневнике. Ты все лучше видишь общую картину дня.",
+    ),
+    "no_sweets_day": Achievement(
+        key="no_sweets_day",
+        title="День без сладкого",
+        emoji="🍬",
+        description="За день добавлено минимум 3 приема пищи — и среди них не было сладкого.",
+    ),
+    "vegetable_day": Achievement(
+        key="vegetable_day",
+        title="Овощной день",
+        emoji="🥦",
+        description="Овощи встретились минимум в двух приемах пищи за день.",
     ),
     "breakfast": Achievement(
         key="breakfast",
@@ -98,6 +164,8 @@ def available_achievements(context: dict[str, Any]) -> list[Achievement]:
     current_streak = int(context.get("current_streak") or 0)
     active_days = int(context.get("active_days") or 0)
     breakfast_entries = int(context.get("breakfast_entries") or 0)
+    vegetable_entries_today = int(context.get("vegetable_entries_today") or 0)
+    sweet_entries_today = int(context.get("sweet_entries_today") or 0)
 
     if total_entries >= 1:
         result.append(ACHIEVEMENTS["first_nyam"])
@@ -122,6 +190,10 @@ def available_achievements(context: dict[str, Any]) -> list[Achievement]:
         result.append(ACHIEVEMENTS["planner"])
     if total_entries >= 15:
         result.append(ACHIEVEMENTS["sweet_control"])
+    if today_entries >= 3 and sweet_entries_today == 0:
+        result.append(ACHIEVEMENTS["no_sweets_day"])
+    if vegetable_entries_today >= 2:
+        result.append(ACHIEVEMENTS["vegetable_day"])
     if breakfast_entries >= 1:
         result.append(ACHIEVEMENTS["breakfast"])
     if total_entries >= 50:

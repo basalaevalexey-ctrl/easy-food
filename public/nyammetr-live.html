@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-79" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-80" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -122,11 +122,11 @@
 
         <div class="achievements-title">
           <h2>Достижения</h2>
-          <small data-achievements-summary>Собрано 0 из 12</small>
+          <small data-achievements-summary>Собрано 0 из 14</small>
         </div>
         <div class="achievement-pager" aria-label="Листать достижения">
           <button type="button" data-achievements-prev aria-label="Предыдущие достижения">‹</button>
-          <span data-achievements-page>1/3</span>
+          <span data-achievements-page>1/4</span>
           <button type="button" data-achievements-next aria-label="Следующие достижения">›</button>
         </div>
         <div class="badges">
@@ -134,13 +134,15 @@
           <span data-achievement-key="in_rhythm"><b><img loading="lazy" src="./assets/achievement-02-trim.png" alt="" /></b><small>Вошел в ритм</small></span>
           <span data-achievement-key="full_day"><b><img loading="lazy" src="./assets/achievement-03-trim.png" alt="" /></b><small>Полный день</small></span>
           <span data-achievement-key="target_day"><b><img loading="lazy" src="./assets/achievement-04-trim.png" alt="" /></b><small>День в цель</small></span>
-          <span data-achievement-key="five_entries"><b><img loading="lazy" src="./assets/achievement-05-trim.png" alt="" /></b><small>5 записей</small></span>
+          <span data-achievement-key="five_entries"><b><img loading="lazy" src="./assets/achievement-five-entries.png" alt="" /></b><small>5 записей</small></span>
           <span data-achievement-key="five_day_streak"><b><img loading="lazy" src="./assets/achievement-06-trim.png" alt="" /></b><small>5 дней</small></span>
           <span data-achievement-key="photo_lunch"><b><img loading="lazy" src="./assets/achievement-07-trim.png" alt="" /></b><small>Фото-обед</small></span>
-          <span data-achievement-key="ten_entries"><b><img loading="lazy" src="./assets/achievement-08-trim.png" alt="" /></b><small>10 записей</small></span>
+          <span data-achievement-key="ten_entries"><b><img loading="lazy" src="./assets/achievement-ten-entries.png" alt="" /></b><small>10 записей</small></span>
           <span data-achievement-key="planner"><b><img loading="lazy" src="./assets/achievement-09-trim.png" alt="" /></b><small>Собранный день</small></span>
-          <span data-achievement-key="sweet_control"><b><img loading="lazy" src="./assets/achievement-10-trim.png" alt="" /></b><small>Баланс дня</small></span>
+          <span data-achievement-key="sweet_control"><b><img loading="lazy" src="./assets/achievement-balance-day.png" alt="" /></b><small>Баланс дня</small></span>
           <span data-achievement-key="breakfast"><b><img loading="lazy" src="./assets/achievement-11-trim.png" alt="" /></b><small>Завтрак</small></span>
+          <span data-achievement-key="no_sweets_day"><b><img loading="lazy" src="./assets/achievement-no-sweets.png" alt="" /></b><small>Без сладкого</small></span>
+          <span data-achievement-key="vegetable_day"><b><img loading="lazy" src="./assets/achievement-vegetable-day.png" alt="" /></b><small>Овощной день</small></span>
           <span data-achievement-key="secret"><b><img loading="lazy" src="./assets/achievement-12-trim.png" alt="" /></b><small>Секрет</small></span>
         </div>
 
@@ -348,6 +350,8 @@ const achievementKeys = [
   "planner",
   "sweet_control",
   "breakfast",
+  "no_sweets_day",
+  "vegetable_day",
   "secret",
 ];
 
@@ -395,6 +399,14 @@ const achievementDetails = {
   breakfast: {
     title: "Завтрак",
     description: "Первая запись еды за день была добавлена до 12:00.",
+  },
+  no_sweets_day: {
+    title: "День без сладкого",
+    description: "За день добавлено минимум 3 приема пищи — и среди них не было сладкого.",
+  },
+  vegetable_day: {
+    title: "Овощной день",
+    description: "Овощи встретились минимум в двух приемах пищи за день.",
   },
   secret: {
     title: "Секрет",

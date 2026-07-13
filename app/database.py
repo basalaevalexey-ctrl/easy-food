@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
-from app.achievements import Achievement, available_achievements
+from app.achievements import Achievement, available_achievements, daily_food_signals
 from app.missions import (
     MISSION_ORDER,
     MISSIONS,
@@ -1040,6 +1040,17 @@ class Database:
                 """,
                 (user.id, user.id, user.id, user.id, user.id, user.id),
             ).fetchone()
+            today_food_rows = conn.execute(
+                """
+                SELECT title, description
+                FROM food_entries
+                WHERE user_id = ? AND date(created_at, '+3 hours') = date('now', '+3 hours')
+                """,
+                (user.id,),
+            ).fetchall()
+        vegetable_entries_today, sweet_entries_today = daily_food_signals(
+            [(entry["title"], entry["description"]) for entry in today_food_rows]
+        )
         return {
             "total_entries": int(row["total_entries"] or 0),
             "photo_entries": int(row["photo_entries"] or 0),
@@ -1049,6 +1060,8 @@ class Database:
             "best_streak": int(best_streak or 0),
             "active_days": int(row["active_days"] or 0),
             "breakfast_entries": int(row["breakfast_entries"] or 0),
+            "vegetable_entries_today": vegetable_entries_today,
+            "sweet_entries_today": sweet_entries_today,
             "calorie_target": user.calorie_target,
         }
 
