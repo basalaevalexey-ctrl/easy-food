@@ -83,7 +83,7 @@ db = Database(
 )
 admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-85"
+WEBAPP_BUILD = "nyam-86"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 BOT_USERNAME = ""
@@ -718,7 +718,7 @@ def update_miniapp_water(telegram_user: dict, payload: dict) -> dict:
     if action == "remove":
         db.remove_last_water_entry(telegram_id)
     elif action == "add":
-        amount_ml = int(payload.get("amount_ml") or 150)
+        amount_ml = int(payload.get("amount_ml") or 200)
         db.add_water_entry(telegram_id, amount_ml)
     else:
         raise ValueError("invalid_water_action")

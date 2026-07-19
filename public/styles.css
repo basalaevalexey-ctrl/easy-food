@@ -1405,10 +1405,19 @@ h2 {
 
 .profile-panel h2 span img[src*="profile-goals"],
 .profile-panel button > span img[src*="profile-calorie-goal"],
-.profile-panel button > span img[src*="profile-protein-goal"],
-.profile-panel button > span img[src*="achievement-05"] {
+.profile-panel button > span img[src*="profile-protein-goal"] {
   width: 36px;
   height: 36px;
+}
+
+.profile-water-symbol {
+  width: 13px;
+  height: 17px;
+  display: block;
+  border-radius: 65% 35% 65% 35%;
+  background: var(--green);
+  transform: rotate(45deg);
+  box-shadow: inset -2px -2px 0 rgba(56, 130, 34, 0.18);
 }
 
 .profile-panel h2 span img[src*="profile-goals-symbol"] {

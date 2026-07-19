@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-85" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-86" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -51,7 +51,7 @@
           </div>
           <div class="water-actions">
             <button type="button" data-water-remove aria-label="Убрать последнюю порцию воды" title="Убрать последнюю порцию">−</button>
-            <button type="button" data-water-add aria-label="Добавить 150 миллилитров воды">+150</button>
+            <button type="button" data-water-add aria-label="Добавить 200 миллилитров воды">+200</button>
           </div>
         </article>
 
@@ -196,7 +196,7 @@
           <h2><span><img loading="lazy" src="./assets/profile-goals-symbol.png" alt="" /></span>Мои цели</h2>
           <button type="button" class="goal-row"><span><img loading="lazy" src="./assets/profile-calorie-goal-trim.png" alt="" /></span>Дневная норма<strong data-goal-calories>2100 ккал</strong></button>
           <button type="button" class="goal-row"><span><img loading="lazy" src="./assets/profile-protein-goal-trim.png" alt="" /></span>Белок<strong data-goal-protein>130 г</strong></button>
-          <button type="button" class="goal-row"><span><img loading="lazy" src="./assets/achievement-05-trim.png" alt="" /></span>Вода<strong data-goal-water>2000 мл</strong></button>
+          <button type="button" class="goal-row"><span><i class="profile-water-symbol" aria-hidden="true"></i></span>Вода<strong data-goal-water>2000 мл</strong></button>
         </article>
 
         <article class="profile-panel">
@@ -335,7 +335,7 @@ const text = {
   updateSoon: "Следующее обновление скоро!",
   reminderSaved: "Напоминания сохранены",
   reminderSaveFailed: "Не смог сохранить напоминание",
-  waterAdded: "Добавил 150 мл 💧",
+  waterAdded: "Добавил 200 мл 💧",
   waterRemoved: "Последнюю порцию убрал",
   waterSaveFailed: "Не смог сохранить воду",
   smaller: "\u041f\u043e\u0440\u0446\u0438\u044f \u0443\u043c\u0435\u043d\u044c\u0448\u0435\u043d\u0430",
@@ -1412,7 +1412,7 @@ async function changeWater(action) {
     const data = await miniappRequest("/api/miniapp/water", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, amount_ml: 150 }),
+      body: JSON.stringify({ action, amount_ml: 200 }),
     });
     applyServerState(data);
     showToast(action === "add" ? text.waterAdded : text.waterRemoved);

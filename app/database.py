@@ -941,7 +941,7 @@ class Database:
             ).fetchall()
             return [row["day"] for row in rows if row["day"]]
 
-    def add_water_entry(self, telegram_id: int, amount_ml: int = 150) -> dict[str, int]:
+    def add_water_entry(self, telegram_id: int, amount_ml: int = 200) -> dict[str, int]:
         amount_ml = max(50, min(500, int(amount_ml)))
         user = self.get_or_create_user(telegram_id)
         with self.connect() as conn:
