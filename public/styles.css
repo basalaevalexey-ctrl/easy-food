@@ -1514,20 +1514,10 @@ h2 {
   line-height: 1.25;
 }
 
-.water-reminder-panel .reminder-row > span {
-  display: grid;
-  gap: 3px;
-}
-
-.water-reminder-panel .reminder-row b {
-  font-size: 14px;
-}
-
-.water-reminder-panel .reminder-row small {
-  max-width: 235px;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.3;
+.water-reminder-row {
+  padding-top: 10px;
+  border-top: 1px dashed #eadfcb;
+  font-weight: 700;
 }
 
 .reminder-time-row {
