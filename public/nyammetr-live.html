@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-86" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-87" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -220,6 +220,20 @@
           </label>
         </article>
 
+        <article class="profile-panel reminder-panel water-reminder-panel">
+          <h2><span><i class="profile-water-symbol" aria-hidden="true"></i></span>Напоминания о воде</h2>
+          <div class="reminder-row">
+            <span>
+              <b data-water-reminder-label>Выключены</b>
+              <small>До 2 раз в день, только если отстаешь от цели</small>
+            </span>
+            <label class="switch">
+              <input type="checkbox" data-water-reminder-enabled />
+              <span></span>
+            </label>
+          </div>
+        </article>
+
         <article class="profile-panel">
           <h2><span><img loading="lazy" src="./assets/profile-progress-trim.png" alt="" /></span>Прогресс</h2>
           <div class="profile-stats">
@@ -312,6 +326,8 @@ const foodSubmit = document.querySelector("[data-food-submit]");
 const reminderEnabled = document.querySelector("[data-reminder-enabled]");
 const reminderTime = document.querySelector("[data-reminder-time]");
 const reminderLabel = document.querySelector("[data-reminder-label]");
+const waterReminderEnabled = document.querySelector("[data-water-reminder-enabled]");
+const waterReminderLabel = document.querySelector("[data-water-reminder-label]");
 const referralShareButtons = document.querySelectorAll("[data-referral-share]");
 let calorieGoal = 2100;
 let profileGoal = "support";
@@ -335,6 +351,8 @@ const text = {
   updateSoon: "Следующее обновление скоро!",
   reminderSaved: "Напоминания сохранены",
   reminderSaveFailed: "Не смог сохранить напоминание",
+  waterReminderSaved: "Напоминания о воде сохранены",
+  waterReminderSaveFailed: "Не смог сохранить напоминания о воде",
   waterAdded: "Добавил 200 мл 💧",
   waterRemoved: "Последнюю порцию убрал",
   waterSaveFailed: "Не смог сохранить воду",
@@ -991,6 +1009,31 @@ async function saveReminderSettings() {
   }
 }
 
+function updateWaterReminderControls(waterReminder = {}) {
+  const enabled = Boolean(waterReminder.enabled);
+  if (waterReminderEnabled) waterReminderEnabled.checked = enabled;
+  if (waterReminderLabel) {
+    waterReminderLabel.textContent = enabled ? "Адаптивно, 11:30–19:30 МСК" : "Выключены";
+  }
+}
+
+async function saveWaterReminderSettings() {
+  const enabled = Boolean(waterReminderEnabled?.checked);
+  updateWaterReminderControls({ enabled });
+  try {
+    const data = await miniappRequest("/api/miniapp/water-reminder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    if (data) applyServerState(data);
+    showToast(text.waterReminderSaved);
+  } catch (error) {
+    showToast(text.waterReminderSaveFailed);
+    await loadServerState();
+  }
+}
+
 function showFoodError(error) {
   const code = error?.message || "";
   if (code === "not_food") {
@@ -1266,6 +1309,7 @@ function applyServerState(data) {
     onboarding.hidden = false;
   }
   updateReminderControls(data.reminder || {});
+  updateWaterReminderControls(data.water_reminder || {});
 
   document.querySelectorAll("[data-current-streak]").forEach((node) => {
     node.textContent = Math.max(roundValue(progress.current_streak), streakFromActiveDates());
@@ -1386,6 +1430,7 @@ foodPhotoInput?.addEventListener("change", () => {
 
 reminderEnabled?.addEventListener("change", saveReminderSettings);
 reminderTime?.addEventListener("change", saveReminderSettings);
+waterReminderEnabled?.addEventListener("change", saveWaterReminderSettings);
 
 document.querySelector("[data-missions-add]").addEventListener("click", () => {
   showScreen("home");

@@ -83,10 +83,15 @@ db = Database(
 )
 admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-86"
+WEBAPP_BUILD = "nyam-87"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 BOT_USERNAME = ""
+WATER_REMINDER_SLOTS = {
+    "11:30": 0.25,
+    "15:30": 0.50,
+    "19:30": 0.75,
+}
 
 
 def webapp_url_with_build() -> str:
@@ -597,6 +602,12 @@ def build_miniapp_payload(telegram_user: dict, selected_day: str | None = None) 
             "time": user.reminder_time or "09:00",
             "timezone": "МСК",
         },
+        "water_reminder": {
+            "enabled": user.water_reminders_enabled,
+            "timezone": "МСК",
+            "schedule": ["11:30", "15:30", "19:30"],
+            "max_per_day": 2,
+        },
         "targets": {
             "calories": user.calorie_target,
             "protein": user.protein_target,
@@ -722,6 +733,17 @@ def update_miniapp_water(telegram_user: dict, payload: dict) -> dict:
         db.add_water_entry(telegram_id, amount_ml)
     else:
         raise ValueError("invalid_water_action")
+    return build_miniapp_payload(telegram_user)
+
+
+def update_miniapp_water_reminder(telegram_user: dict, payload: dict) -> dict:
+    telegram_id = int(telegram_user["id"])
+    enabled = bool(payload.get("enabled"))
+    db.set_water_reminders_enabled(telegram_id, enabled)
+    db.record_user_event(
+        telegram_id,
+        "miniapp_water_reminder_enabled" if enabled else "miniapp_water_reminder_disabled",
+    )
     return build_miniapp_payload(telegram_user)
 
 
@@ -879,6 +901,7 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             "/api/miniapp/profile",
             "/api/miniapp/reminder",
             "/api/miniapp/water",
+            "/api/miniapp/water-reminder",
         }:
             self._send_json(404, {"error": "not_found"})
             return
@@ -917,6 +940,10 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
                 except ValueError as exc:
                     self._send_json(400, {"error": str(exc) or "invalid_water_action"})
                     return
+                self._send_json(200, result)
+                return
+            if parsed.path == "/api/miniapp/water-reminder":
+                result = update_miniapp_water_reminder(telegram_user, payload)
                 self._send_json(200, result)
                 return
             if parsed.path == "/api/miniapp/food/text":
@@ -970,6 +997,26 @@ def format_food_saved(entry: FoodEntry, user: User, entries: list[FoodEntry], is
         left = max(0, user.calorie_target - round_num(totals["calories"]))
         lines.append(f"Осталось на сегодня: {left} ккал")
     return "\n".join(lines)
+
+
+def format_water_reminder(summary: dict[str, int]) -> str:
+    return (
+        "💧 Небольшая пауза на воду\n\n"
+        f"Сегодня в балансе {summary['total_ml']} из {summary['target_ml']} мл. "
+        "Можно добавить одну обычную кружку.\n\n"
+        "Не обязательно пить много сразу — небольшие порции тоже считаются."
+    )
+
+
+def water_reminder_keyboard(telegram_id: int) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(text="💧 +200 мл", callback_data="water:add:200")],
+    ]
+    webapp_url = webapp_url_for_user(telegram_id)
+    if webapp_url:
+        rows.append([InlineKeyboardButton(text="Открыть Нямметр", web_app=WebAppInfo(url=webapp_url))])
+    rows.append([InlineKeyboardButton(text="Сегодня не напоминать", callback_data="water:skip")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 async def answer_not_food(message: Message, reason: str = "") -> None:
@@ -2066,6 +2113,34 @@ async def food_grams(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
+@router.callback_query(F.data == "water:add:200")
+async def water_reminder_add(callback: CallbackQuery) -> None:
+    summary = db.add_water_entry(callback.from_user.id, 200)
+    db.record_user_event(callback.from_user.id, "water_reminder_quick_add")
+    await callback.answer("Добавил 200 мл 💧")
+    if callback.message:
+        try:
+            await callback.message.edit_text(
+                format_water_reminder(summary),
+                reply_markup=water_reminder_keyboard(callback.from_user.id),
+            )
+        except Exception:
+            logger.debug("Could not refresh water reminder for user %s", callback.from_user.id)
+
+
+@router.callback_query(F.data == "water:skip")
+async def water_reminder_skip(callback: CallbackQuery) -> None:
+    today = datetime.now(MOSCOW_TZ).date().isoformat()
+    db.skip_water_reminders_today(callback.from_user.id, today)
+    db.record_user_event(callback.from_user.id, "water_reminder_skipped_today")
+    if callback.message:
+        try:
+            await callback.message.edit_reply_markup(reply_markup=None)
+        except Exception:
+            logger.debug("Could not hide water reminder buttons for user %s", callback.from_user.id)
+    await callback.answer("Сегодня больше не напомню 💚")
+
+
 @router.callback_query(F.data.startswith("food:fix:"))
 async def food_fix(callback: CallbackQuery, state: FSMContext) -> None:
     entry_id = int(callback.data.split(":")[-1])
@@ -2266,6 +2341,37 @@ async def reminder_loop(bot: Bot) -> None:
                 len(reminder_users),
                 reminders_sent,
                 reminders_logged,
+            )
+        water_ratio = WATER_REMINDER_SLOTS.get(current_time)
+        if water_ratio is not None:
+            water_candidates = db.get_users_for_water_reminder(current_time, today)
+            water_sent = 0
+            for user in water_candidates:
+                summary = db.get_water_summary(user.telegram_id)
+                expected_ml = round(summary["target_ml"] * water_ratio)
+                if summary["total_ml"] >= max(0, expected_ml - 300):
+                    continue
+                try:
+                    await bot.send_message(
+                        user.telegram_id,
+                        format_water_reminder(summary),
+                        reply_markup=water_reminder_keyboard(user.telegram_id),
+                    )
+                    db.log_reminder(user.telegram_id, "water", current_time, "sent")
+                    water_sent += 1
+                except TelegramForbiddenError:
+                    db.set_water_reminders_enabled(user.telegram_id, False)
+                    db.log_reminder(user.telegram_id, "water", current_time, "failed", "bot_blocked")
+                    logger.info("Water reminders disabled for blocked user %s", user.telegram_id)
+                except Exception as exc:
+                    db.log_reminder(user.telegram_id, "water", current_time, "failed", str(exc))
+                    logger.exception("Failed to send water reminder to user %s", user.telegram_id)
+                await asyncio.sleep(0.05)
+            logger.info(
+                "Water reminder loop %s: candidates=%s sent=%s",
+                current_time,
+                len(water_candidates),
+                water_sent,
             )
         if is_activation_window(now):
             for user, step in db.get_users_for_activation():

@@ -18,6 +18,8 @@ class User:
     goal_set_at: str | None
     reminder_time: str | None
     reminder_last_sent_date: str | None
+    water_reminders_enabled: bool
+    water_reminder_skip_date: str | None
     current_streak: int
     best_streak: int
     last_active_date: str | None

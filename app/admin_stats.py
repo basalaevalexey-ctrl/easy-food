@@ -340,12 +340,14 @@ class AdminStatsService:
         log_filter = self._date_filter("sent_at", days)
         conversion_log_filter = self._date_filter("l.sent_at", days)
         with self.db.connect() as conn:
-            total_logs = conn.execute("SELECT COUNT(*) FROM reminder_logs").fetchone()[0]
+            total_logs = conn.execute(
+                "SELECT COUNT(*) FROM reminder_logs WHERE reminder_type != 'water'"
+            ).fetchone()[0]
             sent = conn.execute(
-                f"SELECT COUNT(*) FROM reminder_logs WHERE status = 'sent' AND {log_filter}",
+                f"SELECT COUNT(*) FROM reminder_logs WHERE reminder_type != 'water' AND status = 'sent' AND {log_filter}",
             ).fetchone()[0]
             failed = conn.execute(
-                f"SELECT COUNT(*) FROM reminder_logs WHERE status = 'failed' AND {log_filter}",
+                f"SELECT COUNT(*) FROM reminder_logs WHERE reminder_type != 'water' AND status = 'failed' AND {log_filter}",
             ).fetchone()[0]
             converted = conn.execute(
                 f"""
@@ -355,6 +357,7 @@ class AdminStatsService:
                  AND datetime(f.created_at) >= datetime(l.sent_at)
                  AND datetime(f.created_at) <= datetime(l.sent_at, '+1 hour')
                 WHERE l.status = 'sent'
+                  AND l.reminder_type != 'water'
                   AND {conversion_log_filter}
                 """,
             ).fetchone()[0]
@@ -379,7 +382,7 @@ class AdminStatsService:
                                  AND datetime(f.created_at) <= datetime(l.sent_at, '+1 hour')
                            ) THEN 1 ELSE 0 END AS converted
                     FROM reminder_logs l
-                    WHERE l.status = 'sent' AND {conversion_log_filter}
+                    WHERE l.reminder_type != 'water' AND l.status = 'sent' AND {conversion_log_filter}
                 )
                 GROUP BY slot_group
                 """

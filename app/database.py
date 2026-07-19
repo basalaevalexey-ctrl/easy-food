@@ -21,6 +21,7 @@ from app.models import FoodEntry, FoodEstimate, User
 SERVICE_EVENT_TYPES = (
     "broadcast_received",
     "reminder_sent",
+    "water_sent",
     "duolingo_push_sent",
     "lifecycle:one_food_no_return_sent",
     "lifecycle:goal_no_food_sent",
@@ -73,6 +74,8 @@ class Database:
                     goal_set_at TEXT,
                     reminder_time TEXT,
                     reminder_last_sent_date TEXT,
+                    water_reminders_enabled INTEGER NOT NULL DEFAULT 0,
+                    water_reminder_skip_date TEXT,
                     current_streak INTEGER NOT NULL DEFAULT 0,
                     best_streak INTEGER NOT NULL DEFAULT 0,
                     last_active_date TEXT,
@@ -87,6 +90,8 @@ class Database:
             self._ensure_column(conn, "users", "water_target", "INTEGER")
             self._ensure_column(conn, "users", "reminder_time", "TEXT")
             self._ensure_column(conn, "users", "reminder_last_sent_date", "TEXT")
+            self._ensure_column(conn, "users", "water_reminders_enabled", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(conn, "users", "water_reminder_skip_date", "TEXT")
             self._ensure_column(conn, "users", "current_streak", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(conn, "users", "best_streak", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(conn, "users", "last_active_date", "TEXT")
@@ -636,6 +641,57 @@ class Database:
                   AND (reminder_last_sent_date IS NULL OR reminder_last_sent_date != ?)
                 """,
                 (reminder_time, today),
+            ).fetchall()
+            return [self._user_from_row(row) for row in rows]
+
+    def set_water_reminders_enabled(self, telegram_id: int, enabled: bool) -> User:
+        self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE users
+                SET water_reminders_enabled = ?,
+                    water_reminder_skip_date = NULL
+                WHERE telegram_id = ?
+                """,
+                (int(enabled), telegram_id),
+            )
+            row = conn.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,)).fetchone()
+            return self._user_from_row(row)
+
+    def skip_water_reminders_today(self, telegram_id: int, today: str) -> None:
+        self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE users SET water_reminder_skip_date = ? WHERE telegram_id = ?",
+                (today, telegram_id),
+            )
+
+    def get_users_for_water_reminder(self, slot: str, today: str) -> list[User]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT users.*
+                FROM users
+                WHERE users.water_reminders_enabled = 1
+                  AND (users.water_reminder_skip_date IS NULL OR users.water_reminder_skip_date != ?)
+                  AND (
+                      SELECT COUNT(*) FROM reminder_logs
+                      WHERE reminder_logs.user_id = users.id
+                        AND reminder_logs.reminder_type = 'water'
+                        AND reminder_logs.status = 'sent'
+                        AND date(reminder_logs.sent_at, '+3 hours') = ?
+                  ) < 2
+                  AND NOT EXISTS (
+                      SELECT 1 FROM reminder_logs
+                      WHERE reminder_logs.user_id = users.id
+                        AND reminder_logs.reminder_type = 'water'
+                        AND reminder_logs.slot = ?
+                        AND date(reminder_logs.sent_at, '+3 hours') = ?
+                  )
+                ORDER BY users.id ASC
+                """,
+                (today, today, slot, today),
             ).fetchall()
             return [self._user_from_row(row) for row in rows]
 
@@ -1600,6 +1656,8 @@ class Database:
             goal_set_at=row["goal_set_at"],
             reminder_time=row["reminder_time"],
             reminder_last_sent_date=row["reminder_last_sent_date"],
+            water_reminders_enabled=bool(row["water_reminders_enabled"]),
+            water_reminder_skip_date=row["water_reminder_skip_date"],
             current_streak=row["current_streak"],
             best_streak=row["best_streak"],
             last_active_date=row["last_active_date"],
