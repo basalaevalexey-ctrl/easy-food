@@ -1150,7 +1150,12 @@ async def maybe_send_daily_mission_completed(message: Message, telegram_id: int)
         )
 
 
-def format_today(user: User, entries: list[FoodEntry], mission_status: dict | None = None) -> str:
+def format_today(
+    user: User,
+    entries: list[FoodEntry],
+    mission_status: dict | None = None,
+    water_summary: dict[str, int] | None = None,
+) -> str:
     totals = today_totals(entries)
     target = user.calorie_target
     protein_target = user.protein_target
@@ -1194,6 +1199,11 @@ def format_today(user: User, entries: list[FoodEntry], mission_status: dict | No
             protein_line,
             f"Жиры: {round_num(totals['fat'])} г",
             f"Углеводы: {round_num(totals['carbs'])} г",
+            (
+                f"Вода: {water_summary['total_ml']} из {water_summary['target_ml']} мл"
+                if water_summary
+                else ""
+            ),
             "",
             "Еда:",
         ]
@@ -1567,7 +1577,15 @@ async def today_command(message: Message) -> None:
     entries = db.get_today_entries(message.from_user.id)
     await maybe_send_daily_mission_completed(message, message.from_user.id)
     mission_status = db.get_daily_mission_status(message.from_user.id)
-    await message.answer(format_today(user, entries, mission_status=mission_status))
+    water_summary = db.get_water_summary(message.from_user.id)
+    await message.answer(
+        format_today(
+            user,
+            entries,
+            mission_status=mission_status,
+            water_summary=water_summary,
+        )
+    )
     await maybe_send_achievements(message)
     await maybe_send_daily_mission_completed(message, message.from_user.id)
 
