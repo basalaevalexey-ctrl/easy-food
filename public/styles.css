@@ -1517,7 +1517,22 @@ h2 {
 .water-reminder-row {
   padding-top: 10px;
   border-top: 1px dashed #eadfcb;
-  font-weight: 700;
+}
+
+.water-reminder-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.water-reminder-copy b {
+  font-size: 14px;
+}
+
+.water-reminder-copy small {
+  max-width: 225px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
 }
 
 .reminder-time-row {

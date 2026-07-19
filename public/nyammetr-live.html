@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-88" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-89" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -211,7 +211,11 @@
             <input type="time" value="09:00" data-reminder-time />
           </label>
           <div class="reminder-row water-reminder-row">
-            <span>Напоминания о воде</span>
+            <span class="water-reminder-copy">
+              <b>Напоминания о воде</b>
+              <small data-water-reminder-label>Выключены</small>
+              <small>До 2 раз в день, только если отстаёшь от цели</small>
+            </span>
             <label class="switch">
               <input type="checkbox" data-water-reminder-enabled />
               <span></span>
@@ -312,6 +316,7 @@ const reminderEnabled = document.querySelector("[data-reminder-enabled]");
 const reminderTime = document.querySelector("[data-reminder-time]");
 const reminderLabel = document.querySelector("[data-reminder-label]");
 const waterReminderEnabled = document.querySelector("[data-water-reminder-enabled]");
+const waterReminderLabel = document.querySelector("[data-water-reminder-label]");
 const referralShareButtons = document.querySelectorAll("[data-referral-share]");
 let calorieGoal = 2100;
 let profileGoal = "support";
@@ -996,6 +1001,9 @@ async function saveReminderSettings() {
 function updateWaterReminderControls(waterReminder = {}) {
   const enabled = Boolean(waterReminder.enabled);
   if (waterReminderEnabled) waterReminderEnabled.checked = enabled;
+  if (waterReminderLabel) {
+    waterReminderLabel.textContent = enabled ? "Адаптивно, 11:30–19:30 МСК" : "Выключены";
+  }
 }
 
 async function saveWaterReminderSettings() {
