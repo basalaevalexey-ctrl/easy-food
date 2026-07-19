@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from app.achievements import Achievement, available_achievements, daily_food_signals
+from app.calorie_calculator import calculate_water_target
 from app.missions import (
     MISSION_ORDER,
     MISSIONS,
@@ -68,6 +69,7 @@ class Database:
                     activity TEXT,
                     calorie_target INTEGER,
                     protein_target INTEGER,
+                    water_target INTEGER,
                     goal_set_at TEXT,
                     reminder_time TEXT,
                     reminder_last_sent_date TEXT,
@@ -82,6 +84,7 @@ class Database:
                 """
             )
             self._ensure_column(conn, "users", "goal_set_at", "TEXT")
+            self._ensure_column(conn, "users", "water_target", "INTEGER")
             self._ensure_column(conn, "users", "reminder_time", "TEXT")
             self._ensure_column(conn, "users", "reminder_last_sent_date", "TEXT")
             self._ensure_column(conn, "users", "current_streak", "INTEGER NOT NULL DEFAULT 0")
@@ -110,6 +113,7 @@ class Database:
                     protein REAL NOT NULL,
                     fat REAL NOT NULL,
                     carbs REAL NOT NULL,
+                    water_ml REAL NOT NULL DEFAULT 0,
                     confidence TEXT NOT NULL,
                     source TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -153,6 +157,28 @@ class Database:
                     UNIQUE(user_id, mission_date),
                     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                 )
+                """
+            )
+            self._ensure_column(conn, "food_entries", "water_ml", "REAL NOT NULL DEFAULT 0")
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS water_entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    amount_ml INTEGER NOT NULL CHECK(amount_ml > 0),
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_water_entries_user_created ON water_entries(user_id, created_at)"
+            )
+            conn.execute(
+                """
+                UPDATE users
+                SET water_target = MIN(3000, MAX(1500, ROUND(weight * 30.0 / 50.0) * 50))
+                WHERE water_target IS NULL AND weight IS NOT NULL
                 """
             )
             conn.execute(
@@ -272,6 +298,7 @@ class Database:
                     "user_achievements",
                     "daily_missions",
                     "lifecycle_pushes",
+                    "water_entries",
                 ):
                     if table in tables:
                         total += int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
@@ -393,8 +420,11 @@ class Database:
             "activity",
             "calorie_target",
             "protein_target",
+            "water_target",
             "goal_set_at",
         ]
+        if data.get("weight") is not None:
+            data["water_target"] = calculate_water_target(float(data["weight"]))
         data["goal_set_at"] = datetime.now().isoformat(timespec="seconds")
         values = [data.get(field) for field in fields]
         assignments = ", ".join(f"{field} = ?" for field in fields)
@@ -791,8 +821,8 @@ class Database:
             cursor = conn.execute(
                 """
                 INSERT INTO food_entries
-                    (user_id, title, description, calories, protein, fat, carbs, confidence, source)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (user_id, title, description, calories, protein, fat, carbs, water_ml, confidence, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     user.id,
@@ -802,6 +832,7 @@ class Database:
                     estimate.protein,
                     estimate.fat,
                     estimate.carbs,
+                    estimate.water_ml,
                     estimate.confidence,
                     source,
                 ),
@@ -829,10 +860,11 @@ class Database:
                 SET calories = calories * ?,
                     protein = protein * ?,
                     fat = fat * ?,
-                    carbs = carbs * ?
+                    carbs = carbs * ?,
+                    water_ml = water_ml * ?
                 WHERE id = ?
                 """,
-                (factor, factor, factor, factor, entry_id),
+                (factor, factor, factor, factor, factor, entry_id),
             )
         return self.get_food_entry(entry_id, telegram_id)
 
@@ -844,7 +876,7 @@ class Database:
             conn.execute(
                 """
                 UPDATE food_entries
-                SET title = ?, description = ?, calories = ?, protein = ?, fat = ?, carbs = ?, confidence = ?
+                SET title = ?, description = ?, calories = ?, protein = ?, fat = ?, carbs = ?, water_ml = ?, confidence = ?
                 WHERE id = ?
                 """,
                 (
@@ -854,6 +886,7 @@ class Database:
                     estimate.protein,
                     estimate.fat,
                     estimate.carbs,
+                    estimate.water_ml,
                     estimate.confidence,
                     entry_id,
                 ),
@@ -907,6 +940,66 @@ class Database:
                 (user.id,),
             ).fetchall()
             return [row["day"] for row in rows if row["day"]]
+
+    def add_water_entry(self, telegram_id: int, amount_ml: int = 150) -> dict[str, int]:
+        amount_ml = max(50, min(500, int(amount_ml)))
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            conn.execute(
+                "INSERT INTO water_entries (user_id, amount_ml) VALUES (?, ?)",
+                (user.id, amount_ml),
+            )
+            conn.execute(
+                "INSERT INTO user_events (user_id, event_type) VALUES (?, 'miniapp_water_added')",
+                (user.id,),
+            )
+        return self.get_water_summary(telegram_id)
+
+    def remove_last_water_entry(self, telegram_id: int) -> dict[str, int]:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id FROM water_entries
+                WHERE user_id = ? AND date(created_at, '+3 hours') = date('now', '+3 hours')
+                ORDER BY id DESC LIMIT 1
+                """,
+                (user.id,),
+            ).fetchone()
+            if row:
+                conn.execute("DELETE FROM water_entries WHERE id = ?", (row["id"],))
+        return self.get_water_summary(telegram_id)
+
+    def get_water_summary(self, telegram_id: int, day: str | None = None) -> dict[str, int]:
+        user = self.get_or_create_user(telegram_id)
+        target = user.water_target or (calculate_water_target(user.weight) if user.weight else 2000)
+        with self.connect() as conn:
+            day_filter = day or conn.execute("SELECT date('now', '+3 hours')").fetchone()[0]
+            manual_ml = conn.execute(
+                """
+                SELECT COALESCE(SUM(amount_ml), 0) FROM water_entries
+                WHERE user_id = ? AND date(created_at, '+3 hours') = ?
+                """,
+                (user.id, day_filter),
+            ).fetchone()[0]
+            food_ml = conn.execute(
+                """
+                SELECT COALESCE(SUM(water_ml), 0) FROM food_entries
+                WHERE user_id = ? AND date(created_at, '+3 hours') = ?
+                """,
+                (user.id, day_filter),
+            ).fetchone()[0]
+        manual = round(float(manual_ml or 0))
+        food = round(float(food_ml or 0))
+        total = manual + food
+        return {
+            "manual_ml": manual,
+            "food_ml": food,
+            "total_ml": total,
+            "target_ml": int(target),
+            "remaining_ml": max(0, int(target) - total),
+            "percent": min(100, round(total / int(target) * 100)) if target else 0,
+        }
 
     def get_entries_between(self, telegram_id: int, start: str, end: str) -> list[FoodEntry]:
         user = self.get_or_create_user(telegram_id)
@@ -1503,6 +1596,7 @@ class Database:
             activity=row["activity"],
             calorie_target=row["calorie_target"],
             protein_target=row["protein_target"],
+            water_target=row["water_target"],
             goal_set_at=row["goal_set_at"],
             reminder_time=row["reminder_time"],
             reminder_last_sent_date=row["reminder_last_sent_date"],
@@ -1526,6 +1620,7 @@ class Database:
             protein=row["protein"],
             fat=row["fat"],
             carbs=row["carbs"],
+            water_ml=row["water_ml"],
             confidence=row["confidence"],
             source=row["source"],
             created_at=datetime.fromisoformat(row["created_at"]),

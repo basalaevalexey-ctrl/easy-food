@@ -83,7 +83,7 @@ db = Database(
 )
 admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-84"
+WEBAPP_BUILD = "nyam-85"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 BOT_USERNAME = ""
@@ -579,6 +579,7 @@ def build_miniapp_payload(telegram_user: dict, selected_day: str | None = None) 
     mission = mission_status["mission"]
     active_dates = db.get_food_entry_days(telegram_id)
     referral_progress = db.get_referral_progress(telegram_id)
+    water = db.get_water_summary(telegram_id, selected_day)
 
     return {
         "user": {
@@ -599,7 +600,9 @@ def build_miniapp_payload(telegram_user: dict, selected_day: str | None = None) 
         "targets": {
             "calories": user.calorie_target,
             "protein": user.protein_target,
+            "water_ml": water["target_ml"],
         },
+        "water": water,
         "today": {
             "date": selected_day,
             "totals": {key: round_num(value) for key, value in totals.items()},
@@ -612,6 +615,7 @@ def build_miniapp_payload(telegram_user: dict, selected_day: str | None = None) 
                     "protein": round_num(entry.protein),
                     "fat": round_num(entry.fat),
                     "carbs": round_num(entry.carbs),
+                    "water_ml": round_num(entry.water_ml),
                     "source": entry.source,
                     "created_at": _json_safe(entry.created_at),
                 }
@@ -705,6 +709,19 @@ def update_miniapp_reminder(telegram_user: dict, payload: dict) -> dict:
     reminder_time = normalize_reminder_time(str(payload.get("time") or "09:00")) or "09:00"
     db.set_reminder_time(telegram_id, reminder_time if enabled else None)
     db.record_user_event(telegram_id, "miniapp_reminder_updated" if enabled else "miniapp_reminder_disabled")
+    return build_miniapp_payload(telegram_user)
+
+
+def update_miniapp_water(telegram_user: dict, payload: dict) -> dict:
+    telegram_id = int(telegram_user["id"])
+    action = str(payload.get("action") or "add")
+    if action == "remove":
+        db.remove_last_water_entry(telegram_id)
+    elif action == "add":
+        amount_ml = int(payload.get("amount_ml") or 150)
+        db.add_water_entry(telegram_id, amount_ml)
+    else:
+        raise ValueError("invalid_water_action")
     return build_miniapp_payload(telegram_user)
 
 
@@ -817,6 +834,7 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             "protein": round_num(entry.protein),
             "fat": round_num(entry.fat),
             "carbs": round_num(entry.carbs),
+            "water_ml": round_num(entry.water_ml),
             "source": entry.source,
             "created_at": _json_safe(entry.created_at),
         }
@@ -860,6 +878,7 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             "/api/miniapp/food/photo",
             "/api/miniapp/profile",
             "/api/miniapp/reminder",
+            "/api/miniapp/water",
         }:
             self._send_json(404, {"error": "not_found"})
             return
@@ -890,6 +909,14 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
                 return
             if parsed.path == "/api/miniapp/reminder":
                 result = update_miniapp_reminder(telegram_user, payload)
+                self._send_json(200, result)
+                return
+            if parsed.path == "/api/miniapp/water":
+                try:
+                    result = update_miniapp_water(telegram_user, payload)
+                except ValueError as exc:
+                    self._send_json(400, {"error": str(exc) or "invalid_water_action"})
+                    return
                 self._send_json(200, result)
                 return
             if parsed.path == "/api/miniapp/food/text":

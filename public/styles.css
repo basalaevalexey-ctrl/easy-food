@@ -374,6 +374,102 @@ button {
   padding: 20px 16px;
 }
 
+.water-strip {
+  width: 100%;
+  min-height: 72px;
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #dcecf3;
+  border-radius: 16px;
+  background: rgba(248, 253, 255, 0.94);
+  box-shadow: 0 8px 20px rgba(39, 123, 162, 0.1);
+}
+
+.water-drop {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #e5f7fd;
+  font-size: 21px;
+}
+
+.water-content {
+  min-width: 0;
+}
+
+.water-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.water-heading strong {
+  font-size: 15px;
+}
+
+.water-heading span {
+  white-space: nowrap;
+  color: #4d6975;
+}
+
+.water-progress {
+  height: 7px;
+  margin-top: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dfeff4;
+}
+
+.water-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #43bde7, #75d7ef);
+  transition: width 0.24s ease;
+}
+
+.water-content small {
+  display: block;
+  margin-top: 3px;
+  color: #71838a;
+  font-size: 10px;
+}
+
+.water-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.water-actions button {
+  height: 32px;
+  min-width: 32px;
+  padding: 0 8px;
+  border: 1px solid #b9dce8;
+  border-radius: 9px;
+  background: white;
+  color: #258cb3;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.water-actions button:first-child {
+  padding: 0;
+  font-size: 20px;
+}
+
+.water-actions button:disabled {
+  opacity: 0.38;
+}
+
 .card-top {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -1309,7 +1405,8 @@ h2 {
 
 .profile-panel h2 span img[src*="profile-goals"],
 .profile-panel button > span img[src*="profile-calorie-goal"],
-.profile-panel button > span img[src*="profile-protein-goal"] {
+.profile-panel button > span img[src*="profile-protein-goal"],
+.profile-panel button > span img[src*="achievement-05"] {
   width: 36px;
   height: 36px;
 }

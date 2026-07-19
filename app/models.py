@@ -14,6 +14,7 @@ class User:
     activity: str | None
     calorie_target: int | None
     protein_target: int | None
+    water_target: int | None
     goal_set_at: str | None
     reminder_time: str | None
     reminder_last_sent_date: str | None
@@ -35,6 +36,7 @@ class FoodEstimate:
     protein: float
     fat: float
     carbs: float
+    water_ml: float
     confidence: str
     comment: str
     not_food_reason: str
@@ -50,6 +52,7 @@ class FoodEntry:
     protein: float
     fat: float
     carbs: float
+    water_ml: float
     confidence: str
     source: str
     created_at: datetime

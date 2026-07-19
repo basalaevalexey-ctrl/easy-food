@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-80" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-85" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -39,6 +39,22 @@
           </div>
         </article>
 
+        <article class="water-strip" aria-label="Водный баланс">
+          <span class="water-drop" aria-hidden="true">💧</span>
+          <div class="water-content">
+            <div class="water-heading">
+              <strong>Вода</strong>
+              <span><b data-water-total>0</b> / <span data-water-target>2000</span> мл</span>
+            </div>
+            <div class="water-progress"><span data-water-progress style="width: 0%"></span></div>
+            <small>Из еды: <span data-water-food>0</span> мл</small>
+          </div>
+          <div class="water-actions">
+            <button type="button" data-water-remove aria-label="Убрать последнюю порцию воды" title="Убрать последнюю порцию">−</button>
+            <button type="button" data-water-add aria-label="Добавить 150 миллилитров воды">+150</button>
+          </div>
+        </article>
+
         <button class="primary-action" type="button" data-add-toggle aria-expanded="false">
           <span class="action-plus" aria-hidden="true">+</span>
           <span class="action-label">Добавить еду</span>
@@ -49,7 +65,7 @@
           <button type="button" data-add-photo><span>📷</span>Фото еды</button>
         </div>
 
-        <aside class="tip-card" data-soon-update role="button" tabindex="0">
+        <aside class="tip-card" data-water-tip role="button" tabindex="0">
           <img class="tip-paw" src="./assets/paw.png" alt="" />
           <div>
             <strong>Пей больше воды! 💧</strong>
@@ -180,6 +196,7 @@
           <h2><span><img loading="lazy" src="./assets/profile-goals-symbol.png" alt="" /></span>Мои цели</h2>
           <button type="button" class="goal-row"><span><img loading="lazy" src="./assets/profile-calorie-goal-trim.png" alt="" /></span>Дневная норма<strong data-goal-calories>2100 ккал</strong></button>
           <button type="button" class="goal-row"><span><img loading="lazy" src="./assets/profile-protein-goal-trim.png" alt="" /></span>Белок<strong data-goal-protein>130 г</strong></button>
+          <button type="button" class="goal-row"><span><img loading="lazy" src="./assets/achievement-05-trim.png" alt="" /></span>Вода<strong data-goal-water>2000 мл</strong></button>
         </article>
 
         <article class="profile-panel">
@@ -276,6 +293,9 @@ const profileHeight = document.querySelector("[data-profile-height]");
 const profileActivity = document.querySelector("[data-profile-activity]");
 const goalCalories = document.querySelector("[data-goal-calories]");
 const goalProtein = document.querySelector("[data-goal-protein]");
+const goalWater = document.querySelector("[data-goal-water]");
+const waterAdd = document.querySelector("[data-water-add]");
+const waterRemove = document.querySelector("[data-water-remove]");
 const onboarding = document.querySelector("[data-onboarding]");
 const onboardingForm = document.querySelector("[data-onboarding-form]");
 const onboardingName = document.querySelector("[data-onboarding-name]");
@@ -315,6 +335,9 @@ const text = {
   updateSoon: "Следующее обновление скоро!",
   reminderSaved: "Напоминания сохранены",
   reminderSaveFailed: "Не смог сохранить напоминание",
+  waterAdded: "Добавил 150 мл 💧",
+  waterRemoved: "Последнюю порцию убрал",
+  waterSaveFailed: "Не смог сохранить воду",
   smaller: "\u041f\u043e\u0440\u0446\u0438\u044f \u0443\u043c\u0435\u043d\u044c\u0448\u0435\u043d\u0430",
   larger: "\u041f\u043e\u0440\u0446\u0438\u044f \u0443\u0432\u0435\u043b\u0438\u0447\u0435\u043d\u0430",
   editGrams: "\u0422\u0435\u043f\u0435\u0440\u044c \u0433\u0440\u0430\u043c\u043c\u044b \u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u0443\u044e\u0442\u0441\u044f \u0432 \u0441\u0442\u0440\u043e\u043a\u0430\u0445",
@@ -703,9 +726,14 @@ function calculateGoals() {
 
   calorieGoal = Math.round((bmr * factor * (goalFactors[profileGoal] || 1)) / 50) * 50;
   const proteinGoal = Math.round(weight * (profileGoal === "gain" ? 1.9 : 1.6));
+  const waterGoal = Math.max(1500, Math.min(3000, Math.round((weight * 30) / 50) * 50));
 
   goalCalories.textContent = `${calorieGoal} ${text.kcal}`;
   goalProtein.textContent = `${proteinGoal} ${text.gram}`;
+  goalWater.textContent = `${waterGoal} мл`;
+  document.querySelectorAll("[data-water-target]").forEach((node) => {
+    node.textContent = waterGoal;
+  });
 
   document.querySelectorAll("[data-calorie-goal-label]").forEach((node) => {
     node.textContent = `/ ${calorieGoal} ${text.kcal}`;
@@ -1074,6 +1102,12 @@ function resetLiveTotals() {
   document.querySelectorAll(".calorie-card .progress-line span").forEach((bar) => {
     bar.style.width = "0%";
   });
+  document.querySelectorAll("[data-water-total], [data-water-food]").forEach((node) => {
+    node.textContent = "0";
+  });
+  document.querySelectorAll("[data-water-progress]").forEach((bar) => {
+    bar.style.width = "0%";
+  });
 }
 
 function showLoadingState() {
@@ -1145,6 +1179,7 @@ function applyServerState(data) {
   const progress = data.progress || {};
   const mission = data.mission || {};
   const referral = data.referral || {};
+  const water = data.water || {};
   const unlockedAchievements = new Set((data.achievements || []).map((item) => item.key));
   const calories = roundValue(totals.calories);
   const protein = roundValue(totals.protein);
@@ -1158,6 +1193,17 @@ function applyServerState(data) {
   if (targetProtein > 0) {
     goalProtein.textContent = `${roundValue(targetProtein)} ${text.gram}`;
   }
+  const waterTarget = roundValue(water.target_ml || data.targets?.water_ml || 2000);
+  const waterTotal = roundValue(water.total_ml);
+  const waterFood = roundValue(water.food_ml);
+  if (goalWater) goalWater.textContent = `${waterTarget} мл`;
+  document.querySelectorAll("[data-water-total]").forEach((node) => { node.textContent = waterTotal; });
+  document.querySelectorAll("[data-water-target]").forEach((node) => { node.textContent = waterTarget; });
+  document.querySelectorAll("[data-water-food]").forEach((node) => { node.textContent = waterFood; });
+  document.querySelectorAll("[data-water-progress]").forEach((bar) => {
+    bar.style.width = `${Math.max(0, Math.min(100, roundValue(water.percent)))}%`;
+  });
+  if (waterRemove) waterRemove.disabled = roundValue(water.manual_ml) <= 0;
 
   document.querySelectorAll("[data-calories]").forEach((node) => {
     node.textContent = calories;
@@ -1355,6 +1401,39 @@ document.querySelectorAll("[data-soon-update]").forEach((node) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       showSoon();
+    }
+  });
+});
+
+async function changeWater(action) {
+  waterAdd.disabled = true;
+  waterRemove.disabled = true;
+  try {
+    const data = await miniappRequest("/api/miniapp/water", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, amount_ml: 150 }),
+    });
+    applyServerState(data);
+    showToast(action === "add" ? text.waterAdded : text.waterRemoved);
+  } catch (error) {
+    showToast(text.waterSaveFailed);
+    await loadServerState();
+  } finally {
+    waterAdd.disabled = false;
+  }
+}
+
+waterAdd?.addEventListener("click", () => changeWater("add"));
+waterRemove?.addEventListener("click", () => changeWater("remove"));
+
+document.querySelectorAll("[data-water-tip]").forEach((node) => {
+  const showWaterTip = () => showToast("Небольшие порции в течение дня тоже считаются 💧", 2600);
+  node.addEventListener("click", showWaterTip);
+  node.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      showWaterTip();
     }
   });
 });

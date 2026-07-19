@@ -33,3 +33,8 @@ def calculate_targets(
     calorie_target = bmr * ACTIVITY_FACTORS[activity] * GOAL_FACTORS[goal]
     protein_target = weight * PROTEIN_PER_KG[goal]
     return round(calorie_target), round(protein_target)
+
+
+def calculate_water_target(weight: float) -> int:
+    target = round((weight * 30) / 50) * 50
+    return max(1500, min(3000, target))
