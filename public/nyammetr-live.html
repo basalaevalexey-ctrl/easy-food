@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-89" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-90" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -23,6 +23,16 @@
           </div>
           <b>›</b>
         </button>
+
+        <button class="primary-action" type="button" data-add-toggle aria-expanded="false">
+          <span class="action-plus" aria-hidden="true">+</span>
+          <span class="action-label">Добавить еду</span>
+        </button>
+
+        <div class="add-food-menu" data-add-menu>
+          <button type="button" data-add-text><span>✎</span>Текстом</button>
+          <button type="button" data-add-photo><span>📷</span>Фото еды</button>
+        </div>
 
         <article class="calorie-card">
           <div class="card-top">
@@ -54,16 +64,6 @@
             <button type="button" data-water-add aria-label="Добавить 200 миллилитров воды">+200</button>
           </div>
         </article>
-
-        <button class="primary-action" type="button" data-add-toggle aria-expanded="false">
-          <span class="action-plus" aria-hidden="true">+</span>
-          <span class="action-label">Добавить еду</span>
-        </button>
-
-        <div class="add-food-menu" data-add-menu>
-          <button type="button" data-add-text><span>✎</span>Текстом</button>
-          <button type="button" data-add-photo><span>📷</span>Фото еды</button>
-        </div>
 
       </section>
 
