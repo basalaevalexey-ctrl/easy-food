@@ -171,6 +171,19 @@ def goal_nudge_keyboard(step: int, webapp_url: str = "") -> InlineKeyboardMarkup
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
+def streak_rescue_keyboard(webapp_url: str = "") -> InlineKeyboardMarkup:
+    if webapp_url.startswith("https://"):
+        add_button = InlineKeyboardButton(text="🍽 Добавить еду", web_app=WebAppInfo(url=webapp_url))
+    else:
+        add_button = InlineKeyboardButton(text="🍽 Добавить еду", callback_data="streak_rescue:add")
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [add_button],
+            [InlineKeyboardButton(text="❄️ Заморозить стрик", callback_data="streak_rescue:freeze")],
+        ]
+    )
+
+
 def food_actions(entry_id: int, can_fix_dish: bool = False) -> InlineKeyboardMarkup:
     keyboard = [
         [

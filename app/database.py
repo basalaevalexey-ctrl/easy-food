@@ -250,6 +250,18 @@ class Database:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS streak_freezes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    freeze_date TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(user_id, freeze_date),
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+                """
+            )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_user_events_type_date ON user_events(event_type, created_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_food_entries_user_date ON food_entries(user_id, created_at)")
             conn.execute(
@@ -263,6 +275,7 @@ class Database:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_broadcast_logs_campaign ON broadcast_logs(campaign_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_lifecycle_pushes_user_segment ON lifecycle_pushes(user_id, segment, sent_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_referrals_inviter ON referrals(inviter_user_id, activated_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_streak_freezes_user_date ON streak_freezes(user_id, freeze_date)")
             self._rebuild_user_streaks(conn)
 
     def _restore_best_database(self) -> None:
@@ -312,6 +325,7 @@ class Database:
                     "daily_missions",
                     "lifecycle_pushes",
                     "water_entries",
+                    "streak_freezes",
                 ):
                     if table in tables:
                         total += int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
@@ -378,15 +392,26 @@ class Database:
     def _streaks_for_user(self, conn: sqlite3.Connection, user_id: int) -> tuple[int, int, str | None]:
         rows = conn.execute(
             """
-            SELECT DISTINCT date(created_at, '+3 hours') AS day
-            FROM food_entries
-            WHERE user_id = ?
+            SELECT day, MAX(is_active) AS is_active
+            FROM (
+                SELECT date(created_at, '+3 hours') AS day, 1 AS is_active
+                FROM food_entries
+                WHERE user_id = ?
+                UNION ALL
+                SELECT freeze_date AS day, 0 AS is_active
+                FROM streak_freezes
+                WHERE user_id = ?
+            ) streak_days
+            GROUP BY day
             ORDER BY day ASC
             """,
-            (user_id,),
+            (user_id, user_id),
         ).fetchall()
-        active_days = [datetime.fromisoformat(row["day"]).date() for row in rows]
-        current_streak, best_streak, last_active_date = self._streaks_from_active_days(active_days)
+        streak_days = [
+            (datetime.fromisoformat(row["day"]).date(), bool(row["is_active"]))
+            for row in rows
+        ]
+        current_streak, best_streak, last_active_date = self._streaks_from_calendar_days(streak_days)
         if last_active_date:
             today = conn.execute("SELECT date('now', '+3 hours')").fetchone()[0]
             yesterday = conn.execute("SELECT date('now', '+3 hours', '-1 day')").fetchone()[0]
@@ -395,24 +420,28 @@ class Database:
         return current_streak, best_streak, last_active_date
 
     @staticmethod
-    def _streaks_from_active_days(active_days: list[Any]) -> tuple[int, int, str | None]:
-        if not active_days:
+    def _streaks_from_calendar_days(streak_days: list[tuple[Any, bool]]) -> tuple[int, int, str | None]:
+        if not streak_days:
             return 0, 0, None
 
         best_streak = 0
         running_streak = 0
         previous_day = None
         current_streak = 0
-        for active_day in active_days:
-            if previous_day and active_day == previous_day + timedelta(days=1):
+        last_streak_date = None
+        for streak_day, is_active in streak_days:
+            is_consecutive = previous_day is not None and streak_day == previous_day + timedelta(days=1)
+            if not is_consecutive:
+                running_streak = 0
+            if is_active:
                 running_streak += 1
-            else:
-                running_streak = 1
-            best_streak = max(best_streak, running_streak)
-            current_streak = running_streak
-            previous_day = active_day
+                best_streak = max(best_streak, running_streak)
+            if running_streak > 0:
+                current_streak = running_streak
+                last_streak_date = streak_day
+            previous_day = streak_day
 
-        return current_streak, best_streak, active_days[-1].isoformat()
+        return current_streak, best_streak, last_streak_date.isoformat() if last_streak_date else None
 
     def get_or_create_user(self, telegram_id: int) -> User:
         with self.connect() as conn:
@@ -1170,7 +1199,41 @@ class Database:
                 (user.id, f"-{days - 1} days"),
             ).fetchall()
 
-    def mark_nyam_streak_if_first_today(self, telegram_id: int) -> dict[str, int | bool] | None:
+    def get_users_for_streak_rescue(self, today: str, yesterday: str) -> list[User]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT users.*
+                FROM users
+                WHERE users.current_streak >= 3
+                  AND users.last_active_date = ?
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM food_entries
+                      WHERE food_entries.user_id = users.id
+                        AND date(food_entries.created_at, '+3 hours') = ?
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM streak_freezes
+                      WHERE streak_freezes.user_id = users.id
+                        AND streak_freezes.freeze_date >= date(?, '-6 days')
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM reminder_logs
+                      WHERE reminder_logs.user_id = users.id
+                        AND reminder_logs.reminder_type = 'streak_rescue'
+                        AND reminder_logs.status = 'sent'
+                        AND date(reminder_logs.sent_at, '+3 hours') = ?
+                  )
+                ORDER BY users.id ASC
+                """,
+                (yesterday, today, today, today),
+            ).fetchall()
+            return [self._user_from_row(row) for row in rows]
+
+    def freeze_streak(self, telegram_id: int) -> dict[str, int | str]:
         user = self.get_or_create_user(telegram_id)
         with self.connect() as conn:
             today = conn.execute("SELECT date('now', '+3 hours')").fetchone()[0]
@@ -1178,35 +1241,84 @@ class Database:
             active_today = conn.execute(
                 """
                 SELECT 1 FROM food_entries
-                WHERE user_id = ?
-                  AND date(created_at, '+3 hours') = ?
+                WHERE user_id = ? AND date(created_at, '+3 hours') = ?
                 LIMIT 1
                 """,
                 (user.id, today),
             ).fetchone()
-            if not active_today:
+            if active_today:
+                return {"status": "active_today", "current_streak": int(user.current_streak or 0)}
+
+            existing = conn.execute(
+                "SELECT 1 FROM streak_freezes WHERE user_id = ? AND freeze_date = ?",
+                (user.id, today),
+            ).fetchone()
+            if existing:
+                return {"status": "already_frozen", "current_streak": int(user.current_streak or 0)}
+
+            current_streak, best_streak, last_streak_date = self._streaks_for_user(conn, user.id)
+            if current_streak < 3 or last_streak_date != yesterday:
+                return {"status": "not_at_risk", "current_streak": int(current_streak or 0)}
+
+            recent_freeze = conn.execute(
+                """
+                SELECT 1 FROM streak_freezes
+                WHERE user_id = ? AND freeze_date >= date(?, '-6 days')
+                LIMIT 1
+                """,
+                (user.id, today),
+            ).fetchone()
+            if recent_freeze:
+                return {"status": "cooldown", "current_streak": int(current_streak)}
+
+            conn.execute(
+                "INSERT INTO streak_freezes (user_id, freeze_date) VALUES (?, ?)",
+                (user.id, today),
+            )
+            conn.execute(
+                """
+                UPDATE users
+                SET current_streak = ?, best_streak = ?, last_active_date = ?
+                WHERE id = ?
+                """,
+                (current_streak, best_streak, today, user.id),
+            )
+            conn.execute(
+                "INSERT INTO user_events (user_id, event_type) VALUES (?, 'nyam_streak_frozen')",
+                (user.id,),
+            )
+            return {"status": "frozen", "current_streak": int(current_streak)}
+
+    def mark_nyam_streak_if_first_today(self, telegram_id: int) -> dict[str, int | bool] | None:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            today = conn.execute("SELECT date('now', '+3 hours')").fetchone()[0]
+            entries_today = int(conn.execute(
+                """
+                SELECT COUNT(*) FROM food_entries
+                WHERE user_id = ?
+                  AND date(created_at, '+3 hours') = ?
+                """,
+                (user.id, today),
+            ).fetchone()[0])
+            if entries_today == 0 or entries_today > 1:
                 return None
 
             row = conn.execute(
                 """
-                SELECT current_streak, best_streak, last_active_date
+                SELECT best_streak
                 FROM users
                 WHERE id = ?
                 """,
                 (user.id,),
             ).fetchone()
-            last_active_date = row["last_active_date"]
-            if last_active_date == today:
-                return None
-
-            current_streak = int(row["current_streak"] or 0)
             previous_best_streak = int(row["best_streak"] or 0)
-            if last_active_date == yesterday:
-                current_streak += 1
-            else:
-                current_streak = 1
-
-            best_streak = max(previous_best_streak, current_streak)
+            conn.execute(
+                "DELETE FROM streak_freezes WHERE user_id = ? AND freeze_date = ?",
+                (user.id, today),
+            )
+            current_streak, calculated_best, last_active_date = self._streaks_for_user(conn, user.id)
+            best_streak = max(previous_best_streak, calculated_best, current_streak)
             best_updated = best_streak > previous_best_streak
             conn.execute(
                 """
@@ -1216,7 +1328,7 @@ class Database:
                     last_active_date = ?
                 WHERE id = ?
                 """,
-                (current_streak, best_streak, today, user.id),
+                (current_streak, best_streak, last_active_date, user.id),
             )
             conn.execute(
                 "INSERT INTO user_events (user_id, event_type) VALUES (?, ?)",

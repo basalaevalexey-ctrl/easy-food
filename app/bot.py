@@ -64,6 +64,7 @@ from app.keyboards import (
     reminder_time_keyboard,
     setup_goal_intro_keyboard,
     sex_keyboard,
+    streak_rescue_keyboard,
 )
 from app.models import FoodEntry, User
 from app.openai_client import FoodRecognitionClient, NotFoodError, OpenAIRecognitionError
@@ -94,6 +95,7 @@ WATER_REMINDER_SLOTS = {
     "15:30": 0.50,
     "19:30": 0.75,
 }
+STREAK_RESCUE_TIME = "21:00"
 DAILY_REMINDER_MESSAGES = (
     (
         "Нямметр заглянул на минутку 🍽\n\n"
@@ -1070,6 +1072,14 @@ def format_water_reminder(summary: dict[str, int]) -> str:
         f"Сегодня в балансе {summary['total_ml']} из {summary['target_ml']} мл. "
         "Можно добавить одну обычную кружку.\n\n"
         "Не обязательно пить много сразу — небольшие порции тоже считаются."
+    )
+
+
+def streak_rescue_text(current_streak: int) -> str:
+    return (
+        f"Твой Ням-стрик: {current_streak} дней 🔥\n\n"
+        "Сегодня в дневнике пока нет еды. Можно добавить хотя бы одну запись или использовать заморозку.\n\n"
+        "❄️ Заморозка сохранит текущий стрик, но не увеличит его. Она доступна один раз в 7 дней."
     )
 
 
@@ -2255,6 +2265,28 @@ async def goal_nudge_callback(callback: CallbackQuery, state: FSMContext) -> Non
     await callback.answer()
 
 
+@router.callback_query(F.data.startswith("streak_rescue:"))
+async def streak_rescue_callback(callback: CallbackQuery) -> None:
+    action = callback.data.split(":")[-1]
+    if action == "add":
+        await callback.message.answer("Отправь фото еды или напиши, что съел — я добавлю запись в дневник 🍽")
+        await callback.answer()
+        return
+
+    result = db.freeze_streak(callback.from_user.id)
+    status = result["status"]
+    current_streak = int(result["current_streak"])
+    messages = {
+        "frozen": f"Ням-стрик заморожен ❄️\n🔥 Серия сохранена: {current_streak} дней",
+        "already_frozen": f"Сегодняшний стрик уже заморожен ❄️\n🔥 Серия: {current_streak} дней",
+        "active_today": "Сегодня уже есть запись еды — заморозка не нужна 💚",
+        "cooldown": "Заморозка уже использовалась за последние 7 дней. Стрик еще можно сохранить записью еды 🍽",
+        "not_at_risk": "Сейчас заморозка не требуется.",
+    }
+    await callback.message.edit_text(messages.get(status, "Не получилось заморозить стрик."))
+    await callback.answer()
+
+
 @router.callback_query(F.data == "water:add:200")
 async def water_reminder_add(callback: CallbackQuery) -> None:
     summary = db.add_water_entry(callback.from_user.id, 200)
@@ -2550,6 +2582,26 @@ async def reminder_loop(bot: Bot) -> None:
                         db.log_reminder(user.telegram_id, f"lifecycle:{segment}", f"step:{step}", "failed", str(exc))
                         logger.exception("Failed to send lifecycle push %s step %s to user %s", segment, step, user.telegram_id)
                     await asyncio.sleep(0.05)
+        if current_time == STREAK_RESCUE_TIME:
+            streak_candidates = db.get_users_for_streak_rescue(today, (today_date - timedelta(days=1)).isoformat())
+            streak_sent = 0
+            for user in streak_candidates:
+                try:
+                    await bot.send_message(
+                        user.telegram_id,
+                        streak_rescue_text(user.current_streak),
+                        reply_markup=streak_rescue_keyboard(webapp_url_with_build()),
+                    )
+                    db.log_reminder(user.telegram_id, "streak_rescue", current_time, "sent")
+                    streak_sent += 1
+                except TelegramForbiddenError:
+                    db.log_reminder(user.telegram_id, "streak_rescue", current_time, "failed", "bot_blocked")
+                    logger.info("Streak rescue skipped blocked user %s", user.telegram_id)
+                except Exception as exc:
+                    db.log_reminder(user.telegram_id, "streak_rescue", current_time, "failed", str(exc))
+                    logger.exception("Failed to send streak rescue to user %s", user.telegram_id)
+                await asyncio.sleep(0.05)
+            logger.info("Streak rescue loop %s: candidates=%s sent=%s", current_time, len(streak_candidates), streak_sent)
         if current_time == config.auto_push_time:
             yesterday = (today_date - timedelta(days=1)).isoformat()
             day_before_yesterday = (today_date - timedelta(days=2)).isoformat()
