@@ -7,7 +7,7 @@ import json
 import logging
 import mimetypes
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
@@ -92,6 +92,44 @@ WATER_REMINDER_SLOTS = {
     "15:30": 0.50,
     "19:30": 0.75,
 }
+DAILY_REMINDER_MESSAGES = (
+    (
+        "Нямметр заглянул на минутку 🍽\n\n"
+        "Если уже что-нибудь ел, запиши это фото или текстом. "
+        "Даже одной записи достаточно, чтобы увидеть примерный баланс дня."
+    ),
+    (
+        "Интересно, сколько уже набралось за сегодня? 👀\n\n"
+        "Добавь еду в Нямметр, и сразу увидишь калории, БЖУ и сколько осталось до дневной цели."
+    ),
+    (
+        "Учёт еды без весов и таблиц 💚\n\n"
+        "Сфотографируй блюдо или напиши, что ел. Нямметр сделает остальное."
+    ),
+    (
+        "Пора ненадолго заглянуть в Нямметр 🍽\n\n"
+        "В миниаппе можно быстро добавить еду, проверить дневной прогресс и отметить воду."
+    ),
+    (
+        "Пока ещё помнишь, что было на тарелке 👀\n\n"
+        "Запиши приём пищи фото или текстом, чтобы вечером не пришлось вспоминать весь день."
+    ),
+    (
+        "Продолжим Ням-стрик? 🔥\n\n"
+        "Добавь хотя бы одну еду за сегодня. Фото, текст или быстрый ввод через миниапп — подойдёт любой вариант."
+    ),
+    (
+        "Небольшой ням-чек 🍽\n\n"
+        "Что сегодня уже успело попасть в меню? Добавь еду, и посмотрим текущий баланс дня."
+    ),
+)
+DAILY_REMINDER_ORDER = (0, 3, 6, 2, 5, 1, 4)
+
+
+def daily_reminder_text(telegram_id: int, reminder_date: date, mission_status: dict) -> str:
+    position = (reminder_date.toordinal() + telegram_id) % len(DAILY_REMINDER_ORDER)
+    message_index = DAILY_REMINDER_ORDER[position]
+    return f"{DAILY_REMINDER_MESSAGES[message_index]}\n\n{format_daily_mission(mission_status)}"
 
 
 def webapp_url_with_build() -> str:
@@ -2333,9 +2371,7 @@ async def reminder_loop(bot: Bot) -> None:
                 mission_status = db.get_daily_mission_status(user.telegram_id)
                 await bot.send_message(
                     user.telegram_id,
-                    "Нямметр на связи 🍽\n\n"
-                    "Самое время записать еду за сегодня. Можно фото или просто текстом.\n\n"
-                    f"{format_daily_mission(mission_status)}",
+                    daily_reminder_text(user.telegram_id, today_date, mission_status),
                 )
                 db.mark_reminder_sent(user.telegram_id, today)
                 db.log_reminder(user.telegram_id, "daily", current_time, "sent")
