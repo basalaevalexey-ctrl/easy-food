@@ -101,10 +101,33 @@ def admin_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="Деньги", callback_data="admin:revenue"),
+                InlineKeyboardButton(text="Популярная еда", callback_data="admin:food30"),
             ],
             [
                 InlineKeyboardButton(text="Обновить", callback_data="admin:refresh"),
             ],
+        ]
+    )
+
+
+def admin_food_keyboard(active_period: str = "food30") -> InlineKeyboardMarkup:
+    labels = {
+        "food7": "7 дней",
+        "food30": "30 дней",
+        "foodall": "Всё время",
+    }
+    period_buttons = [
+        InlineKeyboardButton(
+            text=(f"• {label}" if action == active_period else label),
+            callback_data=f"admin:{action}",
+        )
+        for action, label in labels.items()
+    ]
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            period_buttons,
+            [InlineKeyboardButton(text="Назад в админку", callback_data="admin:today")],
+            [InlineKeyboardButton(text="Обновить", callback_data="admin:refresh")],
         ]
     )
 

@@ -51,6 +51,7 @@ from app.calorie_calculator import calculate_targets
 from app.config import load_config
 from app.database import Database
 from app.keyboards import (
+    admin_food_keyboard,
     admin_keyboard,
     activity_keyboard,
     activation_keyboard,
@@ -1310,7 +1311,35 @@ def format_admin_dashboard(screen: str) -> str:
         return format_reminders_stats(admin_stats_service.get_reminders_stats(7))
     if screen == "revenue":
         return format_revenue_stats(admin_stats_service.get_revenue_stats())
+    if screen == "food7":
+        return format_admin_popular_food("7 ДНЕЙ", 7)
+    if screen == "foodall":
+        return format_admin_popular_food("ВСЁ ВРЕМЯ", None)
+    if screen == "food30":
+        return format_admin_popular_food("30 ДНЕЙ", 30)
     return format_total_stats(apply_admin_dashboard_baseline(admin_stats_service.get_stats_total()))
+
+
+def format_admin_popular_food(period_title: str, days: int | None) -> str:
+    rows = db.admin_popular_food(days=days, limit=10)
+    lines = [
+        f"🍽 ПОПУЛЯРНАЯ ЕДА — {period_title}",
+        "",
+        "Рейтинг по числу разных пользователей:",
+        "",
+    ]
+    if not rows:
+        lines.append("За этот период записей еды пока нет.")
+        return "\n".join(lines)
+
+    for index, row in enumerate(rows, start=1):
+        title = " ".join(str(row["title"]).split())
+        title = title.capitalize()
+        lines.append(
+            f"{index}. {title}\n"
+            f"👥 {int(row['users'])} чел. · 🍽 {int(row['entries'])} записей"
+        )
+    return "\n".join(lines)
 
 
 def apply_admin_dashboard_baseline(stats: dict[str, int | float]) -> dict[str, int | float]:
@@ -1338,6 +1367,12 @@ def apply_admin_dashboard_baseline(stats: dict[str, int | float]) -> dict[str, i
 
 def detect_admin_screen(text: str | None) -> str:
     source = text or ""
+    if "ПОПУЛЯРНАЯ ЕДА" in source:
+        if "7 ДНЕЙ" in source:
+            return "food7"
+        if "ВСЁ ВРЕМЯ" in source:
+            return "foodall"
+        return "food30"
     if "СЕГОДНЯ" in source:
         return "today"
     if "7 ДНЕЙ" in source:
@@ -1981,9 +2016,10 @@ async def admin_callback(callback: CallbackQuery) -> None:
     if action == "refresh":
         action = detect_admin_screen(callback.message.text if callback.message else "")
     text = format_admin_dashboard(action)
+    keyboard = admin_food_keyboard(action) if action.startswith("food") else admin_keyboard()
 
     try:
-        await callback.message.edit_text(text, reply_markup=admin_keyboard())
+        await callback.message.edit_text(text, reply_markup=keyboard)
     except TelegramBadRequest as exc:
         if "message is not modified" not in str(exc).lower():
             raise

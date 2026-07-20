@@ -1623,6 +1623,38 @@ class Database:
                 """
             ).fetchall()
 
+    def admin_popular_food(self, days: int | None = None, limit: int = 10) -> list[sqlite3.Row]:
+        def normalize_title(value: str | None) -> str:
+            if not value:
+                return ""
+            normalized = " ".join(value.strip().split()).casefold().replace("ё", "е")
+            return normalized.strip(" .,!?:;-")
+
+        date_filter = ""
+        params: list[Any] = []
+        if days is not None:
+            date_filter = "AND date(created_at, '+3 hours') >= date('now', '+3 hours', ?)"
+            params.append(f"-{max(days - 1, 0)} days")
+        params.append(limit)
+
+        with self.connect() as conn:
+            conn.create_function("normalize_food_title", 1, normalize_title)
+            return conn.execute(
+                f"""
+                SELECT MIN(TRIM(title)) AS title,
+                       COUNT(*) AS entries,
+                       COUNT(DISTINCT user_id) AS users
+                FROM food_entries
+                WHERE title IS NOT NULL
+                  AND normalize_food_title(title) != ''
+                  {date_filter}
+                GROUP BY normalize_food_title(title)
+                ORDER BY users DESC, entries DESC, title COLLATE NOCASE
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+
     def admin_latest_users(self, limit: int = 10) -> list[sqlite3.Row]:
         with self.connect() as conn:
             return conn.execute(
