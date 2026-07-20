@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-91" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-92" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -30,6 +30,10 @@
         </button>
 
         <div class="add-food-menu" data-add-menu>
+          <div class="personal-foods" data-personal-foods hidden>
+            <span class="personal-foods-title">Часто добавляешь</span>
+            <div class="personal-food-list" data-personal-food-list></div>
+          </div>
           <button type="button" data-add-text><span>✎</span>Текстом</button>
           <button type="button" data-add-photo><span>📷</span>Фото еды</button>
         </div>
@@ -284,6 +288,8 @@ const screens = document.querySelectorAll("[data-screen]");
 const toast = document.querySelector(".toast");
 const addToggle = document.querySelector("[data-add-toggle]");
 const addMenu = document.querySelector("[data-add-menu]");
+const personalFoods = document.querySelector("[data-personal-foods]");
+const personalFoodList = document.querySelector("[data-personal-food-list]");
 const dateLabel = document.querySelector("[data-date-label]");
 const datePicker = document.querySelector("[data-date-picker]");
 const dateCalendar = document.querySelector("[data-calendar]");
@@ -962,6 +968,31 @@ function applyFoodResponse(data) {
   }
 }
 
+function renderPersonalFoods(items = []) {
+  if (!personalFoods || !personalFoodList) return;
+  const suggestions = items
+    .filter((item) => String(item?.title || "").trim())
+    .slice(0, 3);
+  personalFoodList.replaceChildren();
+  personalFoods.hidden = suggestions.length === 0;
+
+  suggestions.forEach((item) => {
+    const button = document.createElement("button");
+    const title = String(item.title).trim();
+    button.type = "button";
+    button.className = "personal-food-button";
+    button.dataset.quickFood = title;
+    button.title = `Добавить: ${title}`;
+
+    const label = document.createElement("span");
+    label.textContent = title;
+    const count = document.createElement("small");
+    count.textContent = `×${Math.max(1, roundValue(item.entries))}`;
+    button.append(label, count);
+    personalFoodList.append(button);
+  });
+}
+
 function normalizeTimeValue(value) {
   const match = String(value || "").match(/^([01]\d|2[0-3]):([0-5]\d)$/);
   return match ? `${match[1]}:${match[2]}` : "09:00";
@@ -1208,6 +1239,7 @@ function applyServerState(data) {
   const mission = data.mission || {};
   const referral = data.referral || {};
   const water = data.water || {};
+  renderPersonalFoods(data.food_suggestions || []);
   const unlockedAchievements = new Set((data.achievements || []).map((item) => item.key));
   const calories = roundValue(totals.calories);
   const protein = roundValue(totals.protein);
@@ -1396,6 +1428,13 @@ document.querySelector("[data-add-text]").addEventListener("click", () => {
 document.querySelector("[data-add-photo]").addEventListener("click", () => {
   closeAddMenu();
   foodPhotoInput.click();
+});
+
+personalFoodList?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-quick-food]");
+  if (!button) return;
+  closeAddMenu();
+  submitFoodText(button.dataset.quickFood || "");
 });
 
 document.querySelector("[data-food-cancel]")?.addEventListener("click", closeFoodModal);

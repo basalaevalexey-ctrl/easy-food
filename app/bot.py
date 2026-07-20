@@ -84,7 +84,7 @@ db = Database(
 )
 admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-91"
+WEBAPP_BUILD = "nyam-92"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 BOT_USERNAME = ""
@@ -672,6 +672,7 @@ def build_miniapp_payload(telegram_user: dict, selected_day: str | None = None) 
                 for entry in entries
             ],
         },
+        "food_suggestions": db.get_popular_foods(telegram_id, limit=3),
         "calendar": {
             "active_dates": active_dates,
         },

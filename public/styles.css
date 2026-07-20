@@ -628,7 +628,7 @@ button {
 }
 
 .add-food-menu.open {
-  max-height: 96px;
+  max-height: 340px;
   margin-top: 12px;
   opacity: 1;
   transform: translateY(0);
@@ -666,6 +666,55 @@ button {
   position: relative;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+}
+
+.personal-foods {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.personal-foods[hidden] {
+  display: none;
+}
+
+.personal-foods-title {
+  display: block;
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.personal-food-list {
+  display: grid;
+  gap: 7px;
+}
+
+.add-food-menu .personal-food-button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 8px 13px;
+  border-radius: 13px;
+  text-align: left;
+}
+
+.add-food-menu .personal-food-button span {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #202020;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-food-menu .personal-food-button small {
+  color: var(--green-dark);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .referral-status-row {

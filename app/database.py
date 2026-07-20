@@ -31,6 +31,13 @@ SERVICE_EVENT_TYPES = (
 )
 
 
+def _normalize_food_title(value: str | None) -> str:
+    if not value:
+        return ""
+    normalized = " ".join(value.strip().split()).casefold().replace("ё", "е")
+    return normalized.strip(" .,!?:;-")
+
+
 class Database:
     def __init__(
         self,
@@ -983,6 +990,33 @@ class Database:
             ).fetchall()
             return [self._entry_from_row(row) for row in rows]
 
+    def get_popular_foods(self, telegram_id: int, limit: int = 3) -> list[dict[str, Any]]:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            conn.create_function("normalize_food_title", 1, _normalize_food_title)
+            rows = conn.execute(
+                """
+                SELECT MIN(TRIM(title)) AS title,
+                       COUNT(*) AS entries,
+                       MAX(created_at) AS last_used_at
+                FROM food_entries
+                WHERE user_id = ?
+                  AND title IS NOT NULL
+                  AND normalize_food_title(title) != ''
+                GROUP BY normalize_food_title(title)
+                ORDER BY entries DESC, last_used_at DESC
+                LIMIT ?
+                """,
+                (user.id, limit),
+            ).fetchall()
+            return [
+                {
+                    "title": " ".join(str(row["title"]).split()).capitalize(),
+                    "entries": int(row["entries"]),
+                }
+                for row in rows
+            ]
+
     def get_food_entry_days(self, telegram_id: int) -> list[str]:
         user = self.get_or_create_user(telegram_id)
         with self.connect() as conn:
@@ -1624,12 +1658,6 @@ class Database:
             ).fetchall()
 
     def admin_popular_food(self, days: int | None = None, limit: int = 10) -> list[sqlite3.Row]:
-        def normalize_title(value: str | None) -> str:
-            if not value:
-                return ""
-            normalized = " ".join(value.strip().split()).casefold().replace("ё", "е")
-            return normalized.strip(" .,!?:;-")
-
         date_filter = ""
         params: list[Any] = []
         if days is not None:
@@ -1638,7 +1666,7 @@ class Database:
         params.append(limit)
 
         with self.connect() as conn:
-            conn.create_function("normalize_food_title", 1, normalize_title)
+            conn.create_function("normalize_food_title", 1, _normalize_food_title)
             return conn.execute(
                 f"""
                 SELECT MIN(TRIM(title)) AS title,
