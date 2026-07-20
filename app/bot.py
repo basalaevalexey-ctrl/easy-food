@@ -56,6 +56,7 @@ from app.keyboards import (
     activity_keyboard,
     activation_keyboard,
     food_actions,
+    goal_nudge_keyboard,
     goal_keyboard,
     instruction_keyboard,
     main_menu,
@@ -523,6 +524,30 @@ ACTIVATION_TEXTS = {
 }
 
 LIFECYCLE_PUSH_TEXTS = {
+    "started_no_goal": {
+        1: (
+            "Сделай Нямметр персональным 🎯\n\n"
+            "Укажи свои параметры, и Нямметр рассчитает специально для тебя:\n\n"
+            "• индивидуальную дневную норму калорий;\n"
+            "• цель по белку;\n"
+            "• норму воды;\n"
+            "• сколько калорий и БЖУ осталось на сегодня.\n\n"
+            "Так ты будешь видеть не просто цифры, а свой личный прогресс в течение дня."
+        ),
+        2: (
+            "С целью прогресс становится понятнее 🍽\n\n"
+            "Нямметр покажет, насколько ты приблизился к своей норме, и откроет персональные миссии:\n\n"
+            "• попасть в коридор калорий;\n"
+            "• добрать белок;\n"
+            "• завершить «День в цель».\n\n"
+            "Без таблиц и ручных расчетов."
+        ),
+        3: (
+            "Еду можно записывать и без цели, но с ней Нямметр работает заметно полезнее 💚\n\n"
+            "Ты увидишь личную норму, остаток калорий и прогресс за день. "
+            "Цель можно изменить в любой момент в профиле."
+        ),
+    },
     "one_food_no_return": {
         1: (
             "Ты уже сделал первый шаг 🍽\n\n"
@@ -1804,6 +1829,7 @@ async def broadcast_segment_command(message: Message) -> None:
     segments = {
         "no_food": db.get_started_users_without_food,
         "started_no_food": db.get_started_users_without_food,
+        "started_no_goal": db.get_started_users_without_goal,
         "one_food_no_return": db.get_users_with_one_food_no_return,
         "goal_no_food": db.get_users_with_goal_no_food_no_return,
         "loyal_users": db.get_loyal_users,
@@ -1811,6 +1837,7 @@ async def broadcast_segment_command(message: Message) -> None:
 
     if len(parts) < 3 or not parts[1].strip() or not parts[2].strip():
         no_food_count = len(db.get_started_users_without_food())
+        started_no_goal_count = len(db.get_started_users_without_goal())
         one_food_no_return_count = len(db.get_users_with_one_food_no_return())
         goal_no_food_count = len(db.get_users_with_goal_no_food_no_return())
         loyal_users_count = len(db.get_loyal_users())
@@ -1820,6 +1847,8 @@ async def broadcast_segment_command(message: Message) -> None:
             "/broadcast_segment no_food текст сообщения\n\n"
             "Доступные сегменты:\n"
             f"no_food — нажали /start, но еще не добавляли еду: {no_food_count}\n"
+            "started_no_goal — нажали /start, но не настроили цель: "
+            f"{started_no_goal_count}\n"
             "one_food_no_return — добавили еду 1 раз и не возвращались минимум 2 дня: "
             f"{one_food_no_return_count}\n"
             "goal_no_food — поставили цель, но не добавили еду и не возвращались минимум 2 дня: "
@@ -1833,7 +1862,8 @@ async def broadcast_segment_command(message: Message) -> None:
     broadcast_text = parts[2].strip()
     if segment not in segments:
         await message.answer(
-            "Не знаю такой сегмент. Сейчас доступны: no_food, one_food_no_return, goal_no_food, loyal_users."
+            "Не знаю такой сегмент. Сейчас доступны: no_food, started_no_goal, "
+            "one_food_no_return, goal_no_food, loyal_users."
         )
         return
     if len(broadcast_text) > 4000:
@@ -2206,6 +2236,25 @@ async def food_grams(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
+@router.callback_query(F.data.startswith("goal_nudge:"))
+async def goal_nudge_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    action = callback.data.split(":")[-1]
+    if action == "disable":
+        db.record_user_event(callback.from_user.id, "goal_nudge_disabled")
+        db.disable_activation(callback.from_user.id)
+        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.message.answer("Хорошо, больше не буду напоминать про настройку цели 💚")
+        await callback.answer()
+        return
+
+    db.record_user_event(callback.from_user.id, "goal_nudge_clicked")
+    await cleanup_flow_messages(state, callback.message.chat.id, callback.bot)
+    await state.clear()
+    db.record_useful_action(callback.from_user.id, "goal_setup_started")
+    await callback_answer_clean(callback, state, "Начнем с простого. Укажи пол:", reply_markup=sex_keyboard())
+    await callback.answer()
+
+
 @router.callback_query(F.data == "water:add:200")
 async def water_reminder_add(callback: CallbackQuery) -> None:
     summary = db.add_water_entry(callback.from_user.id, 200)
@@ -2484,7 +2533,12 @@ async def reminder_loop(bot: Bot) -> None:
                     if not text:
                         continue
                     try:
-                        await bot.send_message(user.telegram_id, text)
+                        reply_markup = (
+                            goal_nudge_keyboard(step, webapp_url_with_build())
+                            if segment == "started_no_goal"
+                            else None
+                        )
+                        await bot.send_message(user.telegram_id, text, reply_markup=reply_markup)
                         db.log_lifecycle_push(user.telegram_id, segment, step, "sent")
                         db.log_reminder(user.telegram_id, f"lifecycle:{segment}", f"step:{step}", "sent")
                     except TelegramForbiddenError:

@@ -1,4 +1,4 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
 
 
 def main_menu(has_goal: bool = False, webapp_url: str = "") -> ReplyKeyboardMarkup:
@@ -158,6 +158,16 @@ def activation_keyboard(step: int) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="📸 Попробовать", callback_data="activation:photo")],
             [InlineKeyboardButton(text="🔕 Не напоминать", callback_data="activation:disable")],
         ]
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def goal_nudge_keyboard(step: int, webapp_url: str = "") -> InlineKeyboardMarkup:
+    setup_text = "🎯 Рассчитать мою норму" if step == 1 else "🎯 Настроить цель"
+    keyboard = [[InlineKeyboardButton(text=setup_text, callback_data="goal_nudge:setup")]]
+    if step == 2 and webapp_url.startswith("https://"):
+        keyboard.append([InlineKeyboardButton(text="Открыть Нямметр", web_app=WebAppInfo(url=webapp_url))])
+    if step == 3:
+        keyboard.append([InlineKeyboardButton(text="🔕 Не напоминать", callback_data="goal_nudge:disable")])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 

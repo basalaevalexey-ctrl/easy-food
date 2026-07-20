@@ -25,6 +25,7 @@ SERVICE_EVENT_TYPES = (
     "duolingo_push_sent",
     "lifecycle:one_food_no_return_sent",
     "lifecycle:goal_no_food_sent",
+    "lifecycle:started_no_goal_sent",
     "broadcast_sent",
     "broadcast_segment_sent",
     "database_backup_requested",
@@ -492,6 +493,53 @@ class Database:
             ).fetchall()
             return [self._user_from_row(row) for row in rows]
 
+    def get_started_users_without_goal(self) -> list[User]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT users.*
+                FROM users
+                JOIN user_events ON user_events.user_id = users.id
+                WHERE user_events.event_type = 'start'
+                  AND users.calorie_target IS NULL
+                ORDER BY users.id ASC
+                """
+            ).fetchall()
+            return [self._user_from_row(row) for row in rows]
+
+    def get_users_for_goal_setup_nudge(self) -> list[User]:
+        placeholders = ", ".join("?" for _ in SERVICE_EVENT_TYPES)
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"""
+                WITH latest_start AS (
+                    SELECT user_id, MAX(created_at) AS started_at
+                    FROM user_events
+                    WHERE event_type = 'start'
+                    GROUP BY user_id
+                )
+                SELECT users.*
+                FROM users
+                JOIN latest_start ON latest_start.user_id = users.id
+                WHERE users.activation_disabled = 0
+                  AND users.calorie_target IS NULL
+                  AND datetime('now', 'localtime') >= datetime(latest_start.started_at, 'localtime', '+6 hours')
+                  AND EXISTS (
+                      SELECT 1
+                      FROM user_events activity
+                      WHERE activity.user_id = users.id
+                        AND activity.event_type != 'start'
+                        AND activity.event_type NOT IN ({placeholders})
+                  )
+                ORDER BY users.id ASC
+                """,
+                SERVICE_EVENT_TYPES,
+            ).fetchall()
+            candidates = [self._user_from_row(row) for row in rows]
+
+        one_food_no_return_ids = {user.id for user in self.get_users_with_one_food_no_return()}
+        return [user for user in candidates if user.id not in one_food_no_return_ids]
+
     def get_users_with_one_food_no_return(self) -> list[User]:
         placeholders = ", ".join("?" for _ in SERVICE_EVENT_TYPES)
         with self.connect() as conn:
@@ -800,6 +848,8 @@ class Database:
             candidates = self.get_users_with_one_food_no_return()
         elif segment == "goal_no_food":
             candidates = self.get_users_with_goal_no_food_no_return()
+        elif segment == "started_no_goal":
+            candidates = self.get_users_for_goal_setup_nudge()
         else:
             return []
 
