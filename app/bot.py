@@ -83,7 +83,7 @@ db = Database(
 )
 admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-90"
+WEBAPP_BUILD = "nyam-91"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 BOT_USERNAME = ""
@@ -332,7 +332,7 @@ function render(data) {{
 
   const box = document.querySelector("[data-entries]");
   if (!entries.length) {{
-    box.innerHTML = "<p>Пока записей нет. Добавь еду в боте или миниаппе.</p>";
+    box.innerHTML = "";
     return;
   }}
   box.innerHTML = entries.map((entry) => `

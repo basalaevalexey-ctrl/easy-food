@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-90" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-91" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -1157,11 +1157,7 @@ function renderEntries(entries) {
   if (!mealList) return;
 
   if (!entries.length) {
-    const debug = window.__nyammetrDebug;
-    const subtitle = debug?.is_admin
-      ? `ID ${debug.telegram_id} · entries ${debug.today_entries} · ${debug.build}`
-      : "Добавь еду в боте или миниаппе";
-    renderMessageEntry("Пока записей нет", subtitle);
+    mealList.innerHTML = "";
     return;
   }
 
