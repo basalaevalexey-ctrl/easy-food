@@ -1233,6 +1233,65 @@ class Database:
             ).fetchall()
             return [self._user_from_row(row) for row in rows]
 
+    def get_streak_freeze_days(self, telegram_id: int) -> list[str]:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT freeze_date
+                FROM streak_freezes
+                WHERE user_id = ?
+                ORDER BY freeze_date ASC
+                """,
+                (user.id,),
+            ).fetchall()
+            return [str(row["freeze_date"]) for row in rows]
+
+    def get_streak_freeze_status(self, telegram_id: int) -> dict[str, Any]:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            today = conn.execute("SELECT date('now', '+3 hours')").fetchone()[0]
+            yesterday = conn.execute("SELECT date('now', '+3 hours', '-1 day')").fetchone()[0]
+            moscow_hour = int(conn.execute("SELECT strftime('%H', 'now', '+3 hours')").fetchone()[0])
+            current_streak, _, last_streak_date = self._streaks_for_user(conn, user.id)
+            has_food_today = bool(conn.execute(
+                """
+                SELECT 1 FROM food_entries
+                WHERE user_id = ? AND date(created_at, '+3 hours') = ?
+                LIMIT 1
+                """,
+                (user.id, today),
+            ).fetchone())
+            latest_freeze = conn.execute(
+                """
+                SELECT freeze_date
+                FROM streak_freezes
+                WHERE user_id = ? AND freeze_date >= date(?, '-6 days')
+                ORDER BY freeze_date DESC
+                LIMIT 1
+                """,
+                (user.id, today),
+            ).fetchone()
+
+            frozen_today = bool(latest_freeze and latest_freeze["freeze_date"] == today)
+            eligible = current_streak >= 3
+            at_risk = eligible and last_streak_date == yesterday and not has_food_today and not frozen_today
+            next_available_date = None
+            if latest_freeze:
+                next_available_date = (
+                    datetime.fromisoformat(str(latest_freeze["freeze_date"])).date() + timedelta(days=7)
+                ).isoformat()
+
+            return {
+                "eligible": eligible,
+                "available": eligible and latest_freeze is None,
+                "frozen_today": frozen_today,
+                "at_risk": at_risk,
+                "show_rescue": frozen_today or (at_risk and moscow_hour >= 18),
+                "next_available_date": next_available_date,
+                "current_streak": current_streak,
+            }
+
     def freeze_streak(self, telegram_id: int) -> dict[str, int | str]:
         user = self.get_or_create_user(telegram_id)
         with self.connect() as conn:

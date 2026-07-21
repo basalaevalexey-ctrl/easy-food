@@ -186,12 +186,6 @@ def sanitize_miniapp_html(html: str) -> str:
     html = re.sub(r'<small class="macro-percent">\d+%</small>', '<small class="macro-percent"></small>', html)
     html = re.sub(r"<strong data-goal-calories>.*?</strong>", '<strong data-goal-calories>0 ккал</strong>', html)
     html = re.sub(r"<strong data-goal-protein>.*?</strong>", '<strong data-goal-protein>0 г</strong>', html)
-    html = re.sub(
-        r"<article class=\"streak-card\">.*?</article>",
-        '<article class="streak-card">🔥 <strong>Ням-стрик:</strong> <b><span data-current-streak>0</span> дней</b></article>',
-        html,
-        flags=re.S,
-    )
     html = re.sub(r"<small>Собрано \d+ из 12</small>", "<small>Собрано 0 из 12</small>", html)
     html = re.sub(r"<strong>\d+ дней</strong>", "<strong>0 дней</strong>", html)
 
@@ -649,6 +643,8 @@ def build_miniapp_payload(telegram_user: dict, selected_day: str | None = None) 
     mission_status = db.get_daily_mission_status(telegram_id)
     mission = mission_status["mission"]
     active_dates = db.get_food_entry_days(telegram_id)
+    freeze_status = db.get_streak_freeze_status(telegram_id)
+    frozen_dates = db.get_streak_freeze_days(telegram_id)
     referral_progress = db.get_referral_progress(telegram_id)
     water = db.get_water_summary(telegram_id, selected_day)
 
@@ -702,8 +698,10 @@ def build_miniapp_payload(telegram_user: dict, selected_day: str | None = None) 
         "food_suggestions": db.get_popular_foods(telegram_id, limit=3),
         "calendar": {
             "active_dates": active_dates,
+            "frozen_dates": frozen_dates,
         },
         "progress": progress,
+        "streak_freeze": freeze_status,
         "mission": {
             "key": mission.key,
             "is_completed": mission_status["is_completed"],
@@ -812,6 +810,15 @@ def update_miniapp_water_reminder(telegram_user: dict, payload: dict) -> dict:
         "miniapp_water_reminder_enabled" if enabled else "miniapp_water_reminder_disabled",
     )
     return build_miniapp_payload(telegram_user)
+
+
+def freeze_miniapp_streak(telegram_user: dict) -> dict:
+    telegram_id = int(telegram_user["id"])
+    result = db.freeze_streak(telegram_id)
+    if result["status"] not in {"frozen", "already_frozen"}:
+        raise ValueError(str(result["status"]))
+    db.record_user_event(telegram_id, "miniapp_streak_frozen")
+    return {"result": result, "state": build_miniapp_payload(telegram_user)}
 
 
 async def add_miniapp_food_text(telegram_user: dict, text: str) -> dict:
@@ -969,6 +976,7 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             "/api/miniapp/reminder",
             "/api/miniapp/water",
             "/api/miniapp/water-reminder",
+            "/api/miniapp/streak/freeze",
         }:
             self._send_json(404, {"error": "not_found"})
             return
@@ -1011,6 +1019,14 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
                 return
             if parsed.path == "/api/miniapp/water-reminder":
                 result = update_miniapp_water_reminder(telegram_user, payload)
+                self._send_json(200, result)
+                return
+            if parsed.path == "/api/miniapp/streak/freeze":
+                try:
+                    result = freeze_miniapp_streak(telegram_user)
+                except ValueError as exc:
+                    self._send_json(409, {"error": str(exc) or "streak_freeze_unavailable"})
+                    return
                 self._send_json(200, result)
                 return
             if parsed.path == "/api/miniapp/food/text":

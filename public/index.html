@@ -119,7 +119,22 @@
           <img loading="lazy" class="mission-cat-art" src="./assets/cat-medal-large.png?v=2" alt="" />
         </div>
 
-        <article class="streak-card">🔥 <strong>Ням-стрик:</strong> <b><span data-current-streak>0</span> дней</b></article>
+        <article class="streak-card">
+          <span class="streak-main">🔥 <strong>Ням-стрик:</strong> <b><span data-current-streak>0</span> дней</b></span>
+          <small class="streak-freeze-indicator" data-streak-freeze-indicator hidden></small>
+        </article>
+
+        <article class="streak-rescue-card" data-streak-rescue hidden>
+          <span class="streak-rescue-icon" aria-hidden="true">❄️</span>
+          <div>
+            <strong data-streak-rescue-title>Стрик под угрозой</strong>
+            <small data-streak-rescue-description>Сегодня пока нет записей еды.</small>
+            <div class="streak-rescue-actions" data-streak-rescue-actions>
+              <button type="button" data-streak-add>🍽 Добавить еду</button>
+              <button type="button" class="freeze-action" data-streak-freeze>❄️ Заморозить</button>
+            </div>
+          </div>
+        </article>
 
         <article class="mission-card" data-mission-card role="button" tabindex="0" aria-expanded="false">
           <span class="mission-icon"><img loading="lazy" src="./assets/mission-target.png" alt="" /></span>
@@ -324,6 +339,13 @@ const reminderLabel = document.querySelector("[data-reminder-label]");
 const waterReminderEnabled = document.querySelector("[data-water-reminder-enabled]");
 const waterReminderLabel = document.querySelector("[data-water-reminder-label]");
 const referralShareButtons = document.querySelectorAll("[data-referral-share]");
+const streakFreezeIndicator = document.querySelector("[data-streak-freeze-indicator]");
+const streakRescue = document.querySelector("[data-streak-rescue]");
+const streakRescueTitle = document.querySelector("[data-streak-rescue-title]");
+const streakRescueDescription = document.querySelector("[data-streak-rescue-description]");
+const streakRescueActions = document.querySelector("[data-streak-rescue-actions]");
+const streakAdd = document.querySelector("[data-streak-add]");
+const streakFreeze = document.querySelector("[data-streak-freeze]");
 let calorieGoal = 2100;
 let profileGoal = "support";
 let profileSex = "male";
@@ -484,6 +506,7 @@ const achievementDetails = {
 const today = startOfDay(new Date());
 let selectedDate = new Date(today);
 let activeEntryDates = new Set();
+let frozenStreakDates = new Set();
 let unlockedAchievementKeys = new Set();
 let achievementPage = 0;
 const achievementsPerPage = 4;
@@ -558,6 +581,7 @@ function renderCalendar() {
       day.getMonth() === selectedDate.getMonth() ? "" : "muted",
       iso === toInputDate(selectedDate) ? "selected" : "",
       activeEntryDates.has(iso) ? "has-data" : "",
+      frozenStreakDates.has(iso) ? "has-freeze" : "",
     ].filter(Boolean).join(" ");
     days.push(`<button type="button" class="${classes}" data-calendar-day="${iso}">${day.getDate()}</button>`);
   }
@@ -1231,6 +1255,8 @@ function renderEntries(entries) {
 
 function applyServerState(data) {
   window.__nyammetrDebug = data.debug || null;
+  activeEntryDates = new Set(data.calendar?.active_dates || []);
+  frozenStreakDates = new Set(data.calendar?.frozen_dates || []);
   const targetCalories = Number(data.targets?.calories) || 0;
   const targetProtein = Number(data.targets?.protein) || 0;
   const totals = data.today?.totals || {};
@@ -1331,6 +1357,7 @@ function applyServerState(data) {
   document.querySelectorAll("[data-current-streak]").forEach((node) => {
     node.textContent = Math.max(roundValue(progress.current_streak), streakFromActiveDates());
   });
+  renderStreakFreeze(data.streak_freeze || {});
   document.querySelectorAll("[data-active-days]").forEach((node) => {
     node.textContent = roundValue(progress.active_days ?? progress.days_with_nyammetr);
   });
@@ -1393,7 +1420,6 @@ async function loadServerState() {
 
   try {
     const data = await miniappRequest(`/api/miniapp/me?date=${toInputDate(selectedDate)}`);
-    activeEntryDates = new Set(data.calendar?.active_dates || []);
     applyServerState(data);
     renderCalendar();
   } catch (error) {
@@ -1460,6 +1486,64 @@ document.querySelector("[data-missions-add]").addEventListener("click", () => {
   showScreen("home");
   const isOpen = addMenu.classList.toggle("open", true);
   addToggle.setAttribute("aria-expanded", String(isOpen));
+});
+
+function openAddFoodFromMissions() {
+  showScreen("home");
+  const isOpen = addMenu.classList.toggle("open", true);
+  addToggle.setAttribute("aria-expanded", String(isOpen));
+}
+
+function renderStreakFreeze(status) {
+  if (!streakFreezeIndicator || !streakRescue) return;
+
+  streakFreezeIndicator.hidden = !status.eligible;
+  if (status.frozen_today) {
+    streakFreezeIndicator.textContent = "❄️ Сегодня заморожен";
+  } else if (status.available) {
+    streakFreezeIndicator.textContent = "❄️ Заморозка доступна";
+  } else {
+    const nextDate = status.next_available_date
+      ? new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" }).format(fromInputDate(status.next_available_date))
+      : "позже";
+    streakFreezeIndicator.textContent = `❄️ Следующая ${nextDate}`;
+  }
+
+  streakRescue.hidden = !status.show_rescue;
+  streakRescue.classList.toggle("saved", Boolean(status.frozen_today));
+  if (status.frozen_today) {
+    streakRescueTitle.textContent = "Стрик спасён";
+    streakRescueDescription.textContent = `Серия в ${roundValue(status.current_streak)} дней сохранена. Завтра можно продолжить.`;
+    streakRescueActions.hidden = true;
+    return;
+  }
+
+  streakRescueTitle.textContent = "Стрик под угрозой";
+  streakRescueDescription.textContent = status.available
+    ? "Сегодня пока нет еды. Добавь запись или сохрани серию заморозкой."
+    : "Сегодня пока нет еды. Добавь одну запись, чтобы сохранить серию.";
+  streakRescueActions.hidden = false;
+  streakFreeze.hidden = !status.available;
+}
+
+streakAdd?.addEventListener("click", openAddFoodFromMissions);
+streakFreeze?.addEventListener("click", async () => {
+  streakFreeze.disabled = true;
+  try {
+    const data = await miniappRequest("/api/miniapp/streak/freeze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    applyServerState(data.state);
+    renderCalendar();
+    showToast("Ням-стрик сохранён ❄️", 2600);
+  } catch (error) {
+    showToast("Не получилось заморозить стрик. Обнови экран.", 3000);
+    await loadServerState();
+  } finally {
+    streakFreeze.disabled = false;
+  }
 });
 
 document.querySelectorAll("[data-soon-update]").forEach((node) => {
