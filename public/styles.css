@@ -1159,13 +1159,13 @@ h2 {
   z-index: 5;
   width: min(324px, calc(100% - 56px));
   margin: -38px auto 0;
-  display: flex;
+  display: grid;
+  grid-template-rows: auto auto;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  min-height: 58px;
+  row-gap: 4px;
+  min-height: 68px;
   font-size: 20px;
-  flex-direction: column;
   padding: 8px 14px;
   line-height: 1.05;
 }
@@ -1175,6 +1175,8 @@ h2 {
   align-items: center;
   justify-content: center;
   gap: 7px;
+  width: 100%;
+  white-space: nowrap;
 }
 
 .streak-card strong {
@@ -1186,9 +1188,14 @@ h2 {
 }
 
 .streak-freeze-indicator {
+  display: block;
+  width: 100%;
   color: #2786a0;
   font-size: 11px;
   font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .streak-freeze-indicator[hidden],
