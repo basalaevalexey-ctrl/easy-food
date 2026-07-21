@@ -86,7 +86,7 @@ db = Database(
 )
 admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-94"
+WEBAPP_BUILD = "nyam-95"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 BOT_USERNAME = ""
@@ -191,7 +191,7 @@ def sanitize_miniapp_html(html: str) -> str:
     html = re.sub(r"<strong>\d+ дней</strong>", "<strong>0 дней</strong>", html)
 
     meal_start = html.find('<div class="meal-list">')
-    meal_end = html.find('<aside class="tip-card wide">', meal_start)
+    meal_end = html.find('<aside class="tip-card wide', meal_start)
     if meal_start != -1 and meal_end != -1:
         meal_list = """<div class="meal-list">
           <article class="meal-card open">

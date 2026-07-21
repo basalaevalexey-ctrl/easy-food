@@ -668,6 +668,26 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
+.diary-insight {
+  cursor: default;
+}
+
+.diary-insight > div {
+  min-width: 0;
+  align-self: center;
+}
+
+.diary-insight strong {
+  display: block;
+  line-height: 1.2;
+}
+
+.diary-insight small {
+  display: block;
+  margin-top: 4px;
+  line-height: 1.3;
+}
+
 .personal-foods {
   grid-column: 1 / -1;
   min-width: 0;

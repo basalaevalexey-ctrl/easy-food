@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-94" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-95" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -103,11 +103,11 @@
           </article>
         </div>
 
-        <aside class="tip-card wide">
+        <aside class="tip-card wide diary-insight" aria-live="polite">
           <img loading="lazy" class="tip-paw" src="./assets/paw.png" alt="" />
           <div>
-            <strong>Ты на верном пути!</strong>
-            <small>Продолжай в том же духе.</small>
+            <strong data-diary-insight-title>Собираю итог дня</strong>
+            <small data-diary-insight-text>Посмотрю записи и подскажу, на что обратить внимание.</small>
           </div>
           <img loading="lazy" class="tip-cat" src="./assets/cat-peek.png" alt="" />
         </aside>
@@ -332,6 +332,8 @@ const datePicker = document.querySelector("[data-date-picker]");
 const dateCalendar = document.querySelector("[data-calendar]");
 const datePrev = document.querySelector("[data-date-prev]");
 const dateNext = document.querySelector("[data-date-next]");
+const diaryInsightTitle = document.querySelector("[data-diary-insight-title]");
+const diaryInsightText = document.querySelector("[data-diary-insight-text]");
 const periodReportModal = document.querySelector("[data-period-report-modal]");
 const periodReportTitle = document.querySelector("[data-period-report-title]");
 const periodReportDays = document.querySelector("[data-period-report-days]");
@@ -567,6 +569,81 @@ function formatDiaryDate(date) {
     day: "numeric",
     month: "short",
   }).format(date);
+}
+
+function foodEntryWord(count) {
+  const value = Math.abs(Number(count)) % 100;
+  const last = value % 10;
+  if (value > 10 && value < 20) return "записей";
+  if (last === 1) return "запись";
+  if (last >= 2 && last <= 4) return "записи";
+  return "записей";
+}
+
+function updateDiaryInsight({ entries, calories, protein, targetCalories, targetProtein, water }) {
+  if (!diaryInsightTitle || !diaryInsightText) return;
+  const count = entries.length;
+  const isPastDay = selectedDate < today;
+  const isEvening = new Date().getHours() >= 20;
+  const isFinalSummary = isPastDay || (toInputDate(selectedDate) === toInputDate(today) && isEvening);
+  const calorieRatio = targetCalories > 0 ? calories / targetCalories : 0;
+  const proteinRatio = targetProtein > 0 ? protein / targetProtein : 0;
+  const remainingCalories = Math.max(0, Math.round(targetCalories - calories));
+  const remainingProtein = Math.max(0, Math.round(targetProtein - protein));
+
+  if (count === 0) {
+    diaryInsightTitle.textContent = isPastDay ? "За этот день записей нет" : "Итог дня появится здесь";
+    diaryInsightText.textContent = isPastDay
+      ? "Если вспомнишь приём пищи, его ещё можно добавить в дневник."
+      : "Добавь первую еду, и я начну собирать персональный мини-отчёт.";
+    return;
+  }
+
+  if (!targetCalories) {
+    diaryInsightTitle.textContent = `${count} ${foodEntryWord(count)} · ${calories} ккал`;
+    diaryInsightText.textContent = "Настрой цель, чтобы я сравнивал день с твоей личной нормой.";
+    return;
+  }
+
+  if (!isFinalSummary) {
+    diaryInsightTitle.textContent = `${count} ${foodEntryWord(count)} · ${calories} из ${targetCalories} ккал`;
+    if (count < 3) {
+      diaryInsightText.textContent = `До полного дня осталось ${3 - count} ${foodEntryWord(3 - count)}. До нормы примерно ${remainingCalories} ккал.`;
+    } else if (proteinRatio > 0 && proteinRatio < 0.8) {
+      diaryInsightText.textContent = `Калории идут по плану. По белку осталось примерно ${remainingProtein} г.`;
+    } else {
+      diaryInsightText.textContent = `До дневного ориентира осталось примерно ${remainingCalories} ккал.`;
+    }
+    return;
+  }
+
+  if (count < 3) {
+    diaryInsightTitle.textContent = `${count} ${foodEntryWord(count)} · ${calories} ккал`;
+    diaryInsightText.textContent = "Похоже, день записан не полностью, поэтому вывод пока приблизительный.";
+  } else if (calorieRatio >= 0.9 && calorieRatio <= 1.1 && (!targetProtein || proteinRatio >= 0.8)) {
+    diaryInsightTitle.textContent = "День получился очень ровным";
+    diaryInsightText.textContent = `${calories} ккал и ${protein} г белка — оба ориентира рядом с целью.`;
+  } else if (calorieRatio < 0.7) {
+    diaryInsightTitle.textContent = `В дневнике ${Math.round(calorieRatio * 100)}% нормы`;
+    diaryInsightText.textContent = "Возможно, часть еды осталась без записи. Проверь дневник перед итогом.";
+  } else if (calorieRatio < 0.9) {
+    diaryInsightTitle.textContent = "Сегодня немного ниже ориентира";
+    diaryInsightText.textContent = `Получилось ${calories} ккал. До цели не хватило примерно ${remainingCalories} ккал.`;
+  } else if (calorieRatio > 1.1) {
+    diaryInsightTitle.textContent = "Сегодня чуть выше ориентира";
+    diaryInsightText.textContent = `${calories} ккал при цели ${targetCalories}. Один день не меняет общий прогресс.`;
+  } else if (targetProtein && proteinRatio < 0.8) {
+    diaryInsightTitle.textContent = "По калориям всё близко к цели";
+    diaryInsightText.textContent = `Белка получилось ${protein} г. Завтра можно добавить ещё один белковый продукт.`;
+  } else {
+    diaryInsightTitle.textContent = "День собран";
+    diaryInsightText.textContent = `${count} ${foodEntryWord(count)}, ${calories} ккал. Хорошая база для стабильного прогресса.`;
+  }
+
+  const waterRatio = Number(water?.target_ml) > 0 ? Number(water?.total_ml || 0) / Number(water.target_ml) : 0;
+  if (count >= 3 && waterRatio > 0 && waterRatio < 0.5 && calorieRatio >= 0.9 && calorieRatio <= 1.1) {
+    diaryInsightText.textContent = `По еде день близок к цели. Воды отмечено ${Math.round(Number(water.total_ml || 0))} мл — возможно, не всё записано.`;
+  }
 }
 
 function updateDiaryDate(date) {
@@ -1390,6 +1467,14 @@ function applyServerState(data) {
   const protein = roundValue(totals.protein);
   const fat = roundValue(totals.fat);
   const carbs = roundValue(totals.carbs);
+  updateDiaryInsight({
+    entries,
+    calories,
+    protein,
+    targetCalories,
+    targetProtein,
+    water,
+  });
 
   if (targetCalories > 0) {
     calorieGoal = targetCalories;
