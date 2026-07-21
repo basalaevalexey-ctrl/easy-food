@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-93" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-94" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -296,6 +296,28 @@
 
     <input class="visually-hidden-file" type="file" accept="image/*" data-food-photo-input />
 
+    <div class="period-report-modal" data-period-report-modal hidden>
+      <section class="period-report-sheet" role="dialog" aria-modal="true" aria-labelledby="period-report-title">
+        <header>
+          <div>
+            <small>Твой прогресс</small>
+            <strong id="period-report-title" data-period-report-title>Отчёт за период</strong>
+          </div>
+          <button type="button" data-period-report-close aria-label="Закрыть отчёт">×</button>
+        </header>
+        <div class="period-report-days" data-period-report-days></div>
+        <div class="period-report-grid">
+          <span><small>Активных дней</small><strong data-report-active-days>0</strong></span>
+          <span><small>Записей еды</small><strong data-report-entries>0</strong></span>
+          <span><small>В среднем</small><strong data-report-average>0 ккал</strong></span>
+          <span><small>Полных дней</small><strong data-report-full-days>0</strong></span>
+        </div>
+        <p class="period-report-detail" data-report-target-days hidden></p>
+        <p class="period-report-detail" data-report-top-food hidden></p>
+        <p class="period-report-empty" data-report-empty hidden>За этот период записей пока нет.</p>
+      </section>
+    </div>
+
     <div class="toast" role="status" aria-live="polite"></div>
     <script>
 const tabs = document.querySelectorAll("[data-tab]");
@@ -310,6 +332,9 @@ const datePicker = document.querySelector("[data-date-picker]");
 const dateCalendar = document.querySelector("[data-calendar]");
 const datePrev = document.querySelector("[data-date-prev]");
 const dateNext = document.querySelector("[data-date-next]");
+const periodReportModal = document.querySelector("[data-period-report-modal]");
+const periodReportTitle = document.querySelector("[data-period-report-title]");
+const periodReportDays = document.querySelector("[data-period-report-days]");
 const profileName = document.querySelector("[data-profile-name]");
 const profileGoalLabel = document.querySelector("[data-profile-goal-label]");
 const profileWeight = document.querySelector("[data-profile-weight]");
@@ -505,6 +530,10 @@ const achievementDetails = {
 
 const today = startOfDay(new Date());
 let selectedDate = new Date(today);
+let calendarViewDate = new Date(today);
+let periodSelectionMode = false;
+let periodStart = null;
+let periodEnd = null;
 let activeEntryDates = new Set();
 let frozenStreakDates = new Set();
 let unlockedAchievementKeys = new Set();
@@ -542,6 +571,7 @@ function formatDiaryDate(date) {
 
 function updateDiaryDate(date) {
   selectedDate = startOfDay(date);
+  calendarViewDate = new Date(selectedDate);
   dateLabel.textContent = formatDiaryDate(selectedDate);
   datePicker.value = toInputDate(selectedDate);
 }
@@ -567,8 +597,7 @@ function streakFromActiveDates() {
 
 function renderCalendar() {
   if (!dateCalendar) return;
-  const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
-  const monthEnd = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
+  const monthStart = new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth(), 1);
   const gridStart = new Date(monthStart);
   gridStart.setDate(monthStart.getDate() - ((monthStart.getDay() + 6) % 7));
   const monthLabel = new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" }).format(monthStart);
@@ -577,11 +606,15 @@ function renderCalendar() {
     const day = new Date(gridStart);
     day.setDate(gridStart.getDate() + index);
     const iso = toInputDate(day);
+    const isInRange = periodStart && periodEnd && day >= periodStart && day <= periodEnd;
     const classes = [
-      day.getMonth() === selectedDate.getMonth() ? "" : "muted",
-      iso === toInputDate(selectedDate) ? "selected" : "",
+      day.getMonth() === calendarViewDate.getMonth() ? "" : "muted",
+      !periodSelectionMode && iso === toInputDate(selectedDate) ? "selected" : "",
       activeEntryDates.has(iso) ? "has-data" : "",
       frozenStreakDates.has(iso) ? "has-freeze" : "",
+      periodStart && iso === toInputDate(periodStart) ? "range-start" : "",
+      periodEnd && iso === toInputDate(periodEnd) ? "range-end" : "",
+      isInRange ? "in-range" : "",
     ].filter(Boolean).join(" ");
     days.push(`<button type="button" class="${classes}" data-calendar-day="${iso}">${day.getDate()}</button>`);
   }
@@ -593,7 +626,93 @@ function renderCalendar() {
     </div>
     <div class="calendar-week"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div>
     <div class="calendar-grid">${days.join("")}</div>
+    <div class="calendar-period-actions">
+      ${periodSelectionMode
+        ? `<small>${periodStart ? (periodEnd ? "Период выбран" : "Теперь выбери последний день") : "Выбери первый день"}</small>
+           <div><button type="button" class="calendar-cancel" data-period-cancel>Отмена</button><button type="button" data-period-show ${periodStart && periodEnd ? "" : "disabled"}>Показать отчёт</button></div>`
+        : `<button type="button" data-period-start>Выбрать период</button>`}
+    </div>
   `;
+}
+
+function resetPeriodSelection() {
+  periodSelectionMode = false;
+  periodStart = null;
+  periodEnd = null;
+}
+
+function selectPeriodDay(date) {
+  const day = startOfDay(date);
+  if (day > today) {
+    showToast("Будущие даты пока нельзя выбрать");
+    return;
+  }
+  if (!periodStart || periodEnd) {
+    periodStart = day;
+    periodEnd = null;
+    renderCalendar();
+    return;
+  }
+  if (day < periodStart) {
+    periodStart = day;
+    renderCalendar();
+    return;
+  }
+  const days = Math.round((day - periodStart) / 86400000) + 1;
+  if (days > 7) {
+    showToast("Можно выбрать не больше 7 дней");
+    return;
+  }
+  if (days < 2) {
+    showToast("Выбери минимум 2 дня");
+    return;
+  }
+  periodEnd = day;
+  renderCalendar();
+}
+
+function formatPeriodTitle(start, end) {
+  const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
+  const endLabel = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long" }).format(end);
+  if (sameMonth) return `${start.getDate()}–${endLabel}`;
+  const startLabel = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" }).format(start);
+  return `${startLabel} – ${endLabel}`;
+}
+
+async function showPeriodReport() {
+  if (!periodStart || !periodEnd) return;
+  const start = new Date(periodStart);
+  const end = new Date(periodEnd);
+  try {
+    const data = await miniappRequest(`/api/miniapp/report?start=${toInputDate(start)}&end=${toInputDate(end)}`);
+    const summary = data.summary || {};
+    periodReportTitle.textContent = formatPeriodTitle(start, end);
+    document.querySelector("[data-report-active-days]").textContent = `${summary.active_days || 0} из ${data.period.days}`;
+    document.querySelector("[data-report-entries]").textContent = summary.entries || 0;
+    document.querySelector("[data-report-average]").textContent = `${summary.average_calories || 0} ккал`;
+    document.querySelector("[data-report-full-days]").textContent = summary.full_days || 0;
+    const target = document.querySelector("[data-report-target-days]");
+    target.hidden = summary.target_days === null || summary.target_days === undefined;
+    target.textContent = `🎯 В дневной цели: ${summary.target_days || 0} дн.`;
+    const topFood = document.querySelector("[data-report-top-food]");
+    topFood.hidden = !summary.top_food;
+    topFood.textContent = `🍽 Чаще всего: ${summary.top_food || ""}`;
+    document.querySelector("[data-report-empty]").hidden = Boolean(summary.entries);
+    const dayNodes = [];
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      const iso = toInputDate(cursor);
+      const classes = [activeEntryDates.has(iso) ? "active" : "", frozenStreakDates.has(iso) ? "frozen" : ""].filter(Boolean).join(" ");
+      dayNodes.push(`<span class="${classes}"><small>${new Intl.DateTimeFormat("ru-RU", { weekday: "short" }).format(cursor)}</small><b>${cursor.getDate()}</b></span>`);
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    periodReportDays.innerHTML = dayNodes.join("");
+    dateCalendar.hidden = true;
+    resetPeriodSelection();
+    periodReportModal.hidden = false;
+  } catch (error) {
+    showToast("Не смог загрузить отчёт. Попробуй ещё раз.", 2800);
+  }
 }
 
 function renderAchievementPage() {
@@ -1651,6 +1770,7 @@ dateNext.addEventListener("click", () => setDiaryDateAndLoad(new Date(selectedDa
 
 dateLabel.addEventListener("click", () => {
   dateCalendar.hidden = !dateCalendar.hidden;
+  if (!dateCalendar.hidden) calendarViewDate = new Date(selectedDate);
   renderCalendar();
 });
 
@@ -1710,19 +1830,49 @@ datePicker.addEventListener("change", () => {
 });
 
 dateCalendar?.addEventListener("click", (event) => {
+  if (event.target.closest("[data-period-start]")) {
+    periodSelectionMode = true;
+    periodStart = null;
+    periodEnd = null;
+    renderCalendar();
+    return;
+  }
+  if (event.target.closest("[data-period-cancel]")) {
+    resetPeriodSelection();
+    renderCalendar();
+    return;
+  }
+  if (event.target.closest("[data-period-show]")) {
+    showPeriodReport();
+    return;
+  }
   const monthButton = event.target.closest("[data-calendar-month]");
   if (monthButton) {
-    const nextDate = new Date(selectedDate);
-    nextDate.setMonth(nextDate.getMonth() + Number(monthButton.dataset.calendarMonth || 0));
-    updateDiaryDate(nextDate);
+    calendarViewDate = new Date(
+      calendarViewDate.getFullYear(),
+      calendarViewDate.getMonth() + Number(monthButton.dataset.calendarMonth || 0),
+      1,
+    );
     renderCalendar();
     return;
   }
 
   const dayButton = event.target.closest("[data-calendar-day]");
   if (!dayButton) return;
+  if (periodSelectionMode) {
+    selectPeriodDay(fromInputDate(dayButton.dataset.calendarDay));
+    return;
+  }
   dateCalendar.hidden = true;
   setDiaryDateAndLoad(fromInputDate(dayButton.dataset.calendarDay));
+});
+
+document.querySelector("[data-period-report-close]")?.addEventListener("click", () => {
+  periodReportModal.hidden = true;
+});
+
+periodReportModal?.addEventListener("click", (event) => {
+  if (event.target === periodReportModal) periodReportModal.hidden = true;
 });
 
 document.querySelector("[data-achievements-prev]")?.addEventListener("click", () => {

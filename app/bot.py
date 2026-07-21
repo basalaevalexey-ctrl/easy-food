@@ -86,7 +86,7 @@ db = Database(
 )
 admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-93"
+WEBAPP_BUILD = "nyam-94"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 BOT_USERNAME = ""
@@ -632,6 +632,32 @@ def _valid_miniapp_day(value: str | None) -> str | None:
     return value
 
 
+def build_miniapp_period_report(telegram_user: dict, period_start: str | None, period_end: str | None) -> dict:
+    if not _valid_miniapp_day(period_start) or not _valid_miniapp_day(period_end):
+        raise ValueError("invalid_period")
+
+    start = date.fromisoformat(period_start)
+    end = date.fromisoformat(period_end)
+    period_days = (end - start).days + 1
+    if period_days < 2 or period_days > 7:
+        raise ValueError("period_out_of_range")
+    if end > datetime.now(MOSCOW_TZ).date():
+        raise ValueError("future_period")
+
+    telegram_id = int(telegram_user["id"])
+    db.get_or_create_user(telegram_id)
+    summary = db.get_weekly_report_summary(telegram_id, period_start, period_end)
+    db.record_user_event(telegram_id, "miniapp_period_report_opened")
+    return {
+        "period": {
+            "start": period_start,
+            "end": period_end,
+            "days": period_days,
+        },
+        "summary": summary,
+    }
+
+
 def build_miniapp_payload(telegram_user: dict, selected_day: str | None = None) -> dict:
     telegram_id = int(telegram_user["id"])
     user = db.get_or_create_user(telegram_id)
@@ -954,7 +980,7 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             self._send_static(parsed.path)
             return
 
-        if parsed.path != "/api/miniapp/me":
+        if parsed.path not in {"/api/miniapp/me", "/api/miniapp/report"}:
             self._send_json(404, {"error": "not_found"})
             return
 
@@ -964,6 +990,19 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             return
 
         query = parse_qs(parsed.query)
+        if parsed.path == "/api/miniapp/report":
+            try:
+                report = build_miniapp_period_report(
+                    telegram_user,
+                    (query.get("start") or [None])[0],
+                    (query.get("end") or [None])[0],
+                )
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc) or "invalid_period"})
+                return
+            self._send_json(200, report)
+            return
+
         selected_day = _valid_miniapp_day((query.get("date") or [None])[0])
         db.record_user_event(int(telegram_user["id"]), "miniapp_opened")
         self._send_json(200, build_miniapp_payload(telegram_user, selected_day=selected_day))
