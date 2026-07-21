@@ -871,6 +871,103 @@ class Database:
                 (user.id,),
             ).fetchone())
 
+    def get_users_for_weekly_report(
+        self,
+        period_start: str,
+        period_end: str,
+        report_key: str,
+    ) -> list[User]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT users.*
+                FROM users
+                JOIN food_entries ON food_entries.user_id = users.id
+                WHERE date(food_entries.created_at, '+3 hours') BETWEEN ? AND ?
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM reminder_logs
+                      WHERE reminder_logs.user_id = users.id
+                        AND reminder_logs.reminder_type = 'weekly_report'
+                        AND reminder_logs.slot = ?
+                  )
+                GROUP BY users.id
+                HAVING COUNT(DISTINCT date(food_entries.created_at, '+3 hours')) >= 3
+                ORDER BY users.id ASC
+                """,
+                (period_start, period_end, report_key),
+            ).fetchall()
+            return [self._user_from_row(row) for row in rows]
+
+    def get_weekly_report_summary(
+        self,
+        telegram_id: int,
+        period_start: str,
+        period_end: str,
+    ) -> dict[str, Any]:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                WITH daily AS (
+                    SELECT
+                        date(created_at, '+3 hours') AS day,
+                        COUNT(*) AS entries,
+                        SUM(calories) AS calories
+                    FROM food_entries
+                    WHERE user_id = ?
+                      AND date(created_at, '+3 hours') BETWEEN ? AND ?
+                    GROUP BY day
+                )
+                SELECT
+                    COUNT(*) AS active_days,
+                    COALESCE(SUM(entries), 0) AS entries,
+                    COALESCE(AVG(calories), 0) AS average_calories,
+                    COALESCE(SUM(CASE WHEN entries >= 3 THEN 1 ELSE 0 END), 0) AS full_days,
+                    COALESCE(SUM(
+                        CASE
+                            WHEN ? IS NOT NULL
+                             AND calories BETWEEN ? * 0.9 AND ? * 1.1
+                            THEN 1 ELSE 0
+                        END
+                    ), 0) AS target_days
+                FROM daily
+                """,
+                (
+                    user.id,
+                    period_start,
+                    period_end,
+                    user.calorie_target,
+                    user.calorie_target,
+                    user.calorie_target,
+                ),
+            ).fetchone()
+            top_food = conn.execute(
+                """
+                SELECT MIN(title) AS title, COUNT(*) AS uses
+                FROM food_entries
+                WHERE user_id = ?
+                  AND date(created_at, '+3 hours') BETWEEN ? AND ?
+                  AND trim(title) != ''
+                GROUP BY lower(trim(title))
+                ORDER BY uses DESC, MAX(created_at) DESC
+                LIMIT 1
+                """,
+                (user.id, period_start, period_end),
+            ).fetchone()
+
+        progress = self.get_user_progress_stats(telegram_id)
+        return {
+            "active_days": int(row["active_days"] or 0),
+            "entries": int(row["entries"] or 0),
+            "average_calories": int(round(float(row["average_calories"] or 0))),
+            "full_days": int(row["full_days"] or 0),
+            "target_days": int(row["target_days"] or 0) if user.calorie_target else None,
+            "top_food": str(top_food["title"]) if top_food else None,
+            "current_streak": int(progress["current_streak"] or 0),
+            "best_streak": int(progress["best_streak"] or 0),
+        }
+
     def log_broadcast(
         self,
         telegram_id: int,

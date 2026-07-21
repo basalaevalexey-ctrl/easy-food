@@ -96,6 +96,7 @@ WATER_REMINDER_SLOTS = {
     "19:30": 0.75,
 }
 STREAK_RESCUE_TIME = "21:00"
+WEEKLY_REPORT_TIME = "10:00"
 DAILY_REMINDER_MESSAGES = (
     (
         "Нямметр заглянул на минутку 🍽\n\n"
@@ -1096,6 +1097,36 @@ def streak_rescue_text(current_streak: int) -> str:
         f"Твой Ням-стрик: {current_streak} дней 🔥\n\n"
         "Сегодня в дневнике пока нет еды. Можно добавить хотя бы одну запись или использовать заморозку.\n\n"
         "❄️ Заморозка сохранит текущий стрик, но не увеличит его. Она доступна один раз в 7 дней."
+    )
+
+
+def format_weekly_report(summary: dict, period_start: date, period_end: date) -> str:
+    lines = [
+        "Твоя неделя с Нямметром 💚",
+        f"С {period_start.strftime('%d.%m')} по {period_end.strftime('%d.%m')}",
+        "",
+        f"📅 Активных дней: {summary['active_days']} из 7",
+        f"🍽 Записей еды: {summary['entries']}",
+        f"✅ Полных дней: {summary['full_days']}",
+        f"⚡ В среднем: {summary['average_calories']} ккал за активный день",
+    ]
+    if summary["target_days"] is not None:
+        lines.append(f"🎯 Дней в коридоре цели: {summary['target_days']}")
+    lines.append(f"🔥 Текущий Ням-стрик: {summary['current_streak']} дней")
+    if summary["top_food"]:
+        lines.append(f"🥣 Чаще всего записывал: {summary['top_food']}")
+    lines.extend(["", "Каждая запись помогает лучше видеть свой ритм. Новая неделя уже началась ✨"])
+    return "\n".join(lines)
+
+
+def weekly_report_keyboard(telegram_id: int) -> InlineKeyboardMarkup | None:
+    webapp_url = webapp_url_for_user(telegram_id)
+    if not webapp_url:
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Открыть Нямметр", web_app=WebAppInfo(url=webapp_url))],
+        ]
     )
 
 
@@ -2530,6 +2561,44 @@ async def reminder_loop(bot: Bot) -> None:
                 reminders_sent,
                 reminders_logged,
             )
+        if today_date.weekday() == 0 and WEEKLY_REPORT_TIME <= current_time < "23:30":
+            report_end = today_date - timedelta(days=1)
+            report_start = report_end - timedelta(days=6)
+            report_key = f"{report_start.isoformat()}:{report_end.isoformat()}"
+            report_users = db.get_users_for_weekly_report(
+                report_start.isoformat(),
+                report_end.isoformat(),
+                report_key,
+            )
+            reports_sent = 0
+            for user in report_users:
+                try:
+                    summary = db.get_weekly_report_summary(
+                        user.telegram_id,
+                        report_start.isoformat(),
+                        report_end.isoformat(),
+                    )
+                    await bot.send_message(
+                        user.telegram_id,
+                        format_weekly_report(summary, report_start, report_end),
+                        reply_markup=weekly_report_keyboard(user.telegram_id),
+                    )
+                    db.log_reminder(user.telegram_id, "weekly_report", report_key, "sent")
+                    reports_sent += 1
+                except TelegramForbiddenError:
+                    db.log_reminder(user.telegram_id, "weekly_report", report_key, "blocked", "bot_blocked")
+                    logger.info("Weekly report skipped blocked user %s", user.telegram_id)
+                except Exception as exc:
+                    db.log_reminder(user.telegram_id, "weekly_report", report_key, "failed", str(exc))
+                    logger.exception("Failed to send weekly report to user %s", user.telegram_id)
+                await asyncio.sleep(0.05)
+            if report_users:
+                logger.info(
+                    "Weekly report %s: candidates=%s sent=%s",
+                    report_key,
+                    len(report_users),
+                    reports_sent,
+                )
         water_ratio = WATER_REMINDER_SLOTS.get(current_time)
         if water_ratio is not None:
             water_candidates = db.get_users_for_water_reminder(current_time, today)
