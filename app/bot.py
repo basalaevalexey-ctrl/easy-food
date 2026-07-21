@@ -2563,20 +2563,33 @@ async def reminder_loop(bot: Bot) -> None:
             )
         if is_activation_window(now):
             for user, step in db.get_users_for_activation():
+                if db.has_reactivation_push_today(user.telegram_id):
+                    logger.info("Activation push skipped by daily cap for user %s", user.telegram_id)
+                    continue
                 try:
                     await bot.send_message(
                         user.telegram_id,
                         ACTIVATION_TEXTS[step],
                         reply_markup=activation_keyboard(step),
                     )
+                    db.log_reminder(user.telegram_id, "activation", f"step:{step}", "sent")
                     db.mark_activation_sent(user.telegram_id, step)
                 except TelegramForbiddenError:
                     db.disable_activation(user.telegram_id)
+                    db.log_reminder(user.telegram_id, "activation", f"step:{step}", "failed", "bot_blocked")
                     logger.info("User %s blocked bot, activation disabled", user.telegram_id)
-                except Exception:
+                except Exception as exc:
+                    db.log_reminder(user.telegram_id, "activation", f"step:{step}", "failed", str(exc))
                     logger.exception("Failed to send activation message to user %s", user.telegram_id)
             for segment, texts in LIFECYCLE_PUSH_TEXTS.items():
                 for user, step in db.get_users_for_lifecycle_push(segment, max_steps=len(texts)):
+                    if db.has_reactivation_push_today(user.telegram_id):
+                        logger.info(
+                            "Lifecycle push %s skipped by daily cap for user %s",
+                            segment,
+                            user.telegram_id,
+                        )
+                        continue
                     text = texts.get(step)
                     if not text:
                         continue
@@ -2602,6 +2615,9 @@ async def reminder_loop(bot: Bot) -> None:
             streak_candidates = db.get_users_for_streak_rescue(today, (today_date - timedelta(days=1)).isoformat())
             streak_sent = 0
             for user in streak_candidates:
+                if db.has_reactivation_push_today(user.telegram_id):
+                    logger.info("Streak rescue skipped by daily cap for user %s", user.telegram_id)
+                    continue
                 try:
                     await bot.send_message(
                         user.telegram_id,
@@ -2622,6 +2638,9 @@ async def reminder_loop(bot: Bot) -> None:
             yesterday = (today_date - timedelta(days=1)).isoformat()
             day_before_yesterday = (today_date - timedelta(days=2)).isoformat()
             for user in db.get_users_for_duolingo_push(today, yesterday, day_before_yesterday):
+                if db.has_reactivation_push_today(user.telegram_id):
+                    logger.info("Duolingo push skipped by daily cap for user %s", user.telegram_id)
+                    continue
                 try:
                     await bot.send_message(user.telegram_id, duolingo_push_text(user.telegram_id, today))
                     db.mark_duolingo_push_sent(user.telegram_id)

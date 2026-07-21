@@ -850,6 +850,27 @@ class Database:
                     (user.id, "reminder_sent" if reminder_type == "daily" else f"{reminder_type}_sent"),
                 )
 
+    def has_reactivation_push_today(self, telegram_id: int) -> bool:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            return bool(conn.execute(
+                """
+                SELECT 1
+                FROM reminder_logs
+                WHERE user_id = ?
+                  AND status = 'sent'
+                  AND date(sent_at, '+3 hours') = date('now', '+3 hours')
+                  AND (
+                      reminder_type = 'activation'
+                      OR reminder_type = 'duolingo'
+                      OR reminder_type = 'streak_rescue'
+                      OR reminder_type LIKE 'lifecycle:%'
+                  )
+                LIMIT 1
+                """,
+                (user.id,),
+            ).fetchone())
+
     def log_broadcast(
         self,
         telegram_id: int,
