@@ -250,22 +250,8 @@ class AdminStatsService:
                     (SELECT COUNT(*) FROM users WHERE {user_filter}) AS new_users,
                     (SELECT COUNT(*) FROM users WHERE {previous_filter}) AS previous_new_users,
                     (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'start' AND {event_filter}) AS starts,
-                    (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'miniapp_opened' AND {event_filter}) AS miniapp_opened,
-                    (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'miniapp_profile_updated' AND {event_filter}) AS quiz_completed,
+                    (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'site_quiz_completed' AND {event_filter}) AS quiz_users,
                     (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'goal_set' AND {event_filter}) AS goal_set,
-                    (
-                        SELECT COUNT(DISTINCT user_id)
-                        FROM (
-                            SELECT user_id
-                            FROM user_events
-                            WHERE event_type IN ('start', 'miniapp_opened', 'miniapp_profile_updated', 'goal_set')
-                              AND {event_filter}
-                            UNION
-                            SELECT user_id
-                            FROM food_entries
-                            WHERE {date_filter}
-                        )
-                    ) AS activation_users,
                     (SELECT COUNT(DISTINCT user_id) FROM food_entries WHERE {date_filter}) AS active_users,
                     (SELECT COUNT(DISTINCT user_id) FROM food_entries WHERE {previous_filter}) AS previous_active_users,
                     (SELECT COUNT(*) FROM food_entries WHERE {date_filter}) AS meal_logs,
@@ -297,19 +283,7 @@ class AdminStatsService:
                     (SELECT COUNT(DISTINCT user_id) FROM food_entries) AS total_active_users_ever,
                     (SELECT COUNT(*) FROM users WHERE calorie_target IS NOT NULL) AS total_goal_set,
                     (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'start') AS total_starts,
-                    (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'miniapp_opened') AS total_miniapp_opened,
-                    (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'miniapp_profile_updated') AS total_quiz_completed,
-                    (
-                        SELECT COUNT(DISTINCT user_id)
-                        FROM (
-                            SELECT user_id
-                            FROM user_events
-                            WHERE event_type IN ('start', 'miniapp_opened', 'miniapp_profile_updated', 'goal_set')
-                            UNION
-                            SELECT user_id
-                            FROM food_entries
-                        )
-                    ) AS total_activation_users,
+                    (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'site_quiz_completed') AS total_quiz_users,
                     (SELECT COUNT(*) FROM users WHERE reminder_time IS NOT NULL) AS reminders_enabled_total
                 """
             ).fetchone()
@@ -329,11 +303,9 @@ class AdminStatsService:
         stats = dict(row)
         stats["first_meal"] = int(first_meal or 0)
         stats["avg_logs_per_active"] = ratio(stats["meal_logs"], stats["active_users"])
-        stats["miniapp_opened_conv"] = percent(stats["miniapp_opened"], stats["activation_users"])
-        stats["quiz_completed_conv"] = percent(stats["quiz_completed"], stats["activation_users"])
-        stats["goal_set_conv"] = percent(stats["goal_set"], stats["activation_users"])
-        stats["first_meal_conv"] = percent(stats["first_meal"], stats["activation_users"])
-        stats["users_3plus_logs_conv"] = percent(stats["users_3plus_logs"], stats["activation_users"])
+        stats["goal_set_conv"] = percent(stats["goal_set"], stats["starts"])
+        stats["first_meal_conv"] = percent(stats["first_meal"], stats["starts"])
+        stats["users_3plus_logs_conv"] = percent(stats["users_3plus_logs"], stats["starts"])
         stats["photo_share"] = percent(stats["photo_logs"], stats["meal_logs"])
         stats["text_share"] = percent(stats["text_logs"], stats["meal_logs"])
         return {key: normalize(value) for key, value in stats.items()}
@@ -656,10 +628,8 @@ def format_today_stats(stats: dict[str, Any]) -> str:
             "",
             "━━━━━━━━━━━━",
             "🚀 АКТИВАЦИЯ",
-            f"Активировались: {stats['activation_users']}",
-            f"Открыли миниапп: {stats['miniapp_opened']} ({fmt_percent(stats['miniapp_opened_conv'])})",
-            f"Заполнили квиз / профиль: {stats['quiz_completed']} ({fmt_percent(stats['quiz_completed_conv'])})",
-            f"Нажали /start: {stats['starts']}",
+            f"Запустили бота: {stats['starts']}",
+            f"Перешли с квиза: {stats['quiz_users']}",
             f"Поставили цель: {stats['goal_set']} ({fmt_percent(stats['goal_set_conv'])})",
             f"Сделали 1-й лог еды: {stats['first_meal']} ({fmt_percent(stats['first_meal_conv'])})",
             "",
@@ -717,10 +687,8 @@ def format_period_stats(title: str, stats: dict[str, Any], active_label: str) ->
             "",
             "━━━━━━━━━━━━",
             "🚀 ВОРОНКА АКТИВАЦИИ",
-            f"Активировались: {stats['activation_users']}",
-            f"Открыли миниапп: {stats['miniapp_opened']} ({fmt_percent(stats['miniapp_opened_conv'])})",
-            f"Заполнили квиз / профиль: {stats['quiz_completed']} ({fmt_percent(stats['quiz_completed_conv'])})",
-            f"Нажали /start: {stats['starts']}",
+            f"Запустили бота: {stats['starts']}",
+            f"Перешли с квиза: {stats['quiz_users']}",
             f"Поставили цель: {stats['goal_set']} ({fmt_percent(stats['goal_set_conv'])})",
             f"Сделали 1-й лог еды: {stats['first_meal']} ({fmt_percent(stats['first_meal_conv'])})",
             f"Сделали 3+ логов еды: {stats['users_3plus_logs']} ({fmt_percent(stats['users_3plus_logs_conv'])})",
@@ -774,10 +742,8 @@ def format_total_stats(stats: dict[str, Any]) -> str:
             "━━━━━━━━━━━━",
             "👥 БАЗА",
             f"Всего пользователей: {stats['total_users']}",
-            f"Всего активировались: {stats['total_activation_users']}",
-            f"Всего открыли миниапп: {stats['total_miniapp_opened']}",
-            f"Всего заполнили квиз / профиль: {stats['total_quiz_completed']}",
-            f"Всего нажали /start: {stats['total_starts']}",
+            f"Всего запустили бота: {stats['total_starts']}",
+            f"Всего перешли с квиза: {stats['total_quiz_users']}",
             f"Всего поставили цель: {stats['total_goal_set']}",
             f"Всего сделали хотя бы 1 лог еды: {stats['total_activated_users']}",
             f"Всего активных пользователей за всё время: {stats['total_active_users_ever']}",
@@ -830,11 +796,9 @@ def format_funnel_stats(stats: dict[str, Any]) -> str:
         [
             "🚀 НЯММЕТР — ВОРОНКА (7D)",
             "",
-            f"Активировались: {stats['activation_users']}",
-            f"├ Открыли миниапп: {stats['miniapp_opened']} ({fmt_percent(stats['miniapp_opened_conv'])})",
-            f"├ Заполнили квиз / профиль: {stats['quiz_completed']} ({fmt_percent(stats['quiz_completed_conv'])})",
-            f"├ Нажали /start: {stats['starts']}",
-            f"├ Поставили цель: {stats['goal_set']} ({fmt_percent(stats['goal_set_conv'])})",
+            f"Запустили бота: {stats['starts']}",
+            f"Перешли с квиза: {stats['quiz_users']}",
+            f"└ Поставили цель: {stats['goal_set']} ({fmt_percent(stats['goal_set_conv'])})",
             f"└ Сделали 1-й лог еды: {stats['first_meal']} ({fmt_percent(stats['first_meal_conv'])})",
             f"└ Сделали 3+ логов: {stats['users_3plus_logs']} ({fmt_percent(stats['users_3plus_logs_conv'])})",
             f"└ Вернулись на следующий день: {stats['d1_return_users']} ({fmt_percent(stats['d1_return_conv'])})",
