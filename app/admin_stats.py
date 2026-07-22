@@ -36,6 +36,7 @@ class AdminStatsService:
         stats = self._period_stats(1)
         stats.update(self._retention_stats(1))
         stats.update(self._reminders_stats(1))
+        stats.update(self._referral_stats(1))
         return stats
 
     def get_stats_7d(self) -> dict[str, Any]:
@@ -43,6 +44,7 @@ class AdminStatsService:
         stats.update(self._growth_stats(7))
         stats.update(self._retention_stats(7))
         stats.update(self._reminders_stats(7))
+        stats.update(self._referral_stats(7))
         return stats
 
     def get_stats_30d(self) -> dict[str, Any]:
@@ -50,12 +52,14 @@ class AdminStatsService:
         stats.update(self._growth_stats(30))
         stats.update(self._retention_stats(30))
         stats.update(self._reminders_stats(30))
+        stats.update(self._referral_stats(30))
         return stats
 
     def get_stats_total(self) -> dict[str, Any]:
         stats = self._period_stats(None)
         stats.update(self._retention_stats(None))
         stats.update(self._reminders_stats(None))
+        stats.update(self._referral_stats(None))
         return stats
 
     def get_daily_stats(self, days: int = 7) -> list[dict[str, Any]]:
@@ -336,6 +340,59 @@ class AdminStatsService:
             "streak_14": streak_14,
         }
 
+    def _referral_stats(self, days: int | None) -> dict[str, Any]:
+        registered_filter = self._date_filter("created_at", days)
+        with self.db.connect() as conn:
+            registered = conn.execute(
+                f"SELECT COUNT(*) FROM referrals WHERE {registered_filter}"
+            ).fetchone()[0]
+            activated = conn.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM referrals
+                WHERE activated_at IS NOT NULL AND {registered_filter}
+                """
+            ).fetchone()[0]
+            inviters = conn.execute(
+                f"""
+                SELECT COUNT(DISTINCT inviter_user_id)
+                FROM referrals
+                WHERE {registered_filter}
+                """
+            ).fetchone()[0]
+            active_inviters = conn.execute(
+                f"""
+                SELECT COUNT(DISTINCT inviter_user_id)
+                FROM referrals
+                WHERE activated_at IS NOT NULL AND {registered_filter}
+                """
+            ).fetchone()[0]
+            milestone_row = conn.execute(
+                """
+                SELECT
+                    COALESCE(SUM(CASE WHEN activated >= 1 THEN 1 ELSE 0 END), 0) AS one_plus,
+                    COALESCE(SUM(CASE WHEN activated >= 5 THEN 1 ELSE 0 END), 0) AS five_plus,
+                    COALESCE(SUM(CASE WHEN activated >= 10 THEN 1 ELSE 0 END), 0) AS ten_plus
+                FROM (
+                    SELECT inviter_user_id, COUNT(*) AS activated
+                    FROM referrals
+                    WHERE activated_at IS NOT NULL
+                    GROUP BY inviter_user_id
+                )
+                """
+            ).fetchone()
+
+        return {
+            "referral_inviters": int(inviters or 0),
+            "referral_active_inviters": int(active_inviters or 0),
+            "referral_registered": int(registered or 0),
+            "referral_activated": int(activated or 0),
+            "referral_activation_rate": percent(activated, registered),
+            "referral_one_plus": int(milestone_row["one_plus"] or 0),
+            "referral_five_plus": int(milestone_row["five_plus"] or 0),
+            "referral_ten_plus": int(milestone_row["ten_plus"] or 0),
+        }
+
     def _reminders_stats(self, days: int | None) -> dict[str, Any]:
         log_filter = self._date_filter("sent_at", days)
         conversion_log_filter = self._date_filter("l.sent_at", days)
@@ -582,6 +639,13 @@ def format_today_stats(stats: dict[str, Any]) -> str:
             f"Ккал записано: {stats['kcal']}",
             "",
             "━━━━━━━━━━━━",
+            "🤝 ПРИГЛАШЕНИЯ",
+            f"Приглашавших пользователей: {stats['referral_inviters']}",
+            f"Привели активных друзей: {stats['referral_active_inviters']}",
+            f"Перешли по реферальной ссылке: {stats['referral_registered']}",
+            f"Активировались: {stats['referral_activated']} ({fmt_percent(stats['referral_activation_rate'])})",
+            "",
+            "━━━━━━━━━━━━",
             "🔔 НАПОМИНАНИЯ",
             f"Пользователей с напоминаниями: {stats['reminders_enabled_total']}",
             f"Отправлено сегодня: {fmt_reminder_count(stats, 'reminders_sent')}",
@@ -636,6 +700,13 @@ def format_period_stats(title: str, stats: dict[str, Any], active_label: str) ->
             f"Ккал записано: {stats['kcal']}",
             "",
             "━━━━━━━━━━━━",
+            "🤝 ПРИГЛАШЕНИЯ",
+            f"Приглашавших пользователей: {stats['referral_inviters']}",
+            f"Привели активных друзей: {stats['referral_active_inviters']}",
+            f"Перешли по реферальной ссылке: {stats['referral_registered']}",
+            f"Активировались: {stats['referral_activated']} ({fmt_percent(stats['referral_activation_rate'])})",
+            "",
+            "━━━━━━━━━━━━",
             "🔥 УДЕРЖАНИЕ",
             f"D1 retention: {fmt_percent(stats['d1_retention'])}",
             f"D3 retention: {fmt_percent(stats['d3_retention'])}",
@@ -671,6 +742,16 @@ def format_total_stats(stats: dict[str, Any]) -> str:
             f"Всего поставили цель: {stats['total_goal_set']}",
             f"Всего сделали хотя бы 1 лог еды: {stats['total_activated_users']}",
             f"Всего активных пользователей за всё время: {stats['total_active_users_ever']}",
+            "",
+            "━━━━━━━━━━━━",
+            "🤝 ПРИГЛАШЕНИЯ",
+            f"Приглашавших пользователей: {stats['referral_inviters']}",
+            f"Привели активных друзей: {stats['referral_active_inviters']}",
+            f"Всего переходов по реферальной ссылке: {stats['referral_registered']}",
+            f"Всего активированных приглашённых: {stats['referral_activated']} ({fmt_percent(stats['referral_activation_rate'])})",
+            f"Пригласили 1+ активного друга: {stats['referral_one_plus']}",
+            f"Пригласили 5+ активных друзей: {stats['referral_five_plus']}",
+            f"Пригласили 10+ активных друзей: {stats['referral_ten_plus']}",
             "",
             "━━━━━━━━━━━━",
             "🍽 ЗА ВСЁ ВРЕМЯ",
