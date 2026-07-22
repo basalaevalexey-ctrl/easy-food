@@ -623,6 +623,7 @@ def parse_telegram_init_data(init_data: str) -> dict | None:
     if not user_data.get("id"):
         return None
 
+    user_data["_start_param"] = str(pairs.get("start_param") or "")
     return user_data
 
 
@@ -803,8 +804,6 @@ def update_miniapp_profile(telegram_user: dict, payload: dict) -> dict:
     )
     db.activate_referral(telegram_id)
     db.record_user_event(telegram_id, "miniapp_profile_updated")
-    if payload.get("source") == "site_quiz":
-        db.record_user_event(telegram_id, "site_quiz_completed")
     return build_miniapp_payload(telegram_user)
 
 
@@ -1006,7 +1005,10 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             return
 
         selected_day = _valid_miniapp_day((query.get("date") or [None])[0])
-        db.record_user_event(int(telegram_user["id"]), "miniapp_opened")
+        telegram_id = int(telegram_user["id"])
+        if str(telegram_user.get("_start_param") or "").startswith("q_"):
+            db.record_user_event(telegram_id, "site_quiz_opened")
+        db.record_user_event(telegram_id, "miniapp_opened")
         self._send_json(200, build_miniapp_payload(telegram_user, selected_day=selected_day))
 
     def do_POST(self) -> None:
