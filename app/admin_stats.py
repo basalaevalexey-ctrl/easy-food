@@ -250,7 +250,7 @@ class AdminStatsService:
                     (SELECT COUNT(*) FROM users WHERE {user_filter}) AS new_users,
                     (SELECT COUNT(*) FROM users WHERE {previous_filter}) AS previous_new_users,
                     (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'start' AND {event_filter}) AS starts,
-                    (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'site_quiz_completed' AND {event_filter}) AS quiz_users,
+                    (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'site_quiz_opened' AND {event_filter}) AS quiz_users,
                     (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'goal_set' AND {event_filter}) AS goal_set,
                     (SELECT COUNT(DISTINCT user_id) FROM food_entries WHERE {date_filter}) AS active_users,
                     (SELECT COUNT(DISTINCT user_id) FROM food_entries WHERE {previous_filter}) AS previous_active_users,
@@ -283,7 +283,7 @@ class AdminStatsService:
                     (SELECT COUNT(DISTINCT user_id) FROM food_entries) AS total_active_users_ever,
                     (SELECT COUNT(*) FROM users WHERE calorie_target IS NOT NULL) AS total_goal_set,
                     (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'start') AS total_starts,
-                    (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'site_quiz_completed') AS total_quiz_users,
+                    (SELECT COUNT(DISTINCT user_id) FROM user_events WHERE event_type = 'site_quiz_opened') AS total_quiz_users,
                     (SELECT COUNT(*) FROM users WHERE reminder_time IS NOT NULL) AS reminders_enabled_total
                 """
             ).fetchone()
