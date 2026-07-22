@@ -803,6 +803,8 @@ def update_miniapp_profile(telegram_user: dict, payload: dict) -> dict:
     )
     db.activate_referral(telegram_id)
     db.record_user_event(telegram_id, "miniapp_profile_updated")
+    if payload.get("source") == "site_quiz":
+        db.record_user_event(telegram_id, "site_quiz_completed")
     return build_miniapp_payload(telegram_user)
 
 
