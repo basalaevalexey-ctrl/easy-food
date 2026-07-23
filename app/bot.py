@@ -90,11 +90,35 @@ WEBAPP_BUILD = "nyam-95"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 BOT_USERNAME = ""
+PUSH_STICKER_PATH = Path(__file__).resolve().parent / "assets" / "push-hello.webp"
+PUSH_STICKER_FILE_ID: str | None = None
 WATER_REMINDER_SLOTS = {
     "11:30": 0.25,
     "15:30": 0.50,
     "19:30": 0.75,
 }
+
+
+async def send_push_message(
+    bot: Bot,
+    chat_id: int,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> Message:
+    """Send the branded sticker before a push without risking the text delivery."""
+    global PUSH_STICKER_FILE_ID
+
+    try:
+        sticker = PUSH_STICKER_FILE_ID or FSInputFile(PUSH_STICKER_PATH)
+        sticker_message = await bot.send_sticker(chat_id, sticker)
+        if sticker_message.sticker:
+            PUSH_STICKER_FILE_ID = sticker_message.sticker.file_id
+    except TelegramForbiddenError:
+        raise
+    except Exception:
+        logger.exception("Failed to send push sticker to user %s; sending text anyway", chat_id)
+
+    return await bot.send_message(chat_id, text, reply_markup=reply_markup)
 STREAK_RESCUE_TIME = "21:00"
 WEEKLY_REPORT_TIME = "10:00"
 DAILY_REMINDER_MESSAGES = (
@@ -1896,7 +1920,7 @@ async def broadcast_command(message: Message) -> None:
     failed = 0
     for user in users:
         try:
-            await message.bot.send_message(user.telegram_id, broadcast_text)
+            await send_push_message(message.bot, user.telegram_id, broadcast_text)
             db.log_broadcast(user.telegram_id, campaign_id, "sent")
             sent += 1
         except TelegramForbiddenError:
@@ -1983,7 +2007,7 @@ async def broadcast_segment_command(message: Message) -> None:
     failed = 0
     for user in users:
         try:
-            await message.bot.send_message(user.telegram_id, broadcast_text)
+            await send_push_message(message.bot, user.telegram_id, broadcast_text)
             db.log_broadcast(user.telegram_id, campaign_id, "sent")
             sent += 1
         except TelegramForbiddenError:
@@ -2577,7 +2601,8 @@ async def reminder_loop(bot: Bot) -> None:
         for user in reminder_users:
             try:
                 mission_status = db.get_daily_mission_status(user.telegram_id)
-                await bot.send_message(
+                await send_push_message(
+                    bot,
                     user.telegram_id,
                     daily_reminder_text(user.telegram_id, today_date, mission_status),
                 )
@@ -2621,7 +2646,8 @@ async def reminder_loop(bot: Bot) -> None:
                         report_start.isoformat(),
                         report_end.isoformat(),
                     )
-                    await bot.send_message(
+                    await send_push_message(
+                        bot,
                         user.telegram_id,
                         format_weekly_report(summary, report_start, report_end),
                         reply_markup=weekly_report_keyboard(user.telegram_id),
@@ -2652,7 +2678,8 @@ async def reminder_loop(bot: Bot) -> None:
                 if summary["total_ml"] >= max(0, expected_ml - 300):
                     continue
                 try:
-                    await bot.send_message(
+                    await send_push_message(
+                        bot,
                         user.telegram_id,
                         format_water_reminder(summary),
                         reply_markup=water_reminder_keyboard(user.telegram_id),
@@ -2679,7 +2706,8 @@ async def reminder_loop(bot: Bot) -> None:
                     logger.info("Activation push skipped by daily cap for user %s", user.telegram_id)
                     continue
                 try:
-                    await bot.send_message(
+                    await send_push_message(
+                        bot,
                         user.telegram_id,
                         ACTIVATION_TEXTS[step],
                         reply_markup=activation_keyboard(step),
@@ -2711,7 +2739,7 @@ async def reminder_loop(bot: Bot) -> None:
                             if segment == "started_no_goal"
                             else None
                         )
-                        await bot.send_message(user.telegram_id, text, reply_markup=reply_markup)
+                        await send_push_message(bot, user.telegram_id, text, reply_markup=reply_markup)
                         db.log_lifecycle_push(user.telegram_id, segment, step, "sent")
                         db.log_reminder(user.telegram_id, f"lifecycle:{segment}", f"step:{step}", "sent")
                     except TelegramForbiddenError:
@@ -2731,7 +2759,8 @@ async def reminder_loop(bot: Bot) -> None:
                     logger.info("Streak rescue skipped by daily cap for user %s", user.telegram_id)
                     continue
                 try:
-                    await bot.send_message(
+                    await send_push_message(
+                        bot,
                         user.telegram_id,
                         streak_rescue_text(user.current_streak),
                         reply_markup=streak_rescue_keyboard(webapp_url_with_build()),
@@ -2754,7 +2783,7 @@ async def reminder_loop(bot: Bot) -> None:
                     logger.info("Duolingo push skipped by daily cap for user %s", user.telegram_id)
                     continue
                 try:
-                    await bot.send_message(user.telegram_id, duolingo_push_text(user.telegram_id, today))
+                    await send_push_message(bot, user.telegram_id, duolingo_push_text(user.telegram_id, today))
                     db.mark_duolingo_push_sent(user.telegram_id)
                     db.log_reminder(user.telegram_id, "duolingo", config.auto_push_time, "sent")
                 except Exception as exc:
