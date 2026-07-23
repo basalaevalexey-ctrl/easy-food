@@ -108,15 +108,17 @@ async def send_push_message(
     """Send the branded sticker before a push without risking the text delivery."""
     global PUSH_STICKER_FILE_ID
 
-    try:
-        sticker = PUSH_STICKER_FILE_ID or FSInputFile(PUSH_STICKER_PATH)
-        sticker_message = await bot.send_sticker(chat_id, sticker)
-        if sticker_message.sticker:
-            PUSH_STICKER_FILE_ID = sticker_message.sticker.file_id
-    except TelegramForbiddenError:
-        raise
-    except Exception:
-        logger.exception("Failed to send push sticker to user %s; sending text anyway", chat_id)
+    push_date = datetime.now(MOSCOW_TZ).date().isoformat()
+    if db.claim_daily_push_sticker(chat_id, push_date):
+        try:
+            sticker = PUSH_STICKER_FILE_ID or FSInputFile(PUSH_STICKER_PATH)
+            sticker_message = await bot.send_sticker(chat_id, sticker)
+            if sticker_message.sticker:
+                PUSH_STICKER_FILE_ID = sticker_message.sticker.file_id
+        except TelegramForbiddenError:
+            raise
+        except Exception:
+            logger.exception("Failed to send push sticker to user %s; sending text anyway", chat_id)
 
     return await bot.send_message(chat_id, text, reply_markup=reply_markup)
 STREAK_RESCUE_TIME = "21:00"

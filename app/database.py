@@ -223,6 +223,17 @@ class Database:
             )
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS daily_push_stickers (
+                    user_id INTEGER NOT NULL,
+                    push_date TEXT NOT NULL,
+                    claimed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (user_id, push_date),
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+                """
+            )
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS lifecycle_pushes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
@@ -870,6 +881,18 @@ class Database:
                 """,
                 (user.id,),
             ).fetchone())
+
+    def claim_daily_push_sticker(self, telegram_id: int, push_date: str) -> bool:
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT OR IGNORE INTO daily_push_stickers (user_id, push_date)
+                VALUES (?, ?)
+                """,
+                (user.id, push_date),
+            )
+            return cursor.rowcount == 1
 
     def get_users_for_weekly_report(
         self,
