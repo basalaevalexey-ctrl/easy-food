@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-95" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-96" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -103,11 +103,12 @@
           </article>
         </div>
 
-        <aside class="tip-card wide diary-insight" aria-live="polite">
+        <aside class="tip-card wide diary-insight" data-diary-insight role="button" tabindex="0" aria-expanded="false" aria-label="Открыть персональную рекомендацию">
           <img loading="lazy" class="tip-paw" src="./assets/paw.png" alt="" />
-          <div>
+          <div aria-live="polite">
             <strong data-diary-insight-title>Собираю итог дня</strong>
-            <small data-diary-insight-text>Посмотрю записи и подскажу, на что обратить внимание.</small>
+            <small data-diary-insight-text>Посмотрю записи и сравню их с твоими целями.</small>
+            <small class="diary-insight-advice" data-diary-insight-advice hidden>Здесь появится одна рекомендация на день.</small>
           </div>
           <img loading="lazy" class="tip-cat" src="./assets/cat-peek.png" alt="" />
         </aside>
@@ -332,8 +333,10 @@ const datePicker = document.querySelector("[data-date-picker]");
 const dateCalendar = document.querySelector("[data-calendar]");
 const datePrev = document.querySelector("[data-date-prev]");
 const dateNext = document.querySelector("[data-date-next]");
+const diaryInsight = document.querySelector("[data-diary-insight]");
 const diaryInsightTitle = document.querySelector("[data-diary-insight-title]");
 const diaryInsightText = document.querySelector("[data-diary-insight-text]");
+const diaryInsightAdvice = document.querySelector("[data-diary-insight-advice]");
 const periodReportModal = document.querySelector("[data-period-report-modal]");
 const periodReportTitle = document.querySelector("[data-period-report-title]");
 const periodReportDays = document.querySelector("[data-period-report-days]");
@@ -580,8 +583,16 @@ function foodEntryWord(count) {
   return "записей";
 }
 
+function setDiaryInsight(title, fact, advice) {
+  if (!diaryInsightTitle || !diaryInsightText || !diaryInsightAdvice) return;
+  diaryInsightTitle.textContent = title;
+  diaryInsightText.textContent = fact;
+  diaryInsightAdvice.textContent = advice;
+  diaryInsightAdvice.hidden = true;
+  diaryInsight?.setAttribute("aria-expanded", "false");
+}
+
 function updateDiaryInsight({ entries, calories, protein, targetCalories, targetProtein, water }) {
-  if (!diaryInsightTitle || !diaryInsightText) return;
   const count = entries.length;
   const isPastDay = selectedDate < today;
   const isEvening = new Date().getHours() >= 20;
@@ -590,60 +601,88 @@ function updateDiaryInsight({ entries, calories, protein, targetCalories, target
   const proteinRatio = targetProtein > 0 ? protein / targetProtein : 0;
   const remainingCalories = Math.max(0, Math.round(targetCalories - calories));
   const remainingProtein = Math.max(0, Math.round(targetProtein - protein));
+  const calorieDelta = targetCalories > 0 ? Math.round(Math.abs(calories - targetCalories) / targetCalories * 100) : 0;
+  const proteinFact = targetProtein > 0 ? ` Белок: ${protein} из ${targetProtein} г.` : "";
+  const waterRatio = Number(water?.target_ml) > 0 ? Number(water?.total_ml || 0) / Number(water.target_ml) : 0;
 
   if (count === 0) {
-    diaryInsightTitle.textContent = isPastDay ? "За этот день записей нет" : "Итог дня появится здесь";
-    diaryInsightText.textContent = isPastDay
-      ? "Если вспомнишь приём пищи, его ещё можно добавить в дневник."
-      : "Добавь первую еду, и я начну собирать персональный мини-отчёт.";
+    setDiaryInsight(
+      isPastDay ? "За этот день записей нет" : "Итог дня появится здесь",
+      isPastDay ? "Данных пока недостаточно для мини-отчёта." : "Добавь первую еду, и я начну собирать итог.",
+      isPastDay ? "Если вспомнишь приём пищи, его ещё можно добавить в дневник." : "После нескольких записей я сравню день с твоими целями.",
+    );
     return;
   }
 
   if (!targetCalories) {
-    diaryInsightTitle.textContent = `${count} ${foodEntryWord(count)} · ${calories} ккал`;
-    diaryInsightText.textContent = "Настрой цель, чтобы я сравнивал день с твоей личной нормой.";
+    setDiaryInsight(
+      `${count} ${foodEntryWord(count)} · ${calories} ккал`,
+      `Белок: ${protein} г. Дневная цель пока не настроена.`,
+      "Настрой цель, чтобы я сравнивал рацион с твоими личными ориентирами.",
+    );
     return;
   }
 
   if (!isFinalSummary) {
-    diaryInsightTitle.textContent = `${count} ${foodEntryWord(count)} · ${calories} из ${targetCalories} ккал`;
+    let advice = `До дневного ориентира осталось примерно ${remainingCalories} ккал.`;
     if (count < 3) {
-      diaryInsightText.textContent = `До полного дня осталось ${3 - count} ${foodEntryWord(3 - count)}. До нормы примерно ${remainingCalories} ккал.`;
-    } else if (proteinRatio > 0 && proteinRatio < 0.8) {
-      diaryInsightText.textContent = `Калории идут по плану. По белку осталось примерно ${remainingProtein} г.`;
-    } else {
-      diaryInsightText.textContent = `До дневного ориентира осталось примерно ${remainingCalories} ккал.`;
+      advice = `До полного дня осталось ${3 - count} ${foodEntryWord(3 - count)}.`;
+    } else if (targetProtein && proteinRatio < 0.7) {
+      advice = `По белку осталось примерно ${remainingProtein} г.`;
+    } else if (calorieRatio > 1.1) {
+      advice = "Основной дневной ориентир уже набран.";
     }
+    setDiaryInsight(
+      "День ещё собирается",
+      `${count} ${foodEntryWord(count)} · ${calories} из ${targetCalories} ккал.${proteinFact}`,
+      advice,
+    );
     return;
   }
 
   if (count < 3) {
-    diaryInsightTitle.textContent = `${count} ${foodEntryWord(count)} · ${calories} ккал`;
-    diaryInsightText.textContent = "Похоже, день записан не полностью, поэтому вывод пока приблизительный.";
-  } else if (calorieRatio >= 0.9 && calorieRatio <= 1.1 && (!targetProtein || proteinRatio >= 0.8)) {
-    diaryInsightTitle.textContent = "День получился очень ровным";
-    diaryInsightText.textContent = `${calories} ккал и ${protein} г белка — оба ориентира рядом с целью.`;
-  } else if (calorieRatio < 0.7) {
-    diaryInsightTitle.textContent = `В дневнике ${Math.round(calorieRatio * 100)}% нормы`;
-    diaryInsightText.textContent = "Возможно, часть еды осталась без записи. Проверь дневник перед итогом.";
-  } else if (calorieRatio < 0.9) {
-    diaryInsightTitle.textContent = "Сегодня немного ниже ориентира";
-    diaryInsightText.textContent = `Получилось ${calories} ккал. До цели не хватило примерно ${remainingCalories} ккал.`;
-  } else if (calorieRatio > 1.1) {
-    diaryInsightTitle.textContent = "Сегодня чуть выше ориентира";
-    diaryInsightText.textContent = `${calories} ккал при цели ${targetCalories}. Один день не меняет общий прогресс.`;
-  } else if (targetProtein && proteinRatio < 0.8) {
-    diaryInsightTitle.textContent = "По калориям всё близко к цели";
-    diaryInsightText.textContent = `Белка получилось ${protein} г. Завтра можно добавить ещё один белковый продукт.`;
-  } else {
-    diaryInsightTitle.textContent = "День собран";
-    diaryInsightText.textContent = `${count} ${foodEntryWord(count)}, ${calories} ккал. Хорошая база для стабильного прогресса.`;
+    setDiaryInsight(
+      "Отчёт пока предварительный",
+      `${count} ${foodEntryWord(count)} · ${calories} из ${targetCalories} ккал.${proteinFact}`,
+      "Проверь, все ли приёмы пищи попали в дневник.",
+    );
+    return;
   }
 
-  const waterRatio = Number(water?.target_ml) > 0 ? Number(water?.total_ml || 0) / Number(water.target_ml) : 0;
-  if (count >= 3 && waterRatio > 0 && waterRatio < 0.5 && calorieRatio >= 0.9 && calorieRatio <= 1.1) {
-    diaryInsightText.textContent = `По еде день близок к цели. Воды отмечено ${Math.round(Number(water.total_ml || 0))} мл — возможно, не всё записано.`;
+  let title = "День близко к цели";
+  let fact = `${calories} из ${targetCalories} ккал.${proteinFact}`;
+  let advice = "Основные ориентиры дня выполнены.";
+
+  if (calorieRatio < 0.7) {
+    title = `В дневнике ${Math.round(calorieRatio * 100)}% нормы`;
+    fact = `${calories} из ${targetCalories} ккал — на ${calorieDelta}% ниже ориентира.${proteinFact}`;
+    advice = "Проверь, вся ли еда попала в дневник.";
+  } else if (calorieRatio < 0.9) {
+    title = "Сегодня ниже дневного ориентира";
+    fact = `${calories} из ${targetCalories} ккал — на ${calorieDelta}% ниже.${proteinFact}`;
+    advice = "Если дневник заполнен полностью, завтра можно добавить более сытный приём пищи.";
+  } else if (calorieRatio > 1.25) {
+    title = "Сегодня выше дневного ориентира";
+    fact = `${calories} из ${targetCalories} ккал — на ${calorieDelta}% выше.${proteinFact}`;
+    advice = "Завтра можно вернуться к привычному плану и обычным порциям.";
+  } else if (calorieRatio > 1.1) {
+    title = "Сегодня немного выше ориентира";
+    fact = `${calories} из ${targetCalories} ккал — на ${calorieDelta}% выше.${proteinFact}`;
+    advice = "Завтра можно немного уменьшить самую калорийную порцию.";
+  } else if (targetProtein && proteinRatio < 0.7) {
+    title = "По калориям день в цели";
+    advice = `До белковой цели не хватило примерно ${remainingProtein} г.`;
+  } else if (targetProtein && proteinRatio < 1) {
+    title = "День близко к цели";
+    advice = `Белковая цель почти выполнена: осталось около ${remainingProtein} г.`;
+  } else if (targetProtein && proteinRatio > 1.5) {
+    title = "По калориям день в цели";
+    advice = "Белка уже достаточно — специально добирать его не нужно.";
+  } else if (waterRatio > 0 && waterRatio < 0.5) {
+    advice = `Воды отмечено ${Math.round(Number(water.total_ml || 0))} мл — проверь, всё ли записано.`;
   }
+
+  setDiaryInsight(title, fact, advice);
 }
 
 function updateDiaryDate(date) {
@@ -1857,6 +1896,20 @@ dateLabel.addEventListener("click", () => {
   dateCalendar.hidden = !dateCalendar.hidden;
   if (!dateCalendar.hidden) calendarViewDate = new Date(selectedDate);
   renderCalendar();
+});
+
+function toggleDiaryInsight() {
+  if (!diaryInsight || !diaryInsightAdvice) return;
+  const isOpen = diaryInsight.getAttribute("aria-expanded") === "true";
+  diaryInsight.setAttribute("aria-expanded", String(!isOpen));
+  diaryInsightAdvice.hidden = isOpen;
+}
+
+diaryInsight?.addEventListener("click", toggleDiaryInsight);
+diaryInsight?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  toggleDiaryInsight();
 });
 
 document.querySelector("[data-mission-card]")?.addEventListener("click", () => {
