@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-97" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-98" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -93,6 +93,14 @@
         </article>
 
         <h2>Приемы пищи</h2>
+        <div class="diary-add-food">
+          <small data-diary-add-label>Добавить еду за сегодня</small>
+          <div>
+            <button type="button" data-diary-add-text>✎ Текстом</button>
+            <button type="button" data-diary-add-photo>📷 Фото еды</button>
+          </div>
+        </div>
+
         <div class="meal-list">
           <article class="meal-card open">
             <button type="button" class="meal-toggle" aria-expanded="true">
@@ -101,14 +109,6 @@
               <strong>0 &#1082;&#1082;&#1072;&#1083;</strong>
             </button>
           </article>
-        </div>
-
-        <div class="diary-add-food">
-          <small data-diary-add-label>Добавить еду за сегодня</small>
-          <div>
-            <button type="button" data-diary-add-text>✎ Текстом</button>
-            <button type="button" data-diary-add-photo>📷 Фото еды</button>
-          </div>
         </div>
 
         <aside class="tip-card wide diary-insight" data-diary-insight role="button" tabindex="0" aria-expanded="false" aria-label="Открыть персональную рекомендацию">
