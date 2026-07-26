@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-96" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-97" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -101,6 +101,14 @@
               <strong>0 &#1082;&#1082;&#1072;&#1083;</strong>
             </button>
           </article>
+        </div>
+
+        <div class="diary-add-food">
+          <small data-diary-add-label>Добавить еду за сегодня</small>
+          <div>
+            <button type="button" data-diary-add-text>✎ Текстом</button>
+            <button type="button" data-diary-add-photo>📷 Фото еды</button>
+          </div>
         </div>
 
         <aside class="tip-card wide diary-insight" data-diary-insight role="button" tabindex="0" aria-expanded="false" aria-label="Открыть персональную рекомендацию">
@@ -282,10 +290,10 @@
     <div class="onboarding-modal food-modal" data-food-modal hidden>
       <form class="onboarding-sheet food-sheet" data-food-text-form>
         <div>
-          <strong>Добавить еду</strong>
-          <small>Напиши, что съел, а Нямметр примерно посчитает калории и БЖУ.</small>
+          <strong data-food-modal-title>Добавить еду</strong>
+          <small data-food-modal-help>Напиши, что съел, а Нямметр примерно посчитает калории и БЖУ.</small>
         </div>
-        <label>Что было на тарелке?
+        <label><span data-food-input-label>Что было на тарелке?</span>
           <textarea data-food-text-input rows="4" placeholder="Например: творог с йогуртом и протеином"></textarea>
         </label>
         <div class="food-sheet-actions">
@@ -363,6 +371,12 @@ const foodTextForm = document.querySelector("[data-food-text-form]");
 const foodTextInput = document.querySelector("[data-food-text-input]");
 const foodPhotoInput = document.querySelector("[data-food-photo-input]");
 const foodSubmit = document.querySelector("[data-food-submit]");
+const foodModalTitle = document.querySelector("[data-food-modal-title]");
+const foodModalHelp = document.querySelector("[data-food-modal-help]");
+const foodInputLabel = document.querySelector("[data-food-input-label]");
+const diaryAddLabel = document.querySelector("[data-diary-add-label]");
+const diaryAddText = document.querySelector("[data-diary-add-text]");
+const diaryAddPhoto = document.querySelector("[data-diary-add-photo]");
 const reminderEnabled = document.querySelector("[data-reminder-enabled]");
 const reminderTime = document.querySelector("[data-reminder-time]");
 const reminderLabel = document.querySelector("[data-reminder-label]");
@@ -544,6 +558,9 @@ let frozenStreakDates = new Set();
 let unlockedAchievementKeys = new Set();
 let achievementPage = 0;
 const achievementsPerPage = 4;
+let foodTargetDate = new Date(today);
+let foodModalMode = "add";
+let editingFoodEntryId = null;
 
 function startOfDay(date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -571,6 +588,14 @@ function formatDiaryDate(date) {
   return new Intl.DateTimeFormat("ru-RU", {
     day: "numeric",
     month: "short",
+  }).format(date);
+}
+
+function formatFoodTargetDate(date) {
+  if (toInputDate(date) === toInputDate(today)) return "сегодня";
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: "long",
   }).format(date);
 }
 
@@ -686,10 +711,16 @@ function updateDiaryInsight({ entries, calories, protein, targetCalories, target
 }
 
 function updateDiaryDate(date) {
-  selectedDate = startOfDay(date);
+  const normalizedDate = startOfDay(date);
+  selectedDate = normalizedDate > today ? new Date(today) : normalizedDate;
   calendarViewDate = new Date(selectedDate);
   dateLabel.textContent = formatDiaryDate(selectedDate);
   datePicker.value = toInputDate(selectedDate);
+  datePicker.max = toInputDate(today);
+  dateNext.disabled = selectedDate >= today;
+  if (diaryAddLabel) {
+    diaryAddLabel.textContent = `Добавить еду за ${formatFoodTargetDate(selectedDate)}`;
+  }
 }
 
 function shiftDiaryDate(days) {
@@ -722,6 +753,7 @@ function renderCalendar() {
     const day = new Date(gridStart);
     day.setDate(gridStart.getDate() + index);
     const iso = toInputDate(day);
+    const isFuture = day > today;
     const isInRange = periodStart && periodEnd && day >= periodStart && day <= periodEnd;
     const classes = [
       day.getMonth() === calendarViewDate.getMonth() ? "" : "muted",
@@ -732,7 +764,7 @@ function renderCalendar() {
       periodEnd && iso === toInputDate(periodEnd) ? "range-end" : "",
       isInRange ? "in-range" : "",
     ].filter(Boolean).join(" ");
-    days.push(`<button type="button" class="${classes}" data-calendar-day="${iso}">${day.getDate()}</button>`);
+    days.push(`<button type="button" class="${classes}" data-calendar-day="${iso}" ${isFuture ? "disabled" : ""}>${day.getDate()}</button>`);
   }
   dateCalendar.innerHTML = `
     <div class="calendar-head">
@@ -873,38 +905,12 @@ function showToast(message, timeout = 1800) {
   }, timeout);
 }
 
-function parseAmount(value) {
-  const source = "value" in value ? `${value.value} ${value.dataset.unit || text.gram}` : value.textContent;
-  const match = source.trim().match(/^(\d+(?:[.,]\d+)?)\s*(.*)$/);
-
-  if (!match) {
-    return { value: 0, unit: text.gram };
-  }
-
-  return {
-    value: Number(match[1].replace(",", ".")),
-    unit: match[2] || text.gram,
-  };
-}
-
 function parseCalories(value) {
   return Number(value.replace(/[^\d]/g, "")) || 0;
 }
 
-function formatAmount(value, unit) {
-  return `${Math.max(1, Math.round(value))} ${unit}`;
-}
-
 function formatCalories(value) {
   return `${Math.max(1, Math.round(value))} ${text.kcal}`;
-}
-
-function getAmountNode(row) {
-  return row.querySelector("input") || row.querySelector("small");
-}
-
-function readDishAmount(row) {
-  return parseAmount(getAmountNode(row));
 }
 
 function readDishCalories(row) {
@@ -1014,116 +1020,6 @@ function calculateGoals() {
   updateTotalCalories();
 }
 
-function scaleMeal(card, factor) {
-  getDishRows(card).forEach((row) => {
-    const amountNode = getAmountNode(row);
-    const amount = readDishAmount(row);
-    const calories = readDishCalories(row);
-
-    amountNode.textContent = formatAmount(amount.value * factor, amount.unit);
-    row.querySelector("strong").textContent = formatCalories(calories * factor);
-  });
-
-  updateMealCard(card);
-  updateTotalCalories();
-}
-
-function deleteMeal(card) {
-  const mealName = card.querySelector(".meal-toggle b").textContent;
-  card.remove();
-  updateTotalCalories();
-  showToast(`${mealName} ${text.deleted}`);
-}
-
-function enterDishEditMode(card) {
-  card.classList.add("editing");
-
-  getDishRows(card).forEach((row) => {
-    if (row.querySelector("input")) return;
-
-    const amountNode = row.querySelector("small");
-    const amount = parseAmount(amountNode);
-    const calories = readDishCalories(row);
-    row.dataset.kcalPerUnit = String(calories / amount.value);
-
-    const input = document.createElement("input");
-    input.type = "number";
-    input.min = "1";
-    input.step = "1";
-    input.inputMode = "numeric";
-    input.value = String(Math.round(amount.value));
-    input.dataset.unit = amount.unit;
-    input.setAttribute("aria-label", `${text.gramsLabel}: ${row.querySelector("b").textContent}`);
-
-    const unit = document.createElement("small");
-    unit.className = "amount-unit";
-    unit.textContent = amount.unit;
-
-    amountNode.replaceWith(input, unit);
-
-    input.addEventListener("input", () => updateDishAmount(row, input.value));
-    input.addEventListener("blur", () => {
-      if (!input.value || Number(input.value) <= 0) {
-        input.value = "1";
-        updateDishAmount(row, input.value);
-      }
-    });
-  });
-
-  const firstInput = card.querySelector(".dish-list input");
-  if (firstInput) {
-    firstInput.focus();
-    firstInput.select();
-  }
-
-  ensureSaveGramsButton(card);
-  showToast(text.editGrams);
-}
-
-function ensureSaveGramsButton(card) {
-  const actions = card.querySelector(".meal-actions");
-
-  if (actions.querySelector(".save-grams")) return;
-
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "save-grams";
-  button.textContent = text.save;
-  actions.append(button);
-}
-
-function saveDishEditMode(card) {
-  getDishRows(card).forEach((row) => {
-    const input = row.querySelector("input");
-    const unitNode = row.querySelector(".amount-unit");
-
-    if (!input || !unitNode) return;
-
-    const amount = Math.max(1, Math.round(Number(input.value) || 1));
-    const amountText = document.createElement("small");
-    amountText.textContent = formatAmount(amount, unitNode.textContent);
-    input.replaceWith(amountText);
-    unitNode.remove();
-  });
-
-  card.classList.remove("editing");
-  card.querySelector(".save-grams")?.remove();
-  updateMealCard(card);
-  updateTotalCalories();
-  showToast(text.saved);
-}
-
-function updateDishAmount(row, value) {
-  const nextAmount = Number(String(value).replace(",", "."));
-
-  if (!Number.isFinite(nextAmount) || nextAmount <= 0) return;
-
-  const kcalPerUnit = Number(row.dataset.kcalPerUnit) || 0;
-  row.querySelector("strong").textContent = formatCalories(nextAmount * kcalPerUnit);
-  updateMealCard(row.closest(".meal-card"));
-  updateTotalCalories();
-}
-
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -1204,7 +1100,24 @@ function fileToDataUrl(file) {
   });
 }
 
-function openFoodModal() {
+function openFoodModal({ targetDate = today, mode = "add", entryId = null } = {}) {
+  foodTargetDate = startOfDay(targetDate);
+  foodModalMode = mode;
+  editingFoodEntryId = entryId;
+  const targetLabel = formatFoodTargetDate(foodTargetDate);
+  if (mode === "portion") {
+    foodModalTitle.textContent = "Уточнить порцию";
+    foodModalHelp.textContent = "Напиши новый вес или размер порции — Нямметр пересчитает запись.";
+    foodInputLabel.textContent = "Новая порция";
+    foodTextInput.placeholder = "Например: 180 г или половина тарелки";
+    foodSubmit.textContent = "Пересчитать";
+  } else {
+    foodModalTitle.textContent = `Добавить еду за ${targetLabel}`;
+    foodModalHelp.textContent = "Напиши, что съел, а Нямметр примерно посчитает калории и БЖУ.";
+    foodInputLabel.textContent = "Что было на тарелке?";
+    foodTextInput.placeholder = "Например: творог с йогуртом и протеином";
+    foodSubmit.textContent = "Записать";
+  }
   foodModal.hidden = false;
   foodTextInput.value = "";
   window.setTimeout(() => foodTextInput.focus(), 60);
@@ -1212,6 +1125,8 @@ function openFoodModal() {
 
 function closeFoodModal() {
   foodModal.hidden = true;
+  foodModalMode = "add";
+  editingFoodEntryId = null;
 }
 
 function setFoodSubmitting(isSubmitting) {
@@ -1221,6 +1136,8 @@ function setFoodSubmitting(isSubmitting) {
 
 function applyFoodResponse(data) {
   if (data?.state) {
+    const responseDate = data.state.today?.date;
+    if (responseDate) updateDiaryDate(fromInputDate(responseDate));
     activeEntryDates = new Set(data.state.calendar?.active_dates || []);
     applyServerState(data.state);
     renderCalendar();
@@ -1338,7 +1255,10 @@ async function submitFoodText(value) {
     const data = await miniappRequest("/api/miniapp/food/text", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: foodText }),
+      body: JSON.stringify({
+        text: foodText,
+        date: toInputDate(foodTargetDate),
+      }),
     });
     closeFoodModal();
     applyFoodResponse(data);
@@ -1361,6 +1281,7 @@ async function submitFoodPhoto(file) {
       body: JSON.stringify({
         imageBase64,
         mimeType: file.type || "image/jpeg",
+        date: toInputDate(foodTargetDate),
       }),
     });
     applyFoodResponse(data);
@@ -1369,6 +1290,43 @@ async function submitFoodPhoto(file) {
     showFoodError(error);
   } finally {
     foodPhotoInput.value = "";
+  }
+}
+
+async function updateFoodEntry(entryId, action, extra = {}) {
+  const id = Number(entryId);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error("invalid_entry");
+  }
+  const data = await miniappRequest("/api/miniapp/food/entry", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      entry_id: id,
+      action,
+      ...extra,
+    }),
+  });
+  applyFoodResponse(data);
+  return data;
+}
+
+async function submitPortionUpdate(value) {
+  const portion = value.trim();
+  if (!portion) {
+    showToast("Укажи новый вес или размер порции");
+    return;
+  }
+  setFoodSubmitting(true);
+  showToast(text.recognizing, 2400);
+  try {
+    await updateFoodEntry(editingFoodEntryId, "portion", { portion });
+    closeFoodModal();
+    showToast("Порция пересчитана");
+  } catch (error) {
+    showFoodError(error);
+  } finally {
+    setFoodSubmitting(false);
   }
 }
 
@@ -1460,10 +1418,10 @@ function renderEntries(entries) {
     const carbs = roundValue(entry.carbs);
     const timeLabel = entryTime(entry);
     return `
-      <article class="meal-card">
+      <article class="meal-card" data-entry-id="${Number(entry.id) || ""}">
         <button type="button" class="meal-toggle" aria-expanded="false">
           <span class="meal-emoji"><img loading="lazy" src="${entryIcon(entry)}" alt="" /></span>
-          <span><b>${title}</b><small>${timeLabel || "Сегодня"} · ${entry.source === "photo" ? "фото" : "текст"}</small></span>
+          <span><b>${title}</b><small>${timeLabel || formatDiaryDate(selectedDate)} · ${entry.source === "photo" ? "фото" : "текст"}</small></span>
           <strong>${calories} ккал</strong>
         </button>
         <div class="meal-actions">
@@ -1691,11 +1649,12 @@ addToggle.addEventListener("click", () => {
 
 document.querySelector("[data-add-text]").addEventListener("click", () => {
   closeAddMenu();
-  openFoodModal();
+  openFoodModal({ targetDate: today });
 });
 
 document.querySelector("[data-add-photo]").addEventListener("click", () => {
   closeAddMenu();
+  foodTargetDate = new Date(today);
   foodPhotoInput.click();
 });
 
@@ -1703,7 +1662,17 @@ personalFoodList?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-quick-food]");
   if (!button) return;
   closeAddMenu();
+  foodTargetDate = new Date(today);
   submitFoodText(button.dataset.quickFood || "");
+});
+
+diaryAddText?.addEventListener("click", () => {
+  openFoodModal({ targetDate: selectedDate });
+});
+
+diaryAddPhoto?.addEventListener("click", () => {
+  foodTargetDate = new Date(selectedDate);
+  foodPhotoInput.click();
 });
 
 document.querySelector("[data-food-cancel]")?.addEventListener("click", closeFoodModal);
@@ -1714,7 +1683,11 @@ foodModal?.addEventListener("click", (event) => {
 
 foodTextForm?.addEventListener("submit", (event) => {
   event.preventDefault();
-  submitFoodText(foodTextInput.value);
+  if (foodModalMode === "portion") {
+    submitPortionUpdate(foodTextInput.value);
+  } else {
+    submitFoodText(foodTextInput.value);
+  }
 });
 
 foodPhotoInput?.addEventListener("change", () => {
@@ -2040,38 +2013,41 @@ document.querySelectorAll(".meal-card").forEach((card) => {
   });
 });
 
-document.querySelector(".meal-list").addEventListener("click", (event) => {
+document.querySelector(".meal-list").addEventListener("click", async (event) => {
   const button = event.target.closest(".meal-actions button");
 
   if (!button) return;
 
   const card = button.closest(".meal-card");
   const action = button.dataset.mealAction;
-
-  if (button.classList.contains("save-grams")) {
-    saveDishEditMode(card);
-    return;
-  }
-
-  if (action === "smaller") {
-    scaleMeal(card, 0.85);
-    showToast(text.smaller);
-    return;
-  }
-
-  if (action === "larger") {
-    scaleMeal(card, 1.15);
-    showToast(text.larger);
-    return;
-  }
+  const entryId = card?.dataset.entryId;
 
   if (action === "grams") {
-    enterDishEditMode(card);
+    openFoodModal({
+      targetDate: selectedDate,
+      mode: "portion",
+      entryId,
+    });
     return;
   }
 
-  if (action === "delete") {
-    deleteMeal(card);
+  if (action === "delete" && !window.confirm("Удалить эту запись из дневника?")) {
+    return;
+  }
+
+  if (!["smaller", "larger", "delete"].includes(action)) return;
+
+  card.querySelectorAll(".meal-actions button").forEach((actionButton) => {
+    actionButton.disabled = true;
+  });
+  try {
+    await updateFoodEntry(entryId, action);
+    if (action === "smaller") showToast(text.smaller);
+    if (action === "larger") showToast(text.larger);
+    if (action === "delete") showToast(text.deleted);
+  } catch (error) {
+    showToast("Не удалось сохранить изменение");
+    await loadServerState();
   }
 });
 

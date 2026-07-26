@@ -2,7 +2,7 @@ import sqlite3
 import shutil
 import random
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -1098,28 +1098,48 @@ class Database:
                 (user.id, segment, step, status, error[:500] if error else None),
             )
 
-    def add_food_entry(self, telegram_id: int, estimate: FoodEstimate, source: str) -> FoodEntry:
+    def add_food_entry(
+        self,
+        telegram_id: int,
+        estimate: FoodEstimate,
+        source: str,
+        created_at: datetime | None = None,
+    ) -> FoodEntry:
         user = self.get_or_create_user(telegram_id)
         with self.connect() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO food_entries
-                    (user_id, title, description, calories, protein, fat, carbs, water_ml, confidence, source)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    user.id,
-                    estimate.title,
-                    estimate.description,
-                    estimate.calories,
-                    estimate.protein,
-                    estimate.fat,
-                    estimate.carbs,
-                    estimate.water_ml,
-                    estimate.confidence,
-                    source,
-                ),
+            values = (
+                user.id,
+                estimate.title,
+                estimate.description,
+                estimate.calories,
+                estimate.protein,
+                estimate.fat,
+                estimate.carbs,
+                estimate.water_ml,
+                estimate.confidence,
+                source,
             )
+            if created_at is None:
+                cursor = conn.execute(
+                    """
+                    INSERT INTO food_entries
+                        (user_id, title, description, calories, protein, fat, carbs, water_ml, confidence, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    values,
+                )
+            else:
+                stored_created_at = created_at
+                if stored_created_at.tzinfo is not None:
+                    stored_created_at = stored_created_at.astimezone(timezone.utc).replace(tzinfo=None)
+                cursor = conn.execute(
+                    """
+                    INSERT INTO food_entries
+                        (user_id, title, description, calories, protein, fat, carbs, water_ml, confidence, source, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (*values, stored_created_at.isoformat(sep=" ", timespec="seconds")),
+                )
             row = conn.execute("SELECT * FROM food_entries WHERE id = ?", (cursor.lastrowid,)).fetchone()
             return self._entry_from_row(row)
 

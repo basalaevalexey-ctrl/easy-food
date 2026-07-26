@@ -803,6 +803,11 @@ button {
   line-height: 1;
 }
 
+.day-arrow:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .date-label {
   min-width: 112px;
   height: 34px;
@@ -895,6 +900,12 @@ button {
 
 .calendar-grid button.muted {
   color: #b8afa0;
+}
+
+.calendar-grid button:disabled {
+  color: #c8c1b5;
+  opacity: 0.45;
+  cursor: default;
 }
 
 .calendar-grid button.has-data {
@@ -1240,6 +1251,35 @@ h2 {
   transform: translateY(0);
 }
 
+.diary-add-food {
+  display: grid;
+  gap: 7px;
+  margin: 12px 4px 4px;
+}
+
+.diary-add-food > small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.diary-add-food > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.diary-add-food button {
+  min-height: 42px;
+  border: 1px solid #dcefd1;
+  border-radius: 8px;
+  background: #f4fbef;
+  color: var(--green-dark);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .dish-list {
   grid-column: 1 / -1;
   display: grid;
@@ -1265,25 +1305,6 @@ h2 {
   font-size: 12px;
 }
 
-.dish-list input {
-  width: 58px;
-  height: 28px;
-  border: 1px solid #ded4bf;
-  border-radius: 9px;
-  padding: 0 6px;
-  background: white;
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 800;
-  text-align: right;
-}
-
-.dish-list .amount-unit {
-  color: var(--muted);
-  font-size: 12px;
-  margin-left: -5px;
-}
-
 .dish-list strong {
   color: var(--green-dark);
   font-size: 13px;
@@ -1300,21 +1321,15 @@ h2 {
   font-weight: 800;
 }
 
+.meal-actions button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .meal-actions .danger {
   color: #c6432b;
   background: #fff2ee;
   border-color: #f2d4ca;
-}
-
-.meal-card.editing .meal-actions > button:not(.save-grams) {
-  display: none;
-}
-
-.meal-actions .save-grams {
-  grid-column: 1 / -1;
-  color: white;
-  background: linear-gradient(180deg, #6fc444, #49a52d);
-  border-color: transparent;
 }
 
 .wide {

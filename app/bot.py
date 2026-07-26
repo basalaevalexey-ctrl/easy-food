@@ -86,7 +86,7 @@ db = Database(
 )
 admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-96"
+WEBAPP_BUILD = "nyam-97"
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 BOT_USERNAME = ""
@@ -656,7 +656,33 @@ def parse_telegram_init_data(init_data: str) -> dict | None:
 def _valid_miniapp_day(value: str | None) -> str | None:
     if not value or not DATE_RE.fullmatch(value):
         return None
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        return None
     return value
+
+
+def _miniapp_entry_day(value: str | None) -> str:
+    if value and _valid_miniapp_day(value) is None:
+        raise ValueError("invalid_date")
+    selected_day = _valid_miniapp_day(value)
+    today = datetime.now(MOSCOW_TZ).date()
+    if selected_day is None:
+        return today.isoformat()
+    parsed_day = date.fromisoformat(selected_day)
+    if parsed_day > today:
+        raise ValueError("future_date")
+    return selected_day
+
+
+def _miniapp_entry_created_at(selected_day: str) -> datetime | None:
+    today = datetime.now(MOSCOW_TZ)
+    parsed_day = date.fromisoformat(selected_day)
+    if parsed_day == today.date():
+        return None
+    local_created_at = datetime.combine(parsed_day, today.timetz()).replace(tzinfo=MOSCOW_TZ)
+    return local_created_at.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def build_miniapp_period_report(telegram_user: dict, period_start: str | None, period_end: str | None) -> dict:
@@ -875,28 +901,106 @@ def freeze_miniapp_streak(telegram_user: dict) -> dict:
     return {"result": result, "state": build_miniapp_payload(telegram_user)}
 
 
-async def add_miniapp_food_text(telegram_user: dict, text: str) -> dict:
+def _miniapp_food_entry_day(entry: FoodEntry) -> str:
+    created_at = entry.created_at
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    return created_at.astimezone(MOSCOW_TZ).date().isoformat()
+
+
+def _finish_miniapp_food_change(telegram_id: int, selected_day: str) -> None:
+    db.unlock_available_achievements(telegram_id)
+    if selected_day == datetime.now(MOSCOW_TZ).date().isoformat():
+        db.complete_daily_mission_if_ready(telegram_id)
+
+
+async def add_miniapp_food_text(telegram_user: dict, text: str, selected_day: str | None = None) -> dict:
     telegram_id = int(telegram_user["id"])
+    entry_day = _miniapp_entry_day(selected_day)
     estimate = await food_ai.estimate_text(text)
-    entry = db.add_food_entry(telegram_id, estimate, source="text")
+    entry = db.add_food_entry(
+        telegram_id,
+        estimate,
+        source="text",
+        created_at=_miniapp_entry_created_at(entry_day),
+    )
     db.record_useful_action(telegram_id, "food_text_added")
     db.activate_referral(telegram_id)
-    db.record_user_event(telegram_id, "miniapp_food_text")
-    db.unlock_available_achievements(telegram_id)
-    db.complete_daily_mission_if_ready(telegram_id)
-    return {"entry": entry, "state": build_miniapp_payload(telegram_user)}
+    db.record_user_event(
+        telegram_id,
+        "miniapp_food_text" if entry_day == datetime.now(MOSCOW_TZ).date().isoformat()
+        else "miniapp_food_text_backfilled",
+    )
+    _finish_miniapp_food_change(telegram_id, entry_day)
+    return {"entry": entry, "state": build_miniapp_payload(telegram_user, selected_day=entry_day)}
 
 
-async def add_miniapp_food_photo(telegram_user: dict, image_bytes: bytes, mime_type: str) -> dict:
+async def add_miniapp_food_photo(
+    telegram_user: dict,
+    image_bytes: bytes,
+    mime_type: str,
+    selected_day: str | None = None,
+) -> dict:
     telegram_id = int(telegram_user["id"])
+    entry_day = _miniapp_entry_day(selected_day)
     estimate = await food_ai.estimate_image(image_bytes, mime_type=mime_type)
-    entry = db.add_food_entry(telegram_id, estimate, source="photo")
+    entry = db.add_food_entry(
+        telegram_id,
+        estimate,
+        source="photo",
+        created_at=_miniapp_entry_created_at(entry_day),
+    )
     db.record_useful_action(telegram_id, "food_photo_added")
     db.activate_referral(telegram_id)
-    db.record_user_event(telegram_id, "miniapp_food_photo")
-    db.unlock_available_achievements(telegram_id)
-    db.complete_daily_mission_if_ready(telegram_id)
-    return {"entry": entry, "state": build_miniapp_payload(telegram_user)}
+    db.record_user_event(
+        telegram_id,
+        "miniapp_food_photo" if entry_day == datetime.now(MOSCOW_TZ).date().isoformat()
+        else "miniapp_food_photo_backfilled",
+    )
+    _finish_miniapp_food_change(telegram_id, entry_day)
+    return {"entry": entry, "state": build_miniapp_payload(telegram_user, selected_day=entry_day)}
+
+
+async def update_miniapp_food_entry(telegram_user: dict, payload: dict) -> dict:
+    telegram_id = int(telegram_user["id"])
+    try:
+        entry_id = int(payload.get("entry_id"))
+    except (TypeError, ValueError):
+        raise ValueError("invalid_entry") from None
+
+    entry = db.get_food_entry(entry_id, telegram_id)
+    if entry is None:
+        raise ValueError("entry_not_found")
+    entry_day = _miniapp_food_entry_day(entry)
+    action = str(payload.get("action") or "")
+
+    if action == "smaller":
+        updated_entry = db.scale_food_entry(entry_id, telegram_id, 0.75)
+    elif action == "larger":
+        updated_entry = db.scale_food_entry(entry_id, telegram_id, 1.25)
+    elif action == "portion":
+        portion = str(payload.get("portion") or "").strip()
+        if not portion or len(portion) > 100:
+            raise ValueError("invalid_portion")
+        estimate = await food_ai.estimate_with_portion(
+            previous_description=entry.description or entry.title,
+            portion=portion,
+        )
+        updated_entry = db.replace_food_entry_estimate(entry_id, telegram_id, estimate)
+    elif action == "delete":
+        if not db.delete_food_entry(entry_id, telegram_id):
+            raise ValueError("entry_not_found")
+        updated_entry = None
+    else:
+        raise ValueError("invalid_entry_action")
+
+    db.record_user_event(telegram_id, f"miniapp_food_entry_{action}")
+    _finish_miniapp_food_change(telegram_id, entry_day)
+    return {
+        "entry": updated_entry,
+        "deleted_entry_id": entry_id if action == "delete" else None,
+        "state": build_miniapp_payload(telegram_user, selected_day=entry_day),
+    }
 
 
 class MiniAppApiHandler(BaseHTTPRequestHandler):
@@ -1042,6 +1146,7 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
         if parsed.path not in {
             "/api/miniapp/food/text",
             "/api/miniapp/food/photo",
+            "/api/miniapp/food/entry",
             "/api/miniapp/profile",
             "/api/miniapp/reminder",
             "/api/miniapp/water",
@@ -1099,12 +1204,34 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
                     return
                 self._send_json(200, result)
                 return
+            if parsed.path == "/api/miniapp/food/entry":
+                try:
+                    result = asyncio.run(update_miniapp_food_entry(telegram_user, payload))
+                except ValueError as exc:
+                    error = str(exc) or "invalid_entry_action"
+                    self._send_json(404 if error == "entry_not_found" else 400, {"error": error})
+                    return
+                self._send_json(
+                    200,
+                    {
+                        "entry": self._entry_payload(result["entry"]) if result["entry"] else None,
+                        "deleted_entry_id": result["deleted_entry_id"],
+                        "state": result["state"],
+                    },
+                )
+                return
             if parsed.path == "/api/miniapp/food/text":
                 text = str(payload.get("text") or "").strip()
                 if not text:
                     self._send_json(400, {"error": "empty_text"})
                     return
-                result = asyncio.run(add_miniapp_food_text(telegram_user, text))
+                result = asyncio.run(
+                    add_miniapp_food_text(
+                        telegram_user,
+                        text,
+                        selected_day=str(payload.get("date") or ""),
+                    )
+                )
             else:
                 image_base64 = str(payload.get("imageBase64") or "")
                 mime_type = str(payload.get("mimeType") or "image/jpeg")
@@ -1114,11 +1241,29 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
                 if not image_bytes:
                     self._send_json(400, {"error": "empty_photo"})
                     return
-                result = asyncio.run(add_miniapp_food_photo(telegram_user, image_bytes, mime_type))
+                result = asyncio.run(
+                    add_miniapp_food_photo(
+                        telegram_user,
+                        image_bytes,
+                        mime_type,
+                        selected_day=str(payload.get("date") or ""),
+                    )
+                )
         except NotFoodError as exc:
             self._send_json(422, {"error": "not_food", "reason": exc.reason})
             return
-        except (OpenAIRecognitionError, ValueError, binascii.Error):
+        except ValueError as exc:
+            error = str(exc)
+            self._send_json(
+                400,
+                {
+                    "error": error
+                    if error in {"future_date", "invalid_date", "invalid_portion"}
+                    else "recognition_failed"
+                },
+            )
+            return
+        except (OpenAIRecognitionError, binascii.Error):
             self._send_json(400, {"error": "recognition_failed"})
             return
 
