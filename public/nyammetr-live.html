@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-98" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-99" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -377,6 +377,7 @@ const foodInputLabel = document.querySelector("[data-food-input-label]");
 const diaryAddLabel = document.querySelector("[data-diary-add-label]");
 const diaryAddText = document.querySelector("[data-diary-add-text]");
 const diaryAddPhoto = document.querySelector("[data-diary-add-photo]");
+const diaryAddFood = document.querySelector(".diary-add-food");
 const reminderEnabled = document.querySelector("[data-reminder-enabled]");
 const reminderTime = document.querySelector("[data-reminder-time]");
 const reminderLabel = document.querySelector("[data-reminder-label]");
@@ -547,7 +548,8 @@ const achievementDetails = {
   },
 };
 
-const today = startOfDay(new Date());
+let today = startOfDay(new Date());
+const editableHistoryDays = 2;
 let selectedDate = new Date(today);
 let calendarViewDate = new Date(today);
 let periodSelectionMode = false;
@@ -564,6 +566,17 @@ let editingFoodEntryId = null;
 
 function startOfDay(date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function refreshToday() {
+  today = startOfDay(new Date());
+}
+
+function isDiaryDateEditable(date) {
+  const earliestEditableDate = new Date(today);
+  earliestEditableDate.setDate(earliestEditableDate.getDate() - editableHistoryDays);
+  const normalizedDate = startOfDay(date);
+  return normalizedDate >= earliestEditableDate && normalizedDate <= today;
 }
 
 function toInputDate(date) {
@@ -711,6 +724,7 @@ function updateDiaryInsight({ entries, calories, protein, targetCalories, target
 }
 
 function updateDiaryDate(date) {
+  refreshToday();
   const normalizedDate = startOfDay(date);
   selectedDate = normalizedDate > today ? new Date(today) : normalizedDate;
   calendarViewDate = new Date(selectedDate);
@@ -718,6 +732,9 @@ function updateDiaryDate(date) {
   datePicker.value = toInputDate(selectedDate);
   datePicker.max = toInputDate(today);
   dateNext.disabled = selectedDate >= today;
+  if (diaryAddFood) {
+    diaryAddFood.hidden = !isDiaryDateEditable(selectedDate);
+  }
   if (diaryAddLabel) {
     diaryAddLabel.textContent = `Добавить еду за ${formatFoodTargetDate(selectedDate)}`;
   }
@@ -1232,6 +1249,10 @@ async function saveWaterReminderSettings() {
 
 function showFoodError(error) {
   const code = error?.message || "";
+  if (code === "historical_date_locked") {
+    showToast("Редактировать дневник можно за сегодня и два предыдущих дня", 3600);
+    return;
+  }
   if (code === "not_food") {
     showToast(text.notFood, 3600);
     return;
@@ -1409,6 +1430,7 @@ function renderEntries(entries) {
     return;
   }
 
+  const canEditEntries = isDiaryDateEditable(selectedDate);
   mealList.innerHTML = entries.map((entry) => {
     const title = escapeHtml(entry.title || "Еда");
     const description = escapeHtml(entry.description || "Запись Нямметра");
@@ -1424,7 +1446,7 @@ function renderEntries(entries) {
           <span><b>${title}</b><small>${timeLabel || formatDiaryDate(selectedDate)} · ${entry.source === "photo" ? "фото" : "текст"}</small></span>
           <strong>${calories} ккал</strong>
         </button>
-        <div class="meal-actions">
+        ${canEditEntries ? `<div class="meal-actions">
           <div class="dish-list">
             <span><b>${description}</b><small>Б ${protein} · Ж ${fat} · У ${carbs}</small><strong>${calories} ккал</strong></span>
           </div>
@@ -1432,7 +1454,7 @@ function renderEntries(entries) {
           <button type="button" data-meal-action="larger">Порция больше</button>
           <button type="button" data-meal-action="grams">Указать граммы</button>
           <button type="button" class="danger" data-meal-action="delete">Удалить</button>
-        </div>
+        </div>` : ""}
       </article>
     `;
   }).join("");

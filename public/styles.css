@@ -1257,6 +1257,10 @@ h2 {
   margin: 12px 4px 4px;
 }
 
+.diary-add-food[hidden] {
+  display: none;
+}
+
 .diary-add-food > small {
   color: var(--muted);
   font-size: 12px;

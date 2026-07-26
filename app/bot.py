@@ -86,7 +86,8 @@ db = Database(
 )
 admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
-WEBAPP_BUILD = "nyam-98"
+WEBAPP_BUILD = "nyam-99"
+MINIAPP_EDITABLE_HISTORY_DAYS = 2
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 BOT_USERNAME = ""
@@ -673,6 +674,8 @@ def _miniapp_entry_day(value: str | None) -> str:
     parsed_day = date.fromisoformat(selected_day)
     if parsed_day > today:
         raise ValueError("future_date")
+    if parsed_day < today - timedelta(days=MINIAPP_EDITABLE_HISTORY_DAYS):
+        raise ValueError("historical_date_locked")
     return selected_day
 
 
@@ -972,6 +975,10 @@ async def update_miniapp_food_entry(telegram_user: dict, payload: dict) -> dict:
     if entry is None:
         raise ValueError("entry_not_found")
     entry_day = _miniapp_food_entry_day(entry)
+    if date.fromisoformat(entry_day) < datetime.now(MOSCOW_TZ).date() - timedelta(
+        days=MINIAPP_EDITABLE_HISTORY_DAYS
+    ):
+        raise ValueError("historical_date_locked")
     action = str(payload.get("action") or "")
 
     if action == "smaller":
@@ -1258,7 +1265,12 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
                 400,
                 {
                     "error": error
-                    if error in {"future_date", "invalid_date", "invalid_portion"}
+                    if error in {
+                        "future_date",
+                        "historical_date_locked",
+                        "invalid_date",
+                        "invalid_portion",
+                    }
                     else "recognition_failed"
                 },
             )
