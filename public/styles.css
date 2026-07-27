@@ -115,6 +115,16 @@ button {
   transform: translateY(12px);
 }
 
+[data-screen="home"] > .cat-hero {
+  height: 220px;
+}
+
+[data-screen="home"] > .primary-action {
+  position: relative;
+  z-index: 4;
+  margin-top: -10px;
+}
+
 .heart-bubble {
   position: absolute;
   right: 20px;
