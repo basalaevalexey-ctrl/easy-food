@@ -116,15 +116,19 @@ button {
 }
 
 [data-screen="home"] > .cat-hero {
-  height: 220px;
+  height: 210px;
+}
+
+[data-screen="home"] .hero-cat-art {
+  transform: translateY(-30px);
 }
 
 [data-screen="home"] > .primary-action {
   position: relative;
-  top: -14px;
+  top: -4px;
   z-index: 4;
   margin-top: -18px;
-  margin-bottom: -14px;
+  margin-bottom: -4px;
 }
 
 .heart-bubble {

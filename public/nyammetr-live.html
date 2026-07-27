@@ -6,13 +6,20 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-103" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-104" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
       <section class="screen active" data-screen="home">
-        <div class="cat-hero">
-          <img class="hero-cat-art" src="./assets/cat-food.png" alt="" fetchpriority="high" decoding="async" />
+        <div class="cat-hero" style="height: 210px">
+          <img
+            class="hero-cat-art"
+            src="./assets/cat-food.png"
+            alt=""
+            fetchpriority="high"
+            decoding="async"
+            style="transform: translateY(-30px)"
+          />
         </div>
 
         <button
@@ -20,7 +27,7 @@
           type="button"
           data-add-toggle
           aria-expanded="false"
-          style="margin-top: -18px; margin-bottom: -14px; position: relative; top: -14px; z-index: 4"
+          style="margin-top: -18px; margin-bottom: -4px; position: relative; top: -4px; z-index: 4"
         >
           <span class="action-plus" aria-hidden="true">+</span>
           <span class="action-label">Добавить еду</span>
