@@ -23,9 +23,16 @@ class Config:
     database_path: Path
     legacy_database_paths: tuple[Path, ...]
     database_backup_paths: tuple[Path, ...]
+    database_require_existing: bool
+    database_min_users: int
+    database_min_entries: int
+    database_min_events: int
     openai_model: str
     auto_push_time: str
     timezone: str
+    telegram_polling_enabled: bool
+    background_jobs_enabled: bool
+    instance_name: str
     admin_total_baseline: dict[str, int]
     admin_total_baseline_offset: dict[str, int]
 
@@ -62,7 +69,16 @@ def _legacy_database_paths() -> tuple[Path, ...]:
 
 
 def _database_backup_paths(primary_path: Path) -> tuple[Path, ...]:
+    configured_paths: list[Path] = []
+    for item in os.getenv("DATABASE_BACKUP_PATHS", "").split(","):
+        raw_path = item.strip()
+        if not raw_path:
+            continue
+        path = Path(raw_path)
+        configured_paths.append(path if path.is_absolute() else BASE_DIR / path)
+    configured = tuple(configured_paths)
     candidates = (
+        *configured,
         BASE_DIR / "data" / "calories.sqlite3",
         BASE_DIR / "calories.sqlite3",
         Path("/data/calories.sqlite3"),
@@ -98,6 +114,13 @@ def _int_env(name: str, fallback: int) -> int:
         return fallback
 
 
+def _bool_env(name: str, fallback: bool) -> bool:
+    raw = os.getenv(name, "").strip().lower()
+    if not raw:
+        return fallback
+    return raw in {"1", "true", "yes", "on"}
+
+
 def _app_timezone() -> str:
     return os.getenv("APP_TIMEZONE", os.getenv("TZ", "Europe/Moscow")).strip() or "Europe/Moscow"
 
@@ -126,9 +149,16 @@ def load_config() -> Config:
         database_path=database_path,
         legacy_database_paths=_legacy_database_paths(),
         database_backup_paths=_database_backup_paths(database_path),
+        database_require_existing=_bool_env("DATABASE_REQUIRE_EXISTING", False),
+        database_min_users=_int_env("DATABASE_MIN_USERS", 0),
+        database_min_entries=_int_env("DATABASE_MIN_ENTRIES", 0),
+        database_min_events=_int_env("DATABASE_MIN_EVENTS", 0),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         auto_push_time=os.getenv("AUTO_PUSH_TIME", "19:00"),
         timezone=timezone,
+        telegram_polling_enabled=_bool_env("TELEGRAM_POLLING_ENABLED", True),
+        background_jobs_enabled=_bool_env("BACKGROUND_JOBS_ENABLED", True),
+        instance_name=os.getenv("INSTANCE_NAME", "local").strip() or "local",
         admin_total_baseline=_parse_int_dict(os.getenv("ADMIN_TOTAL_BASELINE", "")),
         admin_total_baseline_offset=_parse_int_dict(os.getenv("ADMIN_TOTAL_BASELINE_OFFSET", "")),
     )

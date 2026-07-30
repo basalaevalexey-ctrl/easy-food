@@ -86,6 +86,10 @@ db = Database(
     legacy_paths=config.legacy_database_paths,
     backup_paths=config.database_backup_paths,
 )
+DATABASE_HEALTH: dict[str, object] = {
+    "ready": False,
+    "integrity": "not_checked",
+}
 admin_stats_service = AdminStatsService(db)
 food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
 WEBAPP_BUILD = "nyam-106"
@@ -1112,8 +1116,31 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/health":
-            self._send_headers(200, "text/plain; charset=utf-8")
-            self.wfile.write(b"ok")
+            health = dict(DATABASE_HEALTH)
+            if parse_qs(parsed.query).get("deep") == ["1"] and health.get("ready"):
+                info = db.database_info()
+                health.update(
+                    {
+                        "integrity": db.integrity_check(),
+                        "users": int(info["users"]),
+                        "entries": int(info["entries"]),
+                        "events": int(info["events"]),
+                        "size": int(info["size"]),
+                        "sha256": hashlib.sha256(config.database_path.read_bytes()).hexdigest()[:16],
+                    }
+                )
+            ready = bool(health.get("ready")) and health.get("integrity") == "ok"
+            self._send_json(
+                200 if ready else 503,
+                {
+                    "status": "ok" if ready else "not_ready",
+                    "build": WEBAPP_BUILD,
+                    "instance": config.instance_name,
+                    "database": health,
+                    "telegram_polling_enabled": config.telegram_polling_enabled,
+                    "background_jobs_enabled": config.background_jobs_enabled,
+                },
+            )
             return
         if parsed.path == WEBAPP_ENTRY_PATH:
             self._send_headers(200, "text/html; charset=utf-8")
@@ -1656,6 +1683,55 @@ def normalize_reminder_time(text: str) -> str | None:
 
 def is_admin(telegram_id: int) -> bool:
     return telegram_id in config.admin_ids
+
+
+def initialize_and_validate_database() -> dict[str, int | str | bool]:
+    if config.database_require_existing and not db.has_valid_database_candidate():
+        raise RuntimeError(
+            "Database safety check failed: no valid SQLite database found in DATABASE_PATH "
+            "or DATABASE_BACKUP_PATHS"
+        )
+
+    db.init()
+    integrity = db.integrity_check()
+    if integrity != "ok":
+        raise RuntimeError(f"Database integrity check failed: {integrity}")
+
+    info = db.database_info()
+    minimums = {
+        "users": config.database_min_users,
+        "entries": config.database_min_entries,
+        "events": config.database_min_events,
+    }
+    violations = [
+        f"{key}={int(info[key])} < {minimum}"
+        for key, minimum in minimums.items()
+        if int(info[key]) < minimum
+    ]
+    if violations:
+        raise RuntimeError("Database safety check failed: " + ", ".join(violations))
+
+    digest = hashlib.sha256(config.database_path.read_bytes()).hexdigest()[:16]
+    DATABASE_HEALTH.update(
+        {
+            "ready": True,
+            "integrity": integrity,
+            "users": int(info["users"]),
+            "entries": int(info["entries"]),
+            "events": int(info["events"]),
+            "size": int(info["size"]),
+            "sha256": digest,
+        }
+    )
+    logger.info(
+        "Database safety check passed: users=%s entries=%s events=%s size=%s sha256=%s",
+        info["users"],
+        info["entries"],
+        info["events"],
+        info["size"],
+        digest,
+    )
+    return info
 
 
 def format_admin_dashboard(screen: str) -> str:
@@ -2897,21 +2973,49 @@ async def main() -> None:
         raise RuntimeError("BOT_TOKEN is not set")
     if not config.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY is not set")
+    if not config.telegram_polling_enabled and config.background_jobs_enabled:
+        raise RuntimeError(
+            "Unsafe staging configuration: BACKGROUND_JOBS_ENABLED must be false "
+            "when TELEGRAM_POLLING_ENABLED is false"
+        )
 
-    db.init()
+    db_info = initialize_and_validate_database()
     bot = Bot(token=config.bot_token)
     bot_info = await bot.get_me()
     BOT_USERNAME = bot_info.username or ""
     dispatcher = Dispatcher(storage=MemoryStorage())
     dispatcher.include_router(router)
-    logger.info("Bot started with database: %s, timezone: %s", config.database_path, config.timezone)
+    logger.info(
+        "Bot instance %s started with database: %s (%s users, %s entries), timezone: %s",
+        config.instance_name,
+        config.database_path,
+        db_info["users"],
+        db_info["entries"],
+        config.timezone,
+    )
     web_server = await start_miniapp_server()
-    await configure_bot_ui(bot)
-    reminder_task = asyncio.create_task(reminder_loop(bot))
+    if config.telegram_polling_enabled:
+        await configure_bot_ui(bot)
+    else:
+        logger.warning(
+            "Telegram polling and bot UI updates are disabled for instance %s",
+            config.instance_name,
+        )
+    reminder_task = (
+        asyncio.create_task(reminder_loop(bot))
+        if config.background_jobs_enabled
+        else None
+    )
+    if reminder_task is None:
+        logger.warning("Background jobs are disabled for instance %s", config.instance_name)
     try:
-        await dispatcher.start_polling(bot)
+        if config.telegram_polling_enabled:
+            await dispatcher.start_polling(bot)
+        else:
+            await asyncio.Event().wait()
     finally:
-        reminder_task.cancel()
+        if reminder_task is not None:
+            reminder_task.cancel()
         web_server.shutdown()
         web_server.server_close()
         await bot.session.close()

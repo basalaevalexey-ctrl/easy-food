@@ -289,6 +289,26 @@ class Database:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_streak_freezes_user_date ON streak_freezes(user_id, freeze_date)")
             self._rebuild_user_streaks(conn)
 
+    def has_valid_database_candidate(self) -> bool:
+        candidates = self._unique_paths((self.path, *self.legacy_paths, *self.backup_paths))
+        return any(
+            candidate.exists() and self._database_score(candidate) != (-1, -1)
+            for candidate in candidates
+        )
+
+    def integrity_check(self) -> str:
+        if not self.path.exists():
+            return "missing"
+        try:
+            conn = sqlite3.connect(self.path)
+            try:
+                row = conn.execute("PRAGMA integrity_check").fetchone()
+                return str(row[0]) if row else "no_result"
+            finally:
+                conn.close()
+        except (OSError, sqlite3.Error) as exc:
+            return f"error:{type(exc).__name__}"
+
     def _restore_best_database(self) -> None:
         candidates = self._unique_paths((self.path, *self.legacy_paths, *self.backup_paths))
         best_path = None
