@@ -55,6 +55,8 @@ from app.keyboards import (
     admin_keyboard,
     activity_keyboard,
     activation_keyboard,
+    edit_goal_keyboard,
+    edit_profile_keyboard,
     food_actions,
     goal_nudge_keyboard,
     goal_keyboard,
@@ -472,6 +474,10 @@ class SetupGoal(StatesGroup):
     age = State()
     height = State()
     weight = State()
+
+
+class EditProfile(StatesGroup):
+    value = State()
 
 
 class PortionCorrection(StatesGroup):
@@ -1586,6 +1592,57 @@ def parse_positive_float(text: str, min_value: float, max_value: float) -> float
     return None
 
 
+def has_complete_nutrition_profile(user: User) -> bool:
+    return all(
+        value is not None
+        for value in (user.sex, user.age, user.height, user.weight, user.goal, user.activity)
+    )
+
+
+def recalculate_nutrition_profile(telegram_id: int, **changes) -> User:
+    user = db.get_or_create_user(telegram_id)
+    data = {
+        "sex": user.sex or "male",
+        "age": int(user.age or 30),
+        "height": int(user.height or 175),
+        "weight": float(user.weight or 75),
+        "goal": user.goal or "maintain",
+        "activity": user.activity or "medium",
+    }
+    data.update(changes)
+    calorie_target, protein_target = calculate_targets(
+        sex=data["sex"],
+        age=data["age"],
+        height=data["height"],
+        weight=data["weight"],
+        goal=data["goal"],
+        activity=data["activity"],
+    )
+    data["calorie_target"] = calorie_target
+    data["protein_target"] = protein_target
+    return db.update_user_goal(telegram_id, data)
+
+
+def format_profile_edit_menu(user: User, saved_field: str | None = None) -> str:
+    lines = []
+    if saved_field:
+        lines.extend([f"{saved_field} обновлён.", ""])
+    lines.extend(
+        [
+            "Что хочешь изменить?",
+            "",
+            f"Возраст: {user.age} лет",
+            f"Рост: {user.height} см",
+            f"Вес: {float(user.weight or 0):g} кг",
+            f"Цель: {GOAL_LABELS.get(user.goal or '', 'поддерживать')}",
+            "",
+            f"Дневная норма: {user.calorie_target} ккал",
+            f"Белок: {user.protein_target} г",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def normalize_reminder_time(text: str) -> str | None:
     value = text.strip()
     match = re.fullmatch(r"([01]?\d|2[0-3])[:. ]([0-5]\d)", value)
@@ -2342,13 +2399,30 @@ async def admin_callback(callback: CallbackQuery) -> None:
 
 @router.message(Command("setup"))
 @router.message(F.text == "Настроить цель")
-@router.message(F.text == "Изменить цель/параметры")
 async def setup_goal_start(message: Message, state: FSMContext) -> None:
     await cleanup_flow_messages(state, message.chat.id, message.bot)
     await state.clear()
     await safe_delete_message(message)
     db.record_useful_action(message.from_user.id, "goal_setup_started")
     await answer_clean(message, state, "Начнем с простого. Укажи пол:", reply_markup=sex_keyboard())
+
+
+@router.message(F.text == "Изменить цель/параметры")
+async def edit_profile_start(message: Message, state: FSMContext) -> None:
+    user = db.get_or_create_user(message.from_user.id)
+    if not has_complete_nutrition_profile(user):
+        await setup_goal_start(message, state)
+        return
+    await cleanup_flow_messages(state, message.chat.id, message.bot)
+    await state.clear()
+    await safe_delete_message(message)
+    db.record_user_event(message.from_user.id, "profile_edit_started")
+    await answer_clean(
+        message,
+        state,
+        format_profile_edit_menu(user),
+        reply_markup=edit_profile_keyboard(),
+    )
 
 
 @router.callback_query(F.data == "setup:start")
@@ -2358,6 +2432,122 @@ async def setup_goal_start_callback(callback: CallbackQuery, state: FSMContext) 
     db.record_useful_action(callback.from_user.id, "goal_setup_started")
     await callback_answer_clean(callback, state, "Начнем с простого. Укажи пол:", reply_markup=sex_keyboard())
     await callback.answer()
+
+
+@router.callback_query(F.data == "profile_edit:menu")
+async def edit_profile_menu(callback: CallbackQuery, state: FSMContext) -> None:
+    user = db.get_or_create_user(callback.from_user.id)
+    await state.set_state(None)
+    await state.update_data(edit_field=None)
+    await callback_answer_clean(
+        callback,
+        state,
+        format_profile_edit_menu(user),
+        reply_markup=edit_profile_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "profile_edit:done")
+async def edit_profile_done(callback: CallbackQuery, state: FSMContext) -> None:
+    await cleanup_flow_messages(state, callback.message.chat.id, callback.bot)
+    await state.clear()
+    await callback.message.answer(
+        "Готово, параметры сохранены.",
+        reply_markup=main_menu(has_goal=True, webapp_url=webapp_url_for_user(callback.from_user.id)),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("profile_edit:field:"))
+async def edit_profile_field(callback: CallbackQuery, state: FSMContext) -> None:
+    field = callback.data.split(":")[-1]
+    if field == "goal":
+        await state.set_state(None)
+        await state.update_data(edit_field=None)
+        await callback_answer_clean(
+            callback,
+            state,
+            "Какую цель поставить?",
+            reply_markup=edit_goal_keyboard(),
+        )
+        await callback.answer()
+        return
+
+    prompts = {
+        "age": "Напиши новый возраст числом, например 32.",
+        "height": "Напиши новый рост в сантиметрах, например 176.",
+        "weight": "Напиши новый вес в килограммах, например 72 или 72.5.",
+    }
+    if field not in prompts:
+        await callback.answer("Неизвестный параметр", show_alert=True)
+        return
+    await state.update_data(edit_field=field)
+    await state.set_state(EditProfile.value)
+    await callback_answer_clean(callback, state, prompts[field])
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("profile_edit:goal:"))
+async def edit_profile_goal(callback: CallbackQuery, state: FSMContext) -> None:
+    goal = callback.data.split(":")[-1]
+    if goal not in GOAL_LABELS:
+        await callback.answer("Неизвестная цель", show_alert=True)
+        return
+    user = recalculate_nutrition_profile(callback.from_user.id, goal=goal)
+    db.record_user_event(callback.from_user.id, "profile_goal_updated")
+    await state.set_state(None)
+    await state.update_data(edit_field=None)
+    await callback_answer_clean(
+        callback,
+        state,
+        format_profile_edit_menu(user, "Цель"),
+        reply_markup=edit_profile_keyboard(),
+    )
+    await callback.answer("Цель и дневная норма обновлены")
+
+
+@router.message(EditProfile.value)
+async def edit_profile_value(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    field = data.get("edit_field")
+    parsers = {
+        "age": (lambda value: parse_positive_int(value, 10, 100)),
+        "height": (lambda value: parse_positive_int(value, 100, 230)),
+        "weight": (lambda value: parse_positive_float(value, 30, 300)),
+    }
+    labels = {
+        "age": "Возраст",
+        "height": "Рост",
+        "weight": "Вес",
+    }
+    await safe_delete_message(message)
+    if field not in parsers:
+        await state.set_state(None)
+        user = db.get_or_create_user(message.from_user.id)
+        await answer_clean(message, state, format_profile_edit_menu(user), reply_markup=edit_profile_keyboard())
+        return
+
+    value = parsers[field](message.text or "")
+    if value is None:
+        error_messages = {
+            "age": "Возраст нужен числом от 10 до 100.",
+            "height": "Рост нужен числом от 100 до 230 см.",
+            "weight": "Вес нужен числом от 30 до 300 кг.",
+        }
+        await answer_clean(message, state, error_messages[field])
+        return
+
+    user = recalculate_nutrition_profile(message.from_user.id, **{field: value})
+    db.record_user_event(message.from_user.id, f"profile_{field}_updated")
+    await state.set_state(None)
+    await state.update_data(edit_field=None)
+    await answer_clean(
+        message,
+        state,
+        format_profile_edit_menu(user, labels[field]),
+        reply_markup=edit_profile_keyboard(),
+    )
 
 
 @router.callback_query(F.data.startswith("activation:"))

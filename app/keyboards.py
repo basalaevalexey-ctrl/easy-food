@@ -44,6 +44,33 @@ def goal_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def edit_profile_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="Возраст", callback_data="profile_edit:field:age"),
+                InlineKeyboardButton(text="Рост", callback_data="profile_edit:field:height"),
+            ],
+            [
+                InlineKeyboardButton(text="Вес", callback_data="profile_edit:field:weight"),
+                InlineKeyboardButton(text="Цель", callback_data="profile_edit:field:goal"),
+            ],
+            [InlineKeyboardButton(text="Готово", callback_data="profile_edit:done")],
+        ]
+    )
+
+
+def edit_goal_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Похудеть", callback_data="profile_edit:goal:lose")],
+            [InlineKeyboardButton(text="Поддерживать", callback_data="profile_edit:goal:maintain")],
+            [InlineKeyboardButton(text="Набрать", callback_data="profile_edit:goal:gain")],
+            [InlineKeyboardButton(text="Назад", callback_data="profile_edit:menu")],
+        ]
+    )
+
+
 def activity_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
