@@ -2054,6 +2054,11 @@ h2 {
   text-align: left;
 }
 
+.profile-field select[data-profile-goal] {
+  width: 176px;
+  font-size: 13px;
+}
+
 .reminder-panel > div {
   display: flex;
   align-items: center;

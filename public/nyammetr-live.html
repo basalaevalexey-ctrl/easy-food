@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-104" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-106a" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -233,7 +233,7 @@
           </button>
           <button type="button" class="profile-menu-button" data-profile-popup-open="data">
             <span><img loading="lazy" src="./assets/profile-data-trim.png" alt="" /></span>
-            <span><strong>Мои данные</strong><small>Вес, рост и активность</small></span>
+            <span><strong>Мои данные</strong><small>Вес, рост, активность и цель</small></span>
             <b aria-hidden="true">›</b>
           </button>
           <button type="button" class="profile-menu-button" data-profile-popup-open="reminders">
@@ -275,6 +275,7 @@
           <div class="profile-field"><span><img loading="lazy" src="./assets/profile-weight-trim.png" alt="" /></span><label for="profile-weight">Вес</label><div><input id="profile-weight" type="number" min="35" max="250" value="82" data-profile-weight /> кг</div></div>
           <div class="profile-field"><span><img loading="lazy" src="./assets/profile-height-trim.png" alt="" /></span><label for="profile-height">Рост</label><div><input id="profile-height" type="number" min="120" max="230" value="182" data-profile-height /> см</div></div>
           <div class="profile-field"><span><img loading="lazy" src="./assets/profile-activity-trim.png" alt="" /></span><label for="profile-activity">Активность</label><div><select id="profile-activity" data-profile-activity><option value="low">Низкая</option><option value="medium" selected>Средняя</option><option value="high">Высокая</option></select></div></div>
+          <div class="profile-field"><span><img loading="lazy" src="./assets/profile-goals-symbol.png" alt="" /></span><label for="profile-goal">Цель</label><div><select id="profile-goal" data-profile-goal><option value="lose">Снизить вес</option><option value="support" selected>Поддерживать форму</option><option value="gain">Набрать массу</option></select></div></div>
         </article>
       </section>
     </div>
@@ -392,6 +393,7 @@ const profileGoalLabel = document.querySelector("[data-profile-goal-label]");
 const profileWeight = document.querySelector("[data-profile-weight]");
 const profileHeight = document.querySelector("[data-profile-height]");
 const profileActivity = document.querySelector("[data-profile-activity]");
+const profileGoalSelect = document.querySelector("[data-profile-goal]");
 const goalCalories = document.querySelector("[data-goal-calories]");
 const goalProtein = document.querySelector("[data-goal-protein]");
 const goalWater = document.querySelector("[data-goal-water]");
@@ -456,6 +458,8 @@ const text = {
   updateSoon: "Следующее обновление скоро!",
   reminderSaved: "Напоминания сохранены",
   reminderSaveFailed: "Не смог сохранить напоминание",
+  profileSaved: "Параметры и цели обновлены",
+  profileSaveFailed: "Не смог сохранить параметры",
   waterReminderSaved: "Напоминания о воде сохранены",
   waterReminderSaveFailed: "Не смог сохранить напоминания о воде",
   waterAdded: "Добавил 200 мл 💧",
@@ -1009,18 +1013,19 @@ function readProfile() {
     weight: Number(profileWeight.value) || 82,
     height: Number(profileHeight.value) || 182,
     activity: profileActivity.value,
-    goal: profileGoal,
+    goal: profileGoalSelect?.value || profileGoal,
   };
 }
 
 function applyProfile(profile) {
-  profileGoal = profile.goal || "support";
+  profileGoal = profile.goal === "maintain" ? "support" : (profile.goal || "support");
   profileSex = profile.sex || "male";
   profileName.textContent = profile.name || "Алексей";
   profileGoalLabel.textContent = goalLabels[profileGoal] || goalLabels.support;
   profileWeight.value = profile.weight || 82;
   profileHeight.value = profile.height || 182;
   profileActivity.value = profile.activity || "medium";
+  if (profileGoalSelect) profileGoalSelect.value = profileGoal;
   calculateGoals();
 }
 
@@ -1048,13 +1053,15 @@ function loadProfile() {
 function calculateGoals() {
   const weight = Math.max(35, Number(profileWeight.value) || 82);
   const height = Math.max(120, Number(profileHeight.value) || 182);
+  profileGoal = profileGoalSelect?.value || profileGoal || "support";
+  profileGoalLabel.textContent = goalLabels[profileGoal] || goalLabels.support;
   const activityFactors = {
-    low: 1.25,
+    low: 1.2,
     medium: 1.45,
-    high: 1.65,
+    high: 1.7,
   };
   const goalFactors = {
-    lose: 0.88,
+    lose: 0.85,
     support: 1,
     gain: 1.1,
   };
@@ -1063,7 +1070,10 @@ function calculateGoals() {
   const bmr = 10 * weight + 6.25 * height - 5 * 30 + sexOffset;
 
   calorieGoal = Math.round((bmr * factor * (goalFactors[profileGoal] || 1)) / 50) * 50;
-  const proteinGoal = Math.round(weight * (profileGoal === "gain" ? 1.9 : 1.6));
+  const proteinPerKg = profileGoal === "support" ? 1.5 : 1.8;
+  const proteinGoal = Math.round(weight * proteinPerKg);
+  const fatGoal = Math.round((calorieGoal * 0.3) / 9);
+  const carbGoal = Math.max(0, Math.round((calorieGoal - proteinGoal * 4 - fatGoal * 9) / 4));
   const waterGoal = Math.max(1500, Math.min(3000, Math.round((weight * 30) / 50) * 50));
 
   goalCalories.textContent = `${calorieGoal} ${text.kcal}`;
@@ -1077,7 +1087,39 @@ function calculateGoals() {
     node.textContent = `/ ${calorieGoal} ${text.kcal}`;
   });
 
+  document.querySelectorAll(".macro-grid").forEach((grid) => {
+    const cells = Array.from(grid.children).filter((child) => child.matches("span"));
+    [proteinGoal, fatGoal, carbGoal].forEach((targetValue, index) => {
+      const cell = cells[index];
+      if (!cell) return;
+      const currentValue = Number(cell.querySelector(".macro-current")?.textContent) || 0;
+      const target = cell.querySelector("small:not(.macro-percent)");
+      const percent = cell.querySelector(".macro-percent");
+      if (target) target.textContent = `/${targetValue}`;
+      if (percent) percent.textContent = `${Math.min(999, Math.round(currentValue / targetValue * 100))}%`;
+    });
+  });
+
   updateTotalCalories();
+}
+
+async function saveProfileSettings(successMessage = text.profileSaved) {
+  calculateGoals();
+  saveProfile();
+  try {
+    const data = await miniappRequest("/api/miniapp/profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(readProfile()),
+    });
+    applyServerState(data);
+    showToast(successMessage);
+    return true;
+  } catch (error) {
+    showToast(text.profileSaveFailed);
+    await loadServerState();
+    return false;
+  }
 }
 
 function escapeHtml(value) {
@@ -1617,6 +1659,7 @@ function applyServerState(data) {
     if (data.user.weight) profileWeight.value = data.user.weight;
     if (data.user.height) profileHeight.value = data.user.height;
     if (data.user.activity) profileActivity.value = data.user.activity;
+    if (profileGoalSelect) profileGoalSelect.value = profileGoal;
   }
 
   const serverHasProfile = targetCalories > 0 || targetProtein > 0 || Boolean(
@@ -1915,13 +1958,14 @@ async function changeWater(action) {
 waterAdd?.addEventListener("click", () => changeWater("add"));
 waterRemove?.addEventListener("click", () => changeWater("remove"));
 
-[profileWeight, profileHeight, profileActivity].forEach((control) => {
+[profileWeight, profileHeight, profileActivity, profileGoalSelect].forEach((control) => {
+  if (!control) return;
   control.addEventListener("input", calculateGoals);
   control.addEventListener("change", calculateGoals);
-  control.addEventListener("change", saveProfile);
+  control.addEventListener("change", () => saveProfileSettings());
 });
 
-onboardingForm.addEventListener("submit", (event) => {
+onboardingForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const requiredFields = [
     [onboardingName, "Укажи имя"],
@@ -1966,9 +2010,9 @@ onboardingForm.addEventListener("submit", (event) => {
     activity: onboardingActivity.value,
     goal: onboardingGoal.value,
   });
-  saveProfile();
-  onboarding.hidden = true;
-  showToast("Профиль настроен");
+  if (await saveProfileSettings("Профиль настроен")) {
+    onboarding.hidden = true;
+  }
 });
 
 [onboardingName, onboardingSex, onboardingWeight, onboardingHeight, onboardingActivity, onboardingGoal].forEach((field) => {
