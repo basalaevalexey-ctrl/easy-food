@@ -429,8 +429,26 @@ class AdminStatsService:
                 FROM (
                     SELECT l.id,
                            CASE
-                               WHEN CAST(substr(COALESCE(l.slot, strftime('%H:%M', l.sent_at, '+3 hours')), 1, 2) AS INTEGER) < 12 THEN 'morning'
-                               WHEN CAST(substr(COALESCE(l.slot, strftime('%H:%M', l.sent_at, '+3 hours')), 1, 2) AS INTEGER) < 18 THEN 'day'
+                               WHEN COALESCE(
+                                   CASE
+                                       WHEN length(l.slot) = 5
+                                        AND substr(l.slot, 3, 1) = ':'
+                                        AND substr(l.slot, 1, 2) BETWEEN '00' AND '23'
+                                        AND substr(l.slot, 4, 2) BETWEEN '00' AND '59'
+                                       THEN substr(l.slot, 1, 2)
+                                   END,
+                                   strftime('%H', l.sent_at, '+3 hours')
+                               ) < '12' THEN 'morning'
+                               WHEN COALESCE(
+                                   CASE
+                                       WHEN length(l.slot) = 5
+                                        AND substr(l.slot, 3, 1) = ':'
+                                        AND substr(l.slot, 1, 2) BETWEEN '00' AND '23'
+                                        AND substr(l.slot, 4, 2) BETWEEN '00' AND '59'
+                                       THEN substr(l.slot, 1, 2)
+                                   END,
+                                   strftime('%H', l.sent_at, '+3 hours')
+                               ) < '18' THEN 'day'
                                ELSE 'evening'
                            END AS slot_group,
                            CASE WHEN EXISTS (
