@@ -97,6 +97,7 @@ food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
 WEBAPP_BUILD = "nyam-106"
 MINIAPP_EDITABLE_HISTORY_DAYS = 2
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
+WEBAPP_ENTRY_PATHS = {WEBAPP_ENTRY_PATH, "/miniapp", "/miniapp/"}
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 BOT_USERNAME = ""
 PUSH_STICKER_PATH = Path(__file__).resolve().parent / "assets" / "push-hello.webp"
@@ -1051,7 +1052,7 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
 
     def _send_static(self, requested_path: str) -> None:
-        relative_path = "index.html" if requested_path in {"", "/", WEBAPP_ENTRY_PATH} else requested_path.lstrip("/")
+        relative_path = "index.html" if requested_path in {"", "/", *WEBAPP_ENTRY_PATHS} else requested_path.lstrip("/")
         try:
             file_path = (config.public_dir / relative_path).resolve()
             public_dir = config.public_dir.resolve()
@@ -1144,7 +1145,7 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
                 },
             )
             return
-        if parsed.path == WEBAPP_ENTRY_PATH:
+        if parsed.path in WEBAPP_ENTRY_PATHS:
             self._send_headers(200, "text/html; charset=utf-8")
             self.wfile.write(miniapp_shell_html().encode("utf-8"))
             return
