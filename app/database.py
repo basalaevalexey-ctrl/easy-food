@@ -5,9 +5,11 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
+from urllib.parse import urlsplit
 
 from app.achievements import Achievement, available_achievements, daily_food_signals
 from app.calorie_calculator import calculate_water_target
+from app.database_backend import connect_postgres, initialize_postgres_compatibility
 from app.missions import (
     MISSION_ORDER,
     MISSIONS,
@@ -45,13 +47,31 @@ class Database:
         path: Path,
         legacy_paths: tuple[Path, ...] = (),
         backup_paths: tuple[Path, ...] = (),
+        database_url: str = "",
     ) -> None:
         self.path = path
         self.legacy_paths = legacy_paths
         self.backup_paths = backup_paths
+        self.database_url = database_url.strip()
+
+    @property
+    def is_postgres(self) -> bool:
+        return self.database_url.startswith(("postgresql://", "postgres://"))
 
     @contextmanager
-    def connect(self) -> Iterator[sqlite3.Connection]:
+    def connect(self) -> Iterator[Any]:
+        if self.is_postgres:
+            conn = connect_postgres(self.database_url)
+            try:
+                yield conn
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+            return
+
         conn = sqlite3.connect(self.path)
         conn.row_factory = sqlite3.Row
         try:
@@ -62,8 +82,11 @@ class Database:
             self._backup_database()
 
     def init(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._restore_best_database()
+        if self.is_postgres:
+            initialize_postgres_compatibility(self.database_url)
+        else:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self._restore_best_database()
         with self.connect() as conn:
             conn.execute(
                 """
@@ -290,6 +313,20 @@ class Database:
             self._rebuild_user_streaks(conn)
 
     def has_valid_database_candidate(self) -> bool:
+        if self.is_postgres:
+            try:
+                with self.connect() as conn:
+                    row = conn.execute(
+                        """
+                        SELECT COUNT(*) AS table_count
+                        FROM information_schema.tables
+                        WHERE table_schema = current_schema()
+                          AND table_name IN ('users', 'food_entries', 'user_events')
+                        """
+                    ).fetchone()
+                    return int(row["table_count"] or 0) == 3
+            except Exception:
+                return False
         candidates = self._unique_paths((self.path, *self.legacy_paths, *self.backup_paths))
         return any(
             candidate.exists() and self._database_score(candidate) != (-1, -1)
@@ -297,6 +334,13 @@ class Database:
         )
 
     def integrity_check(self) -> str:
+        if self.is_postgres:
+            try:
+                with self.connect() as conn:
+                    row = conn.execute("SELECT 1 AS healthy").fetchone()
+                    return "ok" if row and int(row["healthy"]) == 1 else "no_result"
+            except Exception as exc:
+                return f"error:{type(exc).__name__}"
         if not self.path.exists():
             return "missing"
         try:
@@ -327,6 +371,8 @@ class Database:
             shutil.copy2(best_path, self.path)
 
     def _backup_database(self) -> None:
+        if self.is_postgres:
+            return
         if not self.path.exists():
             return
         for backup_path in self._unique_paths(self.backup_paths):
@@ -379,7 +425,7 @@ class Database:
         return tuple(result)
 
     @staticmethod
-    def _backfill_default_reminders(conn: sqlite3.Connection) -> None:
+    def _backfill_default_reminders(conn: Any) -> None:
         migration_key = "backfill_existing_users_reminder_09_00"
         already_done = conn.execute(
             "SELECT 1 FROM app_meta WHERE key = ?",
@@ -400,12 +446,12 @@ class Database:
         )
 
     @staticmethod
-    def _ensure_column(conn: sqlite3.Connection, table: str, column: str, column_type: str) -> None:
+    def _ensure_column(conn: Any, table: str, column: str, column_type: str) -> None:
         columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
         if column not in columns:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
 
-    def _rebuild_user_streaks(self, conn: sqlite3.Connection) -> None:
+    def _rebuild_user_streaks(self, conn: Any) -> None:
         user_ids = [row["id"] for row in conn.execute("SELECT id FROM users").fetchall()]
         for user_id in user_ids:
             current_streak, best_streak, last_active_date = self._streaks_for_user(conn, user_id)
@@ -420,7 +466,7 @@ class Database:
                 (current_streak, best_streak, last_active_date, user_id),
             )
 
-    def _streaks_for_user(self, conn: sqlite3.Connection, user_id: int) -> tuple[int, int, str | None]:
+    def _streaks_for_user(self, conn: Any, user_id: int) -> tuple[int, int, str | None]:
         rows = conn.execute(
             """
             SELECT day, MAX(is_active) AS is_active
@@ -1925,8 +1971,15 @@ class Database:
             return {"users": users, "today_entries": today, "total_entries": total}
 
     def database_info(self) -> dict[str, int | str | bool]:
-        exists = self.path.exists()
-        size = self.path.stat().st_size if exists else 0
+        if self.is_postgres:
+            parsed = urlsplit(self.database_url)
+            database_label = f"postgresql://{parsed.hostname or 'managed'}/{parsed.path.lstrip('/')}"
+            exists = True
+            size = 0
+        else:
+            database_label = str(self.path)
+            exists = self.path.exists()
+            size = self.path.stat().st_size if exists else 0
         with self.connect() as conn:
             users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
             entries = conn.execute("SELECT COUNT(*) FROM food_entries").fetchone()[0]
@@ -1934,11 +1987,14 @@ class Database:
             achievements = conn.execute("SELECT COUNT(*) FROM user_achievements").fetchone()[0]
             missions = conn.execute("SELECT COUNT(*) FROM daily_missions").fetchone()[0]
         backup_info = []
-        for backup_path in self._unique_paths(self.backup_paths):
-            score = self._database_score(backup_path)
-            backup_info.append(f"{backup_path}: {score[0]} rows, {score[1]} bytes")
+        if self.is_postgres:
+            backup_info.append("managed by PostgreSQL provider")
+        else:
+            for backup_path in self._unique_paths(self.backup_paths):
+                score = self._database_score(backup_path)
+                backup_info.append(f"{backup_path}: {score[0]} rows, {score[1]} bytes")
         return {
-            "path": str(self.path),
+            "path": database_label,
             "exists": exists,
             "size": size,
             "users": users,
@@ -1950,6 +2006,10 @@ class Database:
         }
 
     def export_snapshot(self, destination: Path) -> Path:
+        if self.is_postgres:
+            raise RuntimeError(
+                "PostgreSQL snapshots are managed in RelaxDev; use the database backup panel."
+            )
         destination.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as source:
             target = sqlite3.connect(destination)

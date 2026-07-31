@@ -20,6 +20,7 @@ class Config:
     port: int
     webapp_url: str
     public_dir: Path
+    database_url: str
     database_path: Path
     legacy_database_paths: tuple[Path, ...]
     database_backup_paths: tuple[Path, ...]
@@ -146,6 +147,7 @@ def load_config() -> Config:
         port=_int_env("PORT", 3000),
         webapp_url=_webapp_url(),
         public_dir=BASE_DIR / "public",
+        database_url=os.getenv("DATABASE_URL", "").strip(),
         database_path=database_path,
         legacy_database_paths=_legacy_database_paths(),
         database_backup_paths=_database_backup_paths(database_path),

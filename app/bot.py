@@ -85,6 +85,7 @@ db = Database(
     config.database_path,
     legacy_paths=config.legacy_database_paths,
     backup_paths=config.database_backup_paths,
+    database_url=config.database_url,
 )
 DATABASE_HEALTH: dict[str, object] = {
     "ready": False,
@@ -1688,8 +1689,8 @@ def is_admin(telegram_id: int) -> bool:
 def initialize_and_validate_database() -> dict[str, int | str | bool]:
     if config.database_require_existing and not db.has_valid_database_candidate():
         raise RuntimeError(
-            "Database safety check failed: no valid SQLite database found in DATABASE_PATH "
-            "or DATABASE_BACKUP_PATHS"
+            "Database safety check failed: no valid database found in DATABASE_URL, "
+            "DATABASE_PATH or DATABASE_BACKUP_PATHS"
         )
 
     db.init()
@@ -1711,7 +1712,11 @@ def initialize_and_validate_database() -> dict[str, int | str | bool]:
     if violations:
         raise RuntimeError("Database safety check failed: " + ", ".join(violations))
 
-    digest = hashlib.sha256(config.database_path.read_bytes()).hexdigest()[:16]
+    digest = (
+        "managed-postgres"
+        if db.is_postgres
+        else hashlib.sha256(config.database_path.read_bytes()).hexdigest()[:16]
+    )
     DATABASE_HEALTH.update(
         {
             "ready": True,
@@ -2440,7 +2445,14 @@ async def backup_db_command(message: Message) -> None:
     db.record_user_event(message.from_user.id, "database_backup_requested")
     db_info = db.database_info()
     with TemporaryDirectory() as temp_dir:
-        snapshot_path = db.export_snapshot(Path(temp_dir) / "calories.sqlite3")
+        try:
+            snapshot_path = db.export_snapshot(Path(temp_dir) / "calories.sqlite3")
+        except RuntimeError:
+            await message.answer(
+                "База работает на PostgreSQL. Снимки доступны во вкладке «Бэкапы» "
+                "в панели RelaxDev."
+            )
+            return
         await message.answer_document(
             FSInputFile(snapshot_path, filename="calories.sqlite3"),
             caption=(
@@ -2969,17 +2981,30 @@ async def text_food(message: Message) -> None:
 
 async def main() -> None:
     global BOT_USERNAME
-    if not config.bot_token:
-        raise RuntimeError("BOT_TOKEN is not set")
-    if not config.openai_api_key:
-        raise RuntimeError("OPENAI_API_KEY is not set")
     if not config.telegram_polling_enabled and config.background_jobs_enabled:
         raise RuntimeError(
             "Unsafe staging configuration: BACKGROUND_JOBS_ENABLED must be false "
             "when TELEGRAM_POLLING_ENABLED is false"
         )
+    if config.telegram_polling_enabled and not config.bot_token:
+        raise RuntimeError("BOT_TOKEN is not set")
+    if config.telegram_polling_enabled and not config.openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY is not set")
 
     db_info = initialize_and_validate_database()
+    if not config.bot_token:
+        logger.warning(
+            "Instance %s is running in database-only staging mode; Telegram and mini app auth are disabled",
+            config.instance_name,
+        )
+        web_server = await start_miniapp_server()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            web_server.shutdown()
+            web_server.server_close()
+        return
+
     bot = Bot(token=config.bot_token)
     bot_info = await bot.get_me()
     BOT_USERNAME = bot_info.username or ""
@@ -2988,7 +3013,7 @@ async def main() -> None:
     logger.info(
         "Bot instance %s started with database: %s (%s users, %s entries), timezone: %s",
         config.instance_name,
-        config.database_path,
+        db_info["path"],
         db_info["users"],
         db_info["entries"],
         config.timezone,
