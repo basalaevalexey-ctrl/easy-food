@@ -89,6 +89,14 @@ AS $$
     SELECT to_char(nyam_sqlite_timestamp(value, modifiers), 'YYYY-MM-DD')
 $$;
 
+CREATE OR REPLACE FUNCTION nyam_date(value TEXT)
+RETURNS TEXT
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT to_char(nyam_sqlite_timestamp(value, ARRAY[]::TEXT[]), 'YYYY-MM-DD')
+$$;
+
 CREATE OR REPLACE FUNCTION nyam_datetime(value TEXT, VARIADIC modifiers TEXT[])
 RETURNS TEXT
 LANGUAGE sql
@@ -97,12 +105,28 @@ AS $$
     SELECT to_char(nyam_sqlite_timestamp(value, modifiers), 'YYYY-MM-DD HH24:MI:SS')
 $$;
 
+CREATE OR REPLACE FUNCTION nyam_datetime(value TEXT)
+RETURNS TEXT
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT to_char(nyam_sqlite_timestamp(value, ARRAY[]::TEXT[]), 'YYYY-MM-DD HH24:MI:SS')
+$$;
+
 CREATE OR REPLACE FUNCTION nyam_time(value TEXT, VARIADIC modifiers TEXT[])
 RETURNS TEXT
 LANGUAGE sql
 STABLE
 AS $$
     SELECT to_char(nyam_sqlite_timestamp(value, modifiers), 'HH24:MI:SS')
+$$;
+
+CREATE OR REPLACE FUNCTION nyam_time(value TEXT)
+RETURNS TEXT
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT to_char(nyam_sqlite_timestamp(value, ARRAY[]::TEXT[]), 'HH24:MI:SS')
 $$;
 
 CREATE OR REPLACE FUNCTION nyam_julianday(value TEXT)
