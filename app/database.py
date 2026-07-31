@@ -2097,7 +2097,7 @@ class Database:
                 FROM food_entries f
                 JOIN users u ON u.id = f.user_id
                 WHERE date(f.created_at, 'localtime') = date('now', 'localtime')
-                GROUP BY f.user_id
+                GROUP BY f.user_id, u.telegram_id
                 ORDER BY calories DESC
                 LIMIT ?
                 """,
