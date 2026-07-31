@@ -98,10 +98,10 @@ food_ai = FoodRecognitionClient(
     config.openai_model,
     config.openai_proxy_url,
 )
-WEBAPP_BUILD = "nyam-106"
+WEBAPP_BUILD = "nyam-107"
 MINIAPP_EDITABLE_HISTORY_DAYS = 2
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
-WEBAPP_ENTRY_PATHS = {WEBAPP_ENTRY_PATH, "/miniapp", "/miniapp/"}
+WEBAPP_ENTRY_PATHS = {"/", WEBAPP_ENTRY_PATH, "/miniapp", "/miniapp/"}
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 BOT_USERNAME = ""
 PUSH_STICKER_PATH = Path(__file__).resolve().parent / "assets" / "push-hello.webp"
