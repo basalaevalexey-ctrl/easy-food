@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 
+import httpx
 from openai import AsyncOpenAI, OpenAIError
 
 from app.models import FoodEstimate
@@ -20,9 +21,19 @@ class NotFoodError(Exception):
 
 
 class FoodRecognitionClient:
-    def __init__(self, api_key: str, model: str) -> None:
-        self.client = AsyncOpenAI(api_key=api_key or "missing")
+    def __init__(self, api_key: str, model: str, proxy_url: str = "") -> None:
+        self._http_client: httpx.AsyncClient | None = None
+        if proxy_url:
+            self._http_client = httpx.AsyncClient(proxy=proxy_url)
+            logger.info("OpenAI proxy is enabled")
+        self.client = AsyncOpenAI(
+            api_key=api_key or "missing",
+            http_client=self._http_client,
+        )
         self.model = model
+
+    async def close(self) -> None:
+        await self.client.close()
 
     async def estimate_text(self, text: str) -> FoodEstimate:
         normalized_items = self._format_text_items(text)

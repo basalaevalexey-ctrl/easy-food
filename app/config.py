@@ -29,6 +29,7 @@ class Config:
     database_min_entries: int
     database_min_events: int
     openai_model: str
+    openai_proxy_url: str
     auto_push_time: str
     timezone: str
     telegram_polling_enabled: bool
@@ -157,6 +158,7 @@ def load_config() -> Config:
         database_min_entries=_int_env("DATABASE_MIN_ENTRIES", 0),
         database_min_events=_int_env("DATABASE_MIN_EVENTS", 0),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+        openai_proxy_url=os.getenv("OPENAI_PROXY_URL", "").strip(),
         auto_push_time=os.getenv("AUTO_PUSH_TIME", "19:00"),
         timezone=timezone,
         telegram_polling_enabled=_bool_env("TELEGRAM_POLLING_ENABLED", True),

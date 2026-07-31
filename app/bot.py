@@ -93,7 +93,11 @@ DATABASE_HEALTH: dict[str, object] = {
     "integrity": "not_checked",
 }
 admin_stats_service = AdminStatsService(db)
-food_ai = FoodRecognitionClient(config.openai_api_key, config.openai_model)
+food_ai = FoodRecognitionClient(
+    config.openai_api_key,
+    config.openai_model,
+    config.openai_proxy_url,
+)
 WEBAPP_BUILD = "nyam-106"
 MINIAPP_EDITABLE_HISTORY_DAYS = 2
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
@@ -3010,6 +3014,7 @@ async def main() -> None:
         finally:
             web_server.shutdown()
             web_server.server_close()
+            await food_ai.close()
         return
 
     bot = Bot(token=config.bot_token)
@@ -3051,6 +3056,7 @@ async def main() -> None:
         web_server.shutdown()
         web_server.server_close()
         await bot.session.close()
+        await food_ai.close()
 
 
 async def start_miniapp_server() -> ThreadingHTTPServer:
