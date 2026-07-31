@@ -24,6 +24,14 @@ class PostgresTranslationTests(unittest.TestCase):
         self.assertIn("user_id = %s", sql)
         self.assertFalse(returns_id)
 
+    def test_escapes_sqlite_strftime_percent_formats(self) -> None:
+        sql, _ = translate_sqlite_sql(
+            "SELECT strftime('%H:%M', created_at, '+3 hours') FROM users WHERE id = ?"
+        )
+
+        self.assertIn("nyam_strftime('%%H:%%M'", sql)
+        self.assertIn("id = %s", sql)
+
     def test_translates_insert_or_ignore(self) -> None:
         sql, returns_id = translate_sqlite_sql(
             "INSERT OR IGNORE INTO referrals (inviter_user_id, invited_user_id) VALUES (?, ?)"

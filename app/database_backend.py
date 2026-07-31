@@ -197,6 +197,9 @@ def translate_sqlite_sql(statement: str) -> tuple[str, bool]:
     replace_insert = bool(re.match(r"INSERT\s+OR\s+REPLACE\s+INTO", sql, flags=re.IGNORECASE))
     ignore_insert = bool(re.match(r"INSERT\s+OR\s+IGNORE\s+INTO", sql, flags=re.IGNORECASE))
     sql = re.sub(r"^INSERT\s+OR\s+(?:IGNORE|REPLACE)\s+INTO", "INSERT INTO", sql, flags=re.IGNORECASE)
+    # psycopg treats percent signs as placeholder syntax even in SQL literals.
+    # Escape SQLite format strings before adding the real %s parameters.
+    sql = sql.replace("%", "%%")
     sql = sql.replace("?", "%s")
 
     sql = re.sub(
