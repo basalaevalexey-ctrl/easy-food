@@ -2402,7 +2402,7 @@ async def fix_menu_command(message: Message) -> None:
     await message.bot.set_chat_menu_button(
         chat_id=message.chat.id,
         menu_button=MenuButtonWebApp(
-            text=f"Нямметр {WEBAPP_BUILD}",
+            text="Нямметр",
             web_app=WebAppInfo(url=url),
         ),
     )
