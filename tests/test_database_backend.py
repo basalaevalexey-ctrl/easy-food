@@ -3,11 +3,18 @@ import unittest
 from pathlib import Path
 
 from app.database import Database
-from app.database_backend import translate_sqlite_sql
+from app.database_backend import compat_row_factory, translate_sqlite_sql
 from app.models import FoodEstimate
 
 
 class PostgresTranslationTests(unittest.TestCase):
+    def test_row_factory_accepts_commands_without_result_columns(self) -> None:
+        class CursorWithoutDescription:
+            description = None
+
+        make_row = compat_row_factory(CursorWithoutDescription())
+        self.assertEqual(dict(make_row(())), {})
+
     def test_translates_placeholders_and_date_helpers(self) -> None:
         sql, returns_id = translate_sqlite_sql(
             "SELECT date(created_at, '+3 hours') FROM food_entries WHERE user_id = ?"

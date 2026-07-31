@@ -44,7 +44,7 @@ class CompatRow(Mapping[str, Any]):
 
 
 def compat_row_factory(cursor):
-    columns = tuple(column.name for column in cursor.description)
+    columns = tuple(column.name for column in (cursor.description or ()))
 
     def make_row(values: tuple[Any, ...]) -> CompatRow:
         return CompatRow(columns, values)
