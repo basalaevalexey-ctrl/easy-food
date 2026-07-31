@@ -50,6 +50,7 @@ from app.achievements import ACHIEVEMENTS
 from app.calorie_calculator import calculate_targets
 from app.config import load_config
 from app.database import Database
+from app.database_smoke import run_database_smoke_test
 from app.keyboards import (
     admin_food_keyboard,
     admin_keyboard,
@@ -2992,6 +2993,11 @@ async def main() -> None:
         raise RuntimeError("OPENAI_API_KEY is not set")
 
     db_info = initialize_and_validate_database()
+    if config.database_smoke_test:
+        logger.warning("Running database smoke test for instance %s", config.instance_name)
+        run_database_smoke_test(db)
+        db_info = db.database_info()
+        logger.info("Database smoke test completed successfully")
     if not config.bot_token:
         logger.warning(
             "Instance %s is running in database-only staging mode; Telegram and mini app auth are disabled",

@@ -33,6 +33,7 @@ class Config:
     timezone: str
     telegram_polling_enabled: bool
     background_jobs_enabled: bool
+    database_smoke_test: bool
     instance_name: str
     admin_total_baseline: dict[str, int]
     admin_total_baseline_offset: dict[str, int]
@@ -160,6 +161,7 @@ def load_config() -> Config:
         timezone=timezone,
         telegram_polling_enabled=_bool_env("TELEGRAM_POLLING_ENABLED", True),
         background_jobs_enabled=_bool_env("BACKGROUND_JOBS_ENABLED", True),
+        database_smoke_test=_bool_env("DATABASE_SMOKE_TEST", False),
         instance_name=os.getenv("INSTANCE_NAME", "local").strip() or "local",
         admin_total_baseline=_parse_int_dict(os.getenv("ADMIN_TOTAL_BASELINE", "")),
         admin_total_baseline_offset=_parse_int_dict(os.getenv("ADMIN_TOTAL_BASELINE_OFFSET", "")),

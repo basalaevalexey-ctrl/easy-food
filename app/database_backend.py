@@ -138,6 +138,14 @@ AS $$
         )
     )
 $$;
+
+CREATE OR REPLACE FUNCTION normalize_food_title(value TEXT)
+RETURNS TEXT
+LANGUAGE sql
+IMMUTABLE
+AS $$
+    SELECT btrim(lower(regexp_replace(COALESCE(value, ''), '\\s+', ' ', 'g')), ' .,!?:;-')
+$$;
 """
 
 
@@ -237,6 +245,10 @@ class PostgresConnection:
             if inserted is not None:
                 lastrowid = int(inserted["id"])
         return PostgresCursor(cursor, lastrowid=lastrowid)
+
+    def create_function(self, name: str, argument_count: int, function) -> None:
+        # Compatibility functions used by shared queries are installed in PostgreSQL during init.
+        return None
 
     def commit(self) -> None:
         self._connection.commit()

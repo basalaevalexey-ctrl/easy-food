@@ -4,6 +4,7 @@ from pathlib import Path
 
 from app.database import Database
 from app.database_backend import compat_row_factory, translate_sqlite_sql
+from app.database_smoke import run_database_smoke_test
 from app.models import FoodEstimate
 
 
@@ -61,6 +62,13 @@ class PostgresTranslationTests(unittest.TestCase):
 
 
 class SQLiteRegressionTests(unittest.TestCase):
+    def test_full_database_smoke_flow(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database = Database(Path(temp_dir) / "smoke.sqlite3")
+            database.init()
+            run_database_smoke_test(database)
+            self.assertEqual(database.stats()["users"], 0)
+
     def test_core_flow_still_works_without_database_url(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             database = Database(Path(temp_dir) / "test.sqlite3")
