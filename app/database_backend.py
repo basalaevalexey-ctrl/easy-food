@@ -193,6 +193,10 @@ def translate_sqlite_sql(statement: str) -> tuple[str, bool]:
         "MIN(3000, MAX(1500, ROUND(weight * 30.0 / 50.0) * 50))",
         "LEAST(3000, GREATEST(1500, ROUND(weight * 30.0 / 50.0) * 50))",
     )
+    sql = sql.replace(
+        "MIN(bot.first_at, miniapp.first_at)",
+        "LEAST(bot.first_at, miniapp.first_at)",
+    )
 
     replace_insert = bool(re.match(r"INSERT\s+OR\s+REPLACE\s+INTO", sql, flags=re.IGNORECASE))
     ignore_insert = bool(re.match(r"INSERT\s+OR\s+IGNORE\s+INTO", sql, flags=re.IGNORECASE))

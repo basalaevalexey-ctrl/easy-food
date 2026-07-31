@@ -32,6 +32,13 @@ class PostgresTranslationTests(unittest.TestCase):
         self.assertIn("nyam_strftime('%%H:%%M'", sql)
         self.assertIn("id = %s", sql)
 
+    def test_translates_scalar_minimum_for_channel_stats(self) -> None:
+        sql, _ = translate_sqlite_sql(
+            "SELECT MIN(bot.first_at, miniapp.first_at) FROM users"
+        )
+
+        self.assertIn("LEAST(bot.first_at, miniapp.first_at)", sql)
+
     def test_translates_insert_or_ignore(self) -> None:
         sql, returns_id = translate_sqlite_sql(
             "INSERT OR IGNORE INTO referrals (inviter_user_id, invited_user_id) VALUES (?, ?)"
