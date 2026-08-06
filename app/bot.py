@@ -107,7 +107,7 @@ food_ai = FoodRecognitionClient(
     config.openai_model,
     config.openai_proxy_url,
 )
-WEBAPP_BUILD = "nyam-108"
+WEBAPP_BUILD = "nyam-109"
 MINIAPP_EDITABLE_HISTORY_DAYS = 2
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 WEBAPP_ENTRY_PATHS = {"/", WEBAPP_ENTRY_PATH, "/miniapp", "/miniapp/"}
@@ -481,18 +481,21 @@ load();
 </html>"""
 
 
-def miniapp_shell_html() -> str:
+def miniapp_shell_html(*, web_mode: bool = False) -> str:
     html_path = config.public_dir / "nyammetr-live.html"
     try:
         html = html_path.read_text(encoding="utf-8")
     except OSError:
         logger.exception("Failed to read mini app html")
         return "<!doctype html><meta charset='utf-8'><title>Нямметр</title><p>Не смог загрузить миниапп.</p>"
-    return (
+    html = (
         sanitize_miniapp_html(html)
         .replace("__WEBAPP_BUILD__", WEBAPP_BUILD)
         .replace("__BOT_USERNAME__", re.sub(r"[^A-Za-z0-9_]", "", BOT_USERNAME))
     )
+    if web_mode:
+        html = html.replace('<base href="/" />', '<base href="/web/" />', 1)
+    return html
 
 
 class SetupGoal(StatesGroup):
@@ -1079,6 +1082,8 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
         self._send_headers(302, "text/plain; charset=utf-8", extra_headers=headers)
 
     def _send_static(self, requested_path: str) -> None:
+        if requested_path.startswith("/web/"):
+            requested_path = requested_path.removeprefix("/web")
         relative_path = "index.html" if requested_path in {"", "/", *WEBAPP_ENTRY_PATHS} else requested_path.lstrip("/")
         try:
             file_path = (config.public_dir / relative_path).resolve()
@@ -1212,7 +1217,7 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             return
         if parsed.path in WEB_ENTRY_PATHS:
             self._send_headers(200, "text/html; charset=utf-8")
-            self.wfile.write(miniapp_shell_html().encode("utf-8"))
+            self.wfile.write(miniapp_shell_html(web_mode=True).encode("utf-8"))
             return
         if parsed.path in WEBAPP_ENTRY_PATHS:
             self._send_headers(200, "text/html; charset=utf-8")
