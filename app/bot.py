@@ -8,6 +8,7 @@ import logging
 import mimetypes
 import re
 from datetime import date, datetime, timedelta, timezone
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
@@ -71,6 +72,14 @@ from app.keyboards import (
 )
 from app.models import FoodEntry, User
 from app.openai_client import FoodRecognitionClient, NotFoodError, OpenAIRecognitionError
+from app.web_auth import (
+    WEB_SESSION_COOKIE,
+    build_session_cookie,
+    clear_session_cookie,
+    create_web_session,
+    parse_web_session,
+    verify_telegram_login,
+)
 
 
 logging.basicConfig(
@@ -98,10 +107,11 @@ food_ai = FoodRecognitionClient(
     config.openai_model,
     config.openai_proxy_url,
 )
-WEBAPP_BUILD = "nyam-107"
+WEBAPP_BUILD = "nyam-108"
 MINIAPP_EDITABLE_HISTORY_DAYS = 2
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 WEBAPP_ENTRY_PATHS = {"/", WEBAPP_ENTRY_PATH, "/miniapp", "/miniapp/"}
+WEB_ENTRY_PATHS = {"/web", "/web/"}
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 BOT_USERNAME = ""
 PUSH_STICKER_PATH = Path(__file__).resolve().parent / "assets" / "push-hello.webp"
@@ -478,7 +488,11 @@ def miniapp_shell_html() -> str:
     except OSError:
         logger.exception("Failed to read mini app html")
         return "<!doctype html><meta charset='utf-8'><title>Нямметр</title><p>Не смог загрузить миниапп.</p>"
-    return sanitize_miniapp_html(html).replace("__WEBAPP_BUILD__", WEBAPP_BUILD)
+    return (
+        sanitize_miniapp_html(html)
+        .replace("__WEBAPP_BUILD__", WEBAPP_BUILD)
+        .replace("__BOT_USERNAME__", re.sub(r"[^A-Za-z0-9_]", "", BOT_USERNAME))
+    )
 
 
 class SetupGoal(StatesGroup):
@@ -1038,6 +1052,7 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
         status: int,
         content_type: str = "application/json",
         cache_control: str = "no-store, no-cache, must-revalidate, max-age=0",
+        extra_headers: dict[str, str] | None = None,
     ) -> None:
         origin = self.headers.get("Origin") or "*"
         self.send_response(status)
@@ -1049,11 +1064,19 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
         if "no-store" in cache_control:
             self.send_header("Pragma", "no-cache")
             self.send_header("Expires", "0")
+        for name, value in (extra_headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
 
     def _send_json(self, status: int, payload: dict) -> None:
         self._send_headers(status)
         self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+
+    def _redirect(self, location: str, *, cookie: str | None = None) -> None:
+        headers = {"Location": location}
+        if cookie:
+            headers["Set-Cookie"] = cookie
+        self._send_headers(302, "text/plain; charset=utf-8", extra_headers=headers)
 
     def _send_static(self, requested_path: str) -> None:
         relative_path = "index.html" if requested_path in {"", "/", *WEBAPP_ENTRY_PATHS} else requested_path.lstrip("/")
@@ -1101,7 +1124,23 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
         if not init_data:
             query = dict(parse_qsl(urlparse(self.path).query, keep_blank_values=True))
             init_data = query.get("initData", "")
-        return parse_telegram_init_data(init_data)
+        telegram_user = parse_telegram_init_data(init_data)
+        if telegram_user:
+            telegram_user["_auth_mode"] = "miniapp"
+            return telegram_user
+
+        cookies = SimpleCookie()
+        try:
+            cookies.load(self.headers.get("Cookie", ""))
+        except Exception:
+            return None
+        session = cookies.get(WEB_SESSION_COOKIE)
+        if not session:
+            return None
+        return parse_web_session(
+            session.value,
+            config.web_session_secret or config.bot_token,
+        )
 
     def _entry_payload(self, entry: FoodEntry) -> dict:
         return {
@@ -1149,6 +1188,32 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
                 },
             )
             return
+        if parsed.path == "/web/auth/telegram":
+            query = {
+                key: values[-1]
+                for key, values in parse_qs(parsed.query, keep_blank_values=True).items()
+                if values
+            }
+            telegram_user = verify_telegram_login(query, config.bot_token)
+            if not telegram_user:
+                self._redirect("/web?auth=failed")
+                return
+            telegram_id = int(telegram_user["id"])
+            db.get_or_create_user(telegram_id)
+            db.record_user_event(telegram_id, "web_login")
+            session_token = create_web_session(
+                telegram_user,
+                config.web_session_secret or config.bot_token,
+            )
+            self._redirect("/web", cookie=build_session_cookie(session_token))
+            return
+        if parsed.path == "/web/logout":
+            self._redirect("/web", cookie=clear_session_cookie())
+            return
+        if parsed.path in WEB_ENTRY_PATHS:
+            self._send_headers(200, "text/html; charset=utf-8")
+            self.wfile.write(miniapp_shell_html().encode("utf-8"))
+            return
         if parsed.path in WEBAPP_ENTRY_PATHS:
             self._send_headers(200, "text/html; charset=utf-8")
             self.wfile.write(miniapp_shell_html().encode("utf-8"))
@@ -1185,11 +1250,19 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
         telegram_id = int(telegram_user["id"])
         if str(telegram_user.get("_start_param") or "").startswith("q_"):
             db.record_user_event(telegram_id, "site_quiz_opened")
-        db.record_user_event(telegram_id, "miniapp_opened")
-        self._send_json(200, build_miniapp_payload(telegram_user, selected_day=selected_day))
+        db.record_user_event(
+            telegram_id,
+            "web_opened" if telegram_user.get("_auth_mode") == "web" else "miniapp_opened",
+        )
+        response_payload = build_miniapp_payload(telegram_user, selected_day=selected_day)
+        response_payload["auth"] = {"mode": telegram_user.get("_auth_mode", "miniapp")}
+        self._send_json(200, response_payload)
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/api/web/logout":
+            self._send_headers(204, extra_headers={"Set-Cookie": clear_session_cookie()})
+            return
         if parsed.path not in {
             "/api/miniapp/food/text",
             "/api/miniapp/food/photo",

@@ -2315,6 +2315,80 @@ h2 {
   display: none;
 }
 
+.web-auth-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(255, 253, 248, 0.94);
+  backdrop-filter: blur(8px);
+}
+
+.web-auth-modal[hidden] {
+  display: none;
+}
+
+.web-auth-sheet {
+  width: min(100%, 390px);
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 24px 22px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: #fffdf8;
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.web-auth-sheet > img {
+  width: 184px;
+  height: 184px;
+  object-fit: contain;
+}
+
+.web-auth-sheet h1 {
+  margin: 4px 0 8px;
+  font-size: 25px;
+  line-height: 1.1;
+}
+
+.web-auth-sheet p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.web-auth-sheet > div > small {
+  color: var(--green-dark);
+  font-weight: 800;
+}
+
+.telegram-login-slot {
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+}
+
+.web-auth-note {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.web-logout-icon {
+  color: var(--green-dark);
+  font-size: 25px;
+  font-weight: 900;
+}
+
+body.web-auth-open {
+  overflow: hidden;
+}
+
 .onboarding-sheet {
   width: min(100%, 394px);
   display: grid;

@@ -19,6 +19,7 @@ class Config:
     admin_ids: set[int]
     port: int
     webapp_url: str
+    web_session_secret: str
     public_dir: Path
     database_url: str
     database_path: Path
@@ -148,6 +149,7 @@ def load_config() -> Config:
         admin_ids=_parse_admin_ids(os.getenv("ADMIN_IDS", "")),
         port=_int_env("PORT", 3000),
         webapp_url=_webapp_url(),
+        web_session_secret=os.getenv("WEB_SESSION_SECRET", "").strip(),
         public_dir=BASE_DIR / "public",
         database_url=os.getenv("DATABASE_URL", "").strip(),
         database_path=database_path,

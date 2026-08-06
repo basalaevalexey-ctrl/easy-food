@@ -246,6 +246,11 @@
             <span><strong>Сообщество</strong><small>Группа Нямметра</small></span>
             <b aria-hidden="true">›</b>
           </a>
+          <button type="button" class="profile-menu-button web-logout-button" data-web-logout hidden>
+            <span class="web-logout-icon" aria-hidden="true">↪</span>
+            <span><strong>Выйти</strong><small>Из веб-версии Нямметра</small></span>
+            <b aria-hidden="true">›</b>
+          </button>
         </div>
       </section>
 
@@ -256,6 +261,19 @@
         <button type="button" data-tab="profile"><img class="tab-icon" src="./assets/tab-profile.png" alt="" />Профиль</button>
       </nav>
     </main>
+
+    <div class="web-auth-modal" data-web-auth hidden>
+      <section class="web-auth-sheet" role="dialog" aria-modal="true" aria-labelledby="web-auth-title">
+        <img src="./assets/cat-food.png" alt="" />
+        <div>
+          <small>Нямметр в браузере</small>
+          <h1 id="web-auth-title">Войди через Telegram</h1>
+          <p>Твой дневник, цели и прогресс сразу появятся здесь. Ничего переносить не нужно.</p>
+        </div>
+        <div class="telegram-login-slot" data-telegram-login-slot></div>
+        <small class="web-auth-note" data-web-auth-note>Используем Telegram только для безопасного входа.</small>
+      </section>
+    </div>
 
     <div class="profile-popup" data-profile-popup="goals" hidden>
       <section class="profile-popup-sheet" role="dialog" aria-modal="true" aria-labelledby="profile-goals-title">
@@ -424,6 +442,10 @@ const reminderTime = document.querySelector("[data-reminder-time]");
 const reminderLabel = document.querySelector("[data-reminder-label]");
 const waterReminderEnabled = document.querySelector("[data-water-reminder-enabled]");
 const waterReminderLabel = document.querySelector("[data-water-reminder-label]");
+const webAuth = document.querySelector("[data-web-auth]");
+const webAuthNote = document.querySelector("[data-web-auth-note]");
+const telegramLoginSlot = document.querySelector("[data-telegram-login-slot]");
+const webLogout = document.querySelector("[data-web-logout]");
 const reminderMenuSummary = document.querySelector("[data-reminder-menu-summary]");
 const profilePopupTriggers = document.querySelectorAll("[data-profile-popup-open]");
 const profilePopups = document.querySelectorAll("[data-profile-popup]");
@@ -439,6 +461,9 @@ const streakFreeze = document.querySelector("[data-streak-freeze]");
 let calorieGoal = 2100;
 let profileGoal = "support";
 let profileSex = "male";
+const telegramBotUsername = "__BOT_USERNAME__";
+const isWebVersion = /^\/web(?:\/|$)/.test(window.location.pathname);
+let telegramLoginMounted = false;
 const profileStoreKey = "nyammetr-profile";
 let hasLocalProfile = false;
 let referralInviteUrl = "";
@@ -1179,6 +1204,7 @@ async function miniappRequest(path, options = {}) {
   const response = await fetch(requestPath, {
     ...options,
     headers,
+    credentials: "same-origin",
   });
   if (!response.ok) {
     let error = `request_failed_${response.status}`;
@@ -1188,9 +1214,47 @@ async function miniappRequest(path, options = {}) {
     } catch {
       // Keep the generic request error.
     }
-    throw new Error(error);
+    const requestError = new Error(error);
+    requestError.status = response.status;
+    throw requestError;
   }
   return response.json();
+}
+
+function mountTelegramLogin() {
+  if (telegramLoginMounted || !telegramLoginSlot) return;
+  telegramLoginMounted = true;
+  if (!telegramBotUsername) {
+    webAuthNote.textContent = "Вход временно недоступен. Открой Нямметр через Telegram.";
+    return;
+  }
+  const script = document.createElement("script");
+  script.async = true;
+  script.src = "https://telegram.org/js/telegram-widget.js?22";
+  script.dataset.telegramLogin = telegramBotUsername;
+  script.dataset.size = "large";
+  script.dataset.radius = "12";
+  script.dataset.userpic = "false";
+  script.dataset.requestAccess = "write";
+  script.dataset.authUrl = `${window.location.origin}/web/auth/telegram`;
+  telegramLoginSlot.replaceChildren(script);
+}
+
+function showWebLogin() {
+  if (!isWebVersion || !webAuth) return;
+  webAuth.hidden = false;
+  document.body.classList.add("web-auth-open");
+  if (new URLSearchParams(window.location.search).get("auth") === "failed") {
+    webAuthNote.textContent = "Не получилось подтвердить вход. Попробуй ещё раз.";
+    window.history.replaceState({}, "", "/web");
+  }
+  mountTelegramLogin();
+}
+
+function hideWebLogin() {
+  if (!webAuth) return;
+  webAuth.hidden = true;
+  document.body.classList.remove("web-auth-open");
 }
 
 function fileToDataUrl(file) {
@@ -1737,17 +1801,22 @@ async function loadServerState() {
   tg?.ready?.();
   tg?.expand?.();
 
-  if (!telegramInitData()) {
-    showLoadError("Открой миниапп через кнопку в Telegram");
-    showToast("Открой миниапп через Telegram");
-    return;
-  }
-
   try {
     const data = await miniappRequest(`/api/miniapp/me?date=${toInputDate(selectedDate)}`);
+    hideWebLogin();
+    if (webLogout) webLogout.hidden = !isWebVersion || data.auth?.mode !== "web";
     applyServerState(data);
     renderCalendar();
   } catch (error) {
+    if (error.status === 401 && isWebVersion) {
+      showWebLogin();
+      return;
+    }
+    if (error.status === 401) {
+      showLoadError("Открой миниапп через кнопку в Telegram");
+      showToast("Открой миниапп через Telegram");
+      return;
+    }
     console.error(error);
     showLoadError(error.message || "Проверь редеплой и WEBAPP_URL");
     showToast("Не смог загрузить данные");
@@ -1854,6 +1923,18 @@ communityLink?.addEventListener("click", (event) => {
   if (!tg?.openTelegramLink) return;
   event.preventDefault();
   tg.openTelegramLink(communityLink.href);
+});
+
+webLogout?.addEventListener("click", async () => {
+  webLogout.disabled = true;
+  try {
+    await fetch("/api/web/logout", {
+      method: "POST",
+      credentials: "same-origin",
+    });
+  } finally {
+    window.location.replace("/web");
+  }
 });
 
 reminderEnabled?.addEventListener("change", saveReminderSettings);
