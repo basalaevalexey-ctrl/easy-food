@@ -2373,6 +2373,47 @@ h2 {
   place-items: center;
 }
 
+.web-auth-divider {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.web-auth-divider::before,
+.web-auth-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--line);
+}
+
+.vk-login-button {
+  width: min(100%, 260px);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 12px;
+  background: #07f;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.vk-login-button[hidden] {
+  display: none;
+}
+
+.vk-login-button span {
+  font-size: 16px;
+  font-weight: 900;
+}
+
 .web-auth-note {
   color: var(--muted);
   font-size: 11px;

@@ -48,6 +48,9 @@ APP_TIMEZONE=Europe/Moscow
 PORT=3000
 WEBAPP_URL=
 WEB_SESSION_SECRET=replace-with-a-long-random-value
+VKID_CLIENT_ID=
+VKID_CLIENT_SECRET=
+VKID_REDIRECT_URI=https://app.nyammetr.ru/web/auth/vk/callback
 ```
 
 `ADMIN_IDS` можно оставить пустым, если команда `/stats` не нужна.
@@ -82,9 +85,11 @@ DATABASE_PATH=/app/data/calories.sqlite3
 
 `WEB_SESSION_SECRET` - отдельный длинный случайный секрет для подписания браузерных сессий. На production задайте не менее 32 случайных символов и не публикуйте значение. Если переменная не задана, используется производный ключ от `BOT_TOKEN`.
 
+`VKID_CLIENT_ID`, `VKID_CLIENT_SECRET` и `VKID_REDIRECT_URI` включают вход через VK ID. Создайте Web-приложение в кабинете VK ID и добавьте точный callback `https://app.nyammetr.ru/web/auth/vk/callback`. Пока `VKID_CLIENT_ID` или callback не заданы, кнопка VK скрыта.
+
 ## Веб-версия
 
-Полный интерфейс Нямметра доступен по пути `/web` и использует ту же базу и API, что Telegram Mini App. После входа через Telegram пользователь получает защищённую `HttpOnly` cookie-сессию, связанную с тем же `telegram_id`, поэтому дневник, цели, вода, миссии и достижения не дублируются.
+Полный интерфейс Нямметра доступен по пути `/web` и использует ту же базу и API, что Telegram Mini App. После входа через Telegram или VK ID пользователь получает защищённую `HttpOnly` cookie-сессию. VK-профили хранятся в таблице `external_identities`, а дневник, цели, вода, миссии и достижения используют общие таблицы приложения.
 
 Для production:
 

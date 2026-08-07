@@ -4,10 +4,15 @@ import unittest
 
 from app.web_auth import (
     WEB_SESSION_COOKIE,
+    VK_OAUTH_COOKIE,
     build_session_cookie,
+    build_vk_oauth_cookie,
     clear_session_cookie,
+    clear_vk_oauth_cookie,
     create_web_session,
+    create_vk_oauth_flow,
     parse_web_session,
+    parse_vk_oauth_flow,
     verify_telegram_login,
 )
 
@@ -69,6 +74,19 @@ class WebSessionTests(unittest.TestCase):
         self.assertEqual(user["id"], 42)
         self.assertEqual(user["first_name"], "Алексей")
         self.assertEqual(user["_auth_mode"], "web")
+        self.assertEqual(user["_auth_provider"], "telegram")
+
+    def test_round_trips_vk_session_provider(self) -> None:
+        token = create_web_session(
+            {"id": 8_000_000_000_000_000_001, "_auth_provider": "vk"},
+            SESSION_SECRET,
+            now=1000,
+        )
+
+        user = parse_web_session(token, SESSION_SECRET, now=1100)
+
+        self.assertIsNotNone(user)
+        self.assertEqual(user["_auth_provider"], "vk")
 
     def test_rejects_tampered_session(self) -> None:
         token = create_web_session({"id": 42}, SESSION_SECRET, now=1000)
@@ -96,6 +114,41 @@ class WebSessionTests(unittest.TestCase):
         self.assertIn("SameSite=Lax", cookie)
         self.assertIn("Max-Age=60", cookie)
         self.assertIn("Max-Age=0", clear_session_cookie())
+
+
+class VKOAuthFlowTests(unittest.TestCase):
+    def test_round_trips_oauth_state_and_verifier(self) -> None:
+        state, verifier, challenge, token = create_vk_oauth_flow(
+            SESSION_SECRET, now=1000
+        )
+
+        flow = parse_vk_oauth_flow(
+            token, SESSION_SECRET, expected_state=state, now=1100
+        )
+
+        self.assertIsNotNone(flow)
+        self.assertEqual(flow["verifier"], verifier)
+        self.assertTrue(challenge)
+
+    def test_rejects_wrong_or_expired_state(self) -> None:
+        state, _, _, token = create_vk_oauth_flow(SESSION_SECRET, now=1000)
+
+        self.assertIsNone(
+            parse_vk_oauth_flow(token, SESSION_SECRET, expected_state="wrong", now=1100)
+        )
+        self.assertIsNone(
+            parse_vk_oauth_flow(token, SESSION_SECRET, expected_state=state, now=1700)
+        )
+
+    def test_vk_flow_cookies_are_secure_and_scoped(self) -> None:
+        cookie = build_vk_oauth_cookie("flow-token", max_age=60)
+
+        self.assertIn(f"{VK_OAUTH_COOKIE}=flow-token", cookie)
+        self.assertIn("Path=/web/auth/vk", cookie)
+        self.assertIn("HttpOnly", cookie)
+        self.assertIn("Secure", cookie)
+        self.assertIn("SameSite=Lax", cookie)
+        self.assertIn("Max-Age=0", clear_vk_oauth_cookie())
 
 
 if __name__ == "__main__":

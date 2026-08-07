@@ -74,12 +74,18 @@ from app.models import FoodEntry, User
 from app.openai_client import FoodRecognitionClient, NotFoodError, OpenAIRecognitionError
 from app.web_auth import (
     WEB_SESSION_COOKIE,
+    VK_OAUTH_COOKIE,
     build_session_cookie,
+    build_vk_oauth_cookie,
     clear_session_cookie,
+    clear_vk_oauth_cookie,
     create_web_session,
+    create_vk_oauth_flow,
     parse_web_session,
+    parse_vk_oauth_flow,
     verify_telegram_login,
 )
+from app.vk_auth import VKAuthError, build_vk_authorize_url, exchange_vk_code, fetch_vk_user
 
 
 logging.basicConfig(
@@ -107,7 +113,7 @@ food_ai = FoodRecognitionClient(
     config.openai_model,
     config.openai_proxy_url,
 )
-WEBAPP_BUILD = "nyam-109"
+WEBAPP_BUILD = "nyam-110"
 MINIAPP_EDITABLE_HISTORY_DAYS = 2
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 WEBAPP_ENTRY_PATHS = {"/", WEBAPP_ENTRY_PATH, "/miniapp", "/miniapp/"}
@@ -492,6 +498,10 @@ def miniapp_shell_html(*, web_mode: bool = False) -> str:
         sanitize_miniapp_html(html)
         .replace("__WEBAPP_BUILD__", WEBAPP_BUILD)
         .replace("__BOT_USERNAME__", re.sub(r"[^A-Za-z0-9_]", "", BOT_USERNAME))
+        .replace(
+            "__VKID_ENABLED__",
+            "true" if config.vkid_client_id and config.vkid_redirect_uri else "false",
+        )
     )
     if web_mode:
         html = html.replace('<base href="/" />', '<base href="/web/" />', 1)
@@ -1055,7 +1065,7 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
         status: int,
         content_type: str = "application/json",
         cache_control: str = "no-store, no-cache, must-revalidate, max-age=0",
-        extra_headers: dict[str, str] | None = None,
+        extra_headers: dict[str, str | list[str]] | None = None,
     ) -> None:
         origin = self.headers.get("Origin") or "*"
         self.send_response(status)
@@ -1068,18 +1078,36 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             self.send_header("Pragma", "no-cache")
             self.send_header("Expires", "0")
         for name, value in (extra_headers or {}).items():
-            self.send_header(name, value)
+            values = value if isinstance(value, list) else [value]
+            for item in values:
+                self.send_header(name, item)
         self.end_headers()
 
     def _send_json(self, status: int, payload: dict) -> None:
         self._send_headers(status)
         self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
 
-    def _redirect(self, location: str, *, cookie: str | None = None) -> None:
-        headers = {"Location": location}
-        if cookie:
-            headers["Set-Cookie"] = cookie
+    def _redirect(
+        self,
+        location: str,
+        *,
+        cookie: str | None = None,
+        cookies: list[str] | None = None,
+    ) -> None:
+        headers: dict[str, str | list[str]] = {"Location": location}
+        response_cookies = [item for item in [cookie, *(cookies or [])] if item]
+        if response_cookies:
+            headers["Set-Cookie"] = response_cookies
         self._send_headers(302, "text/plain; charset=utf-8", extra_headers=headers)
+
+    def _cookie_value(self, name: str) -> str:
+        cookies = SimpleCookie()
+        try:
+            cookies.load(self.headers.get("Cookie", ""))
+        except Exception:
+            return ""
+        value = cookies.get(name)
+        return value.value if value else ""
 
     def _send_static(self, requested_path: str) -> None:
         if requested_path.startswith("/web/"):
@@ -1134,16 +1162,11 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             telegram_user["_auth_mode"] = "miniapp"
             return telegram_user
 
-        cookies = SimpleCookie()
-        try:
-            cookies.load(self.headers.get("Cookie", ""))
-        except Exception:
-            return None
-        session = cookies.get(WEB_SESSION_COOKIE)
+        session = self._cookie_value(WEB_SESSION_COOKIE)
         if not session:
             return None
         return parse_web_session(
-            session.value,
+            session,
             config.web_session_secret or config.bot_token,
         )
 
@@ -1212,6 +1235,75 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             )
             self._redirect("/web", cookie=build_session_cookie(session_token))
             return
+        if parsed.path == "/web/auth/vk/start":
+            if not config.vkid_client_id or not config.vkid_redirect_uri:
+                self._redirect("/web?auth=vk_unavailable")
+                return
+            secret = config.web_session_secret or config.bot_token
+            try:
+                state, _, challenge, flow_token = create_vk_oauth_flow(secret)
+                authorize_url = build_vk_authorize_url(
+                    config.vkid_client_id,
+                    config.vkid_redirect_uri,
+                    state,
+                    challenge,
+                )
+            except (ValueError, VKAuthError):
+                logger.exception("Failed to start VK ID authorization")
+                self._redirect("/web?auth=vk_failed")
+                return
+            self._redirect(authorize_url, cookie=build_vk_oauth_cookie(flow_token))
+            return
+        if parsed.path == "/web/auth/vk/callback":
+            query = {
+                key: values[-1]
+                for key, values in parse_qs(parsed.query, keep_blank_values=True).items()
+                if values
+            }
+            state = str(query.get("state") or "")
+            flow = parse_vk_oauth_flow(
+                self._cookie_value(VK_OAUTH_COOKIE),
+                config.web_session_secret or config.bot_token,
+                expected_state=state,
+            )
+            if query.get("error") or not flow:
+                self._redirect("/web?auth=vk_failed", cookie=clear_vk_oauth_cookie())
+                return
+            try:
+                token = exchange_vk_code(
+                    client_id=config.vkid_client_id,
+                    client_secret=config.vkid_client_secret,
+                    redirect_uri=config.vkid_redirect_uri,
+                    code=str(query.get("code") or ""),
+                    code_verifier=flow["verifier"],
+                    device_id=str(query.get("device_id") or ""),
+                    state=state,
+                )
+                vk_user = fetch_vk_user(
+                    client_id=config.vkid_client_id,
+                    access_token=str(token["access_token"]),
+                )
+                user = db.get_or_create_external_user("vk", vk_user["provider_user_id"])
+                db.record_user_event(user.telegram_id, "web_vk_login")
+                session_token = create_web_session(
+                    {
+                        "id": user.telegram_id,
+                        "first_name": vk_user["first_name"],
+                        "last_name": vk_user["last_name"],
+                        "photo_url": vk_user["photo_url"],
+                        "_auth_provider": "vk",
+                    },
+                    config.web_session_secret or config.bot_token,
+                )
+            except (KeyError, ValueError, VKAuthError):
+                logger.exception("VK ID authorization failed")
+                self._redirect("/web?auth=vk_failed", cookie=clear_vk_oauth_cookie())
+                return
+            self._redirect(
+                "/web",
+                cookies=[build_session_cookie(session_token), clear_vk_oauth_cookie()],
+            )
+            return
         if parsed.path == "/web/logout":
             self._redirect("/web", cookie=clear_session_cookie())
             return
@@ -1260,7 +1352,10 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             "web_opened" if telegram_user.get("_auth_mode") == "web" else "miniapp_opened",
         )
         response_payload = build_miniapp_payload(telegram_user, selected_day=selected_day)
-        response_payload["auth"] = {"mode": telegram_user.get("_auth_mode", "miniapp")}
+        response_payload["auth"] = {
+            "mode": telegram_user.get("_auth_mode", "miniapp"),
+            "provider": telegram_user.get("_auth_provider", "telegram"),
+        }
         self._send_json(200, response_payload)
 
     def do_POST(self) -> None:

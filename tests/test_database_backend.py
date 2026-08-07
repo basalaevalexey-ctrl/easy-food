@@ -109,6 +109,18 @@ class SQLiteRegressionTests(unittest.TestCase):
             self.assertEqual(len(database.get_today_entries(user.telegram_id)), 1)
             self.assertEqual(database.integrity_check(), "ok")
 
+    def test_external_identity_reuses_the_same_user(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database = Database(Path(temp_dir) / "external.sqlite3")
+            database.init()
+
+            first = database.get_or_create_external_user("vk", "12345")
+            second = database.get_or_create_external_user("VK", "12345")
+
+            self.assertEqual(first.id, second.id)
+            self.assertEqual(first.telegram_id, second.telegram_id)
+            self.assertGreater(first.telegram_id, 8_000_000_000_000_000_000)
+
 
 if __name__ == "__main__":
     unittest.main()

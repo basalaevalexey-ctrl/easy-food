@@ -17,6 +17,7 @@ AUTO_ID_TABLES = {
     "lifecycle_pushes",
     "referrals",
     "streak_freezes",
+    "external_identities",
 }
 
 

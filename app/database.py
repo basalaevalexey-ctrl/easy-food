@@ -1,3 +1,4 @@
+import hashlib
 import sqlite3
 import shutil
 import random
@@ -170,6 +171,19 @@ class Database:
             )
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS external_identities (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    provider TEXT NOT NULL,
+                    provider_user_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(provider, provider_user_id),
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+                """
+            )
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS user_achievements (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
@@ -300,6 +314,9 @@ class Database:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_food_entries_user_date ON food_entries(user_id, created_at)")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_user_achievements_user ON user_achievements(user_id, unlocked_at)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_external_identities_user ON external_identities(user_id)"
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_daily_missions_user_date ON daily_missions(user_id, mission_date)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_reminder_logs_sent_at ON reminder_logs(sent_at)")
@@ -526,6 +543,50 @@ class Database:
             if row is None:
                 conn.execute("INSERT INTO users (telegram_id) VALUES (?)", (telegram_id,))
                 row = conn.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,)).fetchone()
+            return self._user_from_row(row)
+
+    def get_or_create_external_user(self, provider: str, provider_user_id: str) -> User:
+        normalized_provider = provider.strip().lower()
+        normalized_id = provider_user_id.strip()
+        if not normalized_provider or not normalized_id:
+            raise ValueError("invalid_external_identity")
+
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT u.*
+                FROM external_identities ei
+                JOIN users u ON u.id = ei.user_id
+                WHERE ei.provider = ? AND ei.provider_user_id = ?
+                """,
+                (normalized_provider, normalized_id),
+            ).fetchone()
+            if row is not None:
+                return self._user_from_row(row)
+
+            digest = hashlib.sha256(
+                f"{normalized_provider}:{normalized_id}".encode("utf-8")
+            ).digest()
+            external_login_id = 8_000_000_000_000_000_000 + (
+                int.from_bytes(digest[:8], "big") % 900_000_000_000_000_000
+            )
+            while conn.execute(
+                "SELECT 1 FROM users WHERE telegram_id = ?", (external_login_id,)
+            ).fetchone():
+                external_login_id += 1
+
+            cursor = conn.execute(
+                "INSERT INTO users (telegram_id) VALUES (?)", (external_login_id,)
+            )
+            user_id = int(cursor.lastrowid)
+            conn.execute(
+                """
+                INSERT INTO external_identities (user_id, provider, provider_user_id)
+                VALUES (?, ?, ?)
+                """,
+                (user_id, normalized_provider, normalized_id),
+            )
+            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
             return self._user_from_row(row)
 
     def update_user_goal(self, telegram_id: int, data: dict[str, Any]) -> User:
@@ -800,6 +861,9 @@ class Database:
                 SELECT * FROM users
                 WHERE reminder_time = ?
                   AND (reminder_last_sent_date IS NULL OR reminder_last_sent_date != ?)
+                  AND NOT EXISTS (
+                      SELECT 1 FROM external_identities ei WHERE ei.user_id = users.id
+                  )
                 """,
                 (reminder_time, today),
             ).fetchall()
@@ -835,6 +899,9 @@ class Database:
                 SELECT users.*
                 FROM users
                 WHERE users.water_reminders_enabled = 1
+                  AND NOT EXISTS (
+                      SELECT 1 FROM external_identities ei WHERE ei.user_id = users.id
+                  )
                   AND (users.water_reminder_skip_date IS NULL OR users.water_reminder_skip_date != ?)
                   AND (
                       SELECT COUNT(*) FROM reminder_logs
@@ -871,6 +938,9 @@ class Database:
                 SELECT users.*
                 FROM users
                 WHERE users.calorie_target IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM external_identities ei WHERE ei.user_id = users.id
+                  )
                   AND EXISTS (
                       SELECT 1 FROM active_days
                       WHERE active_days.user_id = users.id AND active_days.day = ?
@@ -973,6 +1043,9 @@ class Database:
                 FROM users
                 JOIN food_entries ON food_entries.user_id = users.id
                 WHERE date(food_entries.created_at, '+3 hours') BETWEEN ? AND ?
+                  AND NOT EXISTS (
+                      SELECT 1 FROM external_identities ei WHERE ei.user_id = users.id
+                  )
                   AND NOT EXISTS (
                       SELECT 1
                       FROM reminder_logs
@@ -1091,7 +1164,13 @@ class Database:
 
         result: list[tuple[User, int]] = []
         with self.connect() as conn:
+            external_user_ids = {
+                int(row["user_id"])
+                for row in conn.execute("SELECT user_id FROM external_identities").fetchall()
+            }
             for user in candidates:
+                if user.id in external_user_ids:
+                    continue
                 row = conn.execute(
                     """
                     SELECT
@@ -1434,6 +1513,9 @@ class Database:
                 FROM users
                 WHERE users.current_streak >= 3
                   AND users.last_active_date = ?
+                  AND NOT EXISTS (
+                      SELECT 1 FROM external_identities ei WHERE ei.user_id = users.id
+                  )
                   AND NOT EXISTS (
                       SELECT 1
                       FROM food_entries

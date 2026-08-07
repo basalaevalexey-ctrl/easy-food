@@ -267,11 +267,16 @@
         <img src="./assets/cat-food.png" alt="" />
         <div>
           <small>Нямметр в браузере</small>
-          <h1 id="web-auth-title">Войди через Telegram</h1>
-          <p>Твой дневник, цели и прогресс сразу появятся здесь. Ничего переносить не нужно.</p>
+          <h1 id="web-auth-title">Войди удобным способом</h1>
+          <p>Твой дневник, цели и прогресс сохранятся в одном месте.</p>
         </div>
         <div class="telegram-login-slot" data-telegram-login-slot></div>
-        <small class="web-auth-note" data-web-auth-note>Используем Telegram только для безопасного входа.</small>
+        <div class="web-auth-divider" aria-hidden="true"><span>или</span></div>
+        <a class="vk-login-button" data-vk-login href="/web/auth/vk/start" hidden>
+          <span aria-hidden="true">VK</span>
+          Войти через VK ID
+        </a>
+        <small class="web-auth-note" data-web-auth-note>Используем данные только для безопасного входа.</small>
       </section>
     </div>
 
@@ -445,6 +450,7 @@ const waterReminderLabel = document.querySelector("[data-water-reminder-label]")
 const webAuth = document.querySelector("[data-web-auth]");
 const webAuthNote = document.querySelector("[data-web-auth-note]");
 const telegramLoginSlot = document.querySelector("[data-telegram-login-slot]");
+const vkLogin = document.querySelector("[data-vk-login]");
 const webLogout = document.querySelector("[data-web-logout]");
 const reminderMenuSummary = document.querySelector("[data-reminder-menu-summary]");
 const profilePopupTriggers = document.querySelectorAll("[data-profile-popup-open]");
@@ -462,6 +468,7 @@ let calorieGoal = 2100;
 let profileGoal = "support";
 let profileSex = "male";
 const telegramBotUsername = "__BOT_USERNAME__";
+const vkidEnabled = __VKID_ENABLED__;
 const isWebVersion = /^\/web(?:\/|$)/.test(window.location.pathname);
 let telegramLoginMounted = false;
 const profileStoreKey = "nyammetr-profile";
@@ -1244,10 +1251,15 @@ function showWebLogin() {
   if (!isWebVersion || !webAuth) return;
   webAuth.hidden = false;
   document.body.classList.add("web-auth-open");
-  if (new URLSearchParams(window.location.search).get("auth") === "failed") {
+  const authError = new URLSearchParams(window.location.search).get("auth");
+  if (authError === "failed" || authError === "vk_failed") {
     webAuthNote.textContent = "Не получилось подтвердить вход. Попробуй ещё раз.";
     window.history.replaceState({}, "", "/web");
+  } else if (authError === "vk_unavailable") {
+    webAuthNote.textContent = "Вход через VK ID пока не настроен.";
+    window.history.replaceState({}, "", "/web");
   }
+  if (vkLogin) vkLogin.hidden = !vkidEnabled;
   mountTelegramLogin();
 }
 

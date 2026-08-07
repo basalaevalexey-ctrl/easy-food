@@ -20,6 +20,9 @@ class Config:
     port: int
     webapp_url: str
     web_session_secret: str
+    vkid_client_id: str
+    vkid_client_secret: str
+    vkid_redirect_uri: str
     public_dir: Path
     database_url: str
     database_path: Path
@@ -150,6 +153,9 @@ def load_config() -> Config:
         port=_int_env("PORT", 3000),
         webapp_url=_webapp_url(),
         web_session_secret=os.getenv("WEB_SESSION_SECRET", "").strip(),
+        vkid_client_id=os.getenv("VKID_CLIENT_ID", "").strip(),
+        vkid_client_secret=os.getenv("VKID_CLIENT_SECRET", "").strip(),
+        vkid_redirect_uri=os.getenv("VKID_REDIRECT_URI", "").strip(),
         public_dir=BASE_DIR / "public",
         database_url=os.getenv("DATABASE_URL", "").strip(),
         database_path=database_path,
