@@ -115,7 +115,7 @@ food_ai = FoodRecognitionClient(
     config.openai_model,
     config.openai_proxy_url,
 )
-WEBAPP_BUILD = "nyam-113"
+WEBAPP_BUILD = "nyam-114"
 MINIAPP_EDITABLE_HISTORY_DAYS = 2
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 WEBAPP_ENTRY_PATHS = {"/", WEBAPP_ENTRY_PATH, "/miniapp", "/miniapp/"}

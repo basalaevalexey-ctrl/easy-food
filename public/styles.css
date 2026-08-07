@@ -2390,7 +2390,8 @@ h2 {
   content: "";
   position: absolute;
   inset: 0 0 0 auto;
-  width: 14px;
+  z-index: 2;
+  width: 20px;
   border-radius: 0 12px 12px 0;
   background: #54a9eb;
   pointer-events: none;
