@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.database import Database
@@ -135,6 +136,40 @@ class SQLiteRegressionTests(unittest.TestCase):
             self.assertIsNotNone(login)
             self.assertEqual(login[0].id, user.id)
             self.assertEqual(login[1], "password-hash")
+
+    def test_password_reset_token_is_single_use(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database = Database(Path(temp_dir) / "reset.sqlite3")
+            database.init()
+            user = database.create_email_user("reset@example.com", "old-hash")
+            database.create_password_reset_token(
+                user.id,
+                "token-hash",
+                datetime.now(timezone.utc) + timedelta(minutes=30),
+            )
+
+            reset_user = database.reset_password_with_token("token-hash", "new-hash")
+            reused = database.reset_password_with_token("token-hash", "other-hash")
+            login = database.get_email_login("reset@example.com")
+
+            self.assertEqual(reset_user.id, user.id)
+            self.assertIsNone(reused)
+            self.assertEqual(login[1], "new-hash")
+
+    def test_expired_password_reset_token_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database = Database(Path(temp_dir) / "expired-reset.sqlite3")
+            database.init()
+            user = database.create_email_user("expired@example.com", "old-hash")
+            database.create_password_reset_token(
+                user.id,
+                "expired-hash",
+                datetime.now(timezone.utc) - timedelta(seconds=1),
+            )
+
+            self.assertIsNone(
+                database.reset_password_with_token("expired-hash", "new-hash")
+            )
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ import json
 import logging
 import mimetypes
 import re
+import secrets
 from datetime import date, datetime, timedelta, timezone
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -53,6 +54,7 @@ from app.calorie_calculator import calculate_targets
 from app.config import load_config
 from app.database import Database
 from app.database_smoke import run_database_smoke_test
+from app.email_client import EmailDeliveryError, send_password_reset_email
 from app.keyboards import (
     admin_food_keyboard,
     admin_keyboard,
@@ -115,7 +117,7 @@ food_ai = FoodRecognitionClient(
     config.openai_model,
     config.openai_proxy_url,
 )
-WEBAPP_BUILD = "nyam-115"
+WEBAPP_BUILD = "nyam-116"
 MINIAPP_EDITABLE_HISTORY_DAYS = 2
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 WEBAPP_ENTRY_PATHS = {"/", WEBAPP_ENTRY_PATH, "/miniapp", "/miniapp/"}
@@ -134,6 +136,7 @@ EMAIL_AUTH_MAX_ATTEMPTS = 10
 EMAIL_AUTH_ATTEMPTS: dict[str, list[float]] = {}
 EMAIL_AUTH_LOCK = threading.Lock()
 DUMMY_PASSWORD_HASH = hash_password("not-a-real-password")
+PASSWORD_RESET_TTL_MINUTES = 30
 
 
 def claim_email_auth_attempt(client_ip: str, *, now: float | None = None) -> bool:
@@ -1402,6 +1405,93 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/web/logout":
             self._send_headers(204, extra_headers={"Set-Cookie": clear_session_cookie()})
+            return
+        if parsed.path == "/api/web/email/password-reset/request":
+            if not self._same_origin_request():
+                self._send_json(403, {"error": "invalid_origin"})
+                return
+            if not claim_email_auth_attempt(self._client_ip()):
+                self._send_json(429, {"error": "too_many_attempts"})
+                return
+            try:
+                payload = self._read_json()
+                email = normalize_email(str(payload.get("email") or ""))
+            except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+                self._send_json(400, {"error": "invalid_email"})
+                return
+
+            login = db.get_email_login(email)
+            if login is not None:
+                user = login[0]
+                reset_token = secrets.token_urlsafe(32)
+                token_hash = hashlib.sha256(reset_token.encode("ascii")).hexdigest()
+                db.create_password_reset_token(
+                    user.id,
+                    token_hash,
+                    datetime.now(timezone.utc) + timedelta(minutes=PASSWORD_RESET_TTL_MINUTES),
+                )
+                reset_url = f"{config.public_web_url}?{urlencode({'reset_token': reset_token})}"
+                try:
+                    send_password_reset_email(
+                        smtp_host=config.smtp_host,
+                        smtp_port=config.smtp_port,
+                        smtp_username=config.smtp_username,
+                        smtp_password=config.smtp_password,
+                        from_email=config.smtp_from_email,
+                        from_name=config.smtp_from_name,
+                        recipient=email,
+                        reset_url=reset_url,
+                        use_ssl=config.smtp_use_ssl,
+                        use_tls=config.smtp_use_tls,
+                    )
+                    db.record_user_event(user.telegram_id, "web_password_reset_requested")
+                except EmailDeliveryError:
+                    logger.exception("Failed to send password reset email")
+
+            self._send_json(
+                200,
+                {
+                    "ok": True,
+                    "message": "Если аккаунт существует, письмо уже отправлено.",
+                },
+            )
+            return
+        if parsed.path == "/api/web/email/password-reset/confirm":
+            if not self._same_origin_request():
+                self._send_json(403, {"error": "invalid_origin"})
+                return
+            if not claim_email_auth_attempt(self._client_ip()):
+                self._send_json(429, {"error": "too_many_attempts"})
+                return
+            try:
+                payload = self._read_json()
+                reset_token = str(payload.get("token") or "").strip()
+                password = validate_password(str(payload.get("password") or ""))
+                if not 32 <= len(reset_token) <= 200:
+                    raise ValueError("invalid_reset_token")
+            except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+                error = str(exc)
+                self._send_json(
+                    400,
+                    {
+                        "error": error
+                        if error in {"password_too_short", "password_too_long"}
+                        else "invalid_reset_token"
+                    },
+                )
+                return
+
+            token_hash = hashlib.sha256(reset_token.encode("utf-8")).hexdigest()
+            user = db.reset_password_with_token(token_hash, hash_password(password))
+            if user is None:
+                self._send_json(400, {"error": "invalid_reset_token"})
+                return
+            db.record_user_event(user.telegram_id, "web_password_reset_completed")
+            self._send_json(
+                200,
+                {"ok": True},
+                extra_headers={"Set-Cookie": clear_session_cookie()},
+            )
             return
         if parsed.path in {"/api/web/email/register", "/api/web/email/login"}:
             if not self._same_origin_request():

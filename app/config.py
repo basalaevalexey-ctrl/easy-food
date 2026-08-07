@@ -23,6 +23,15 @@ class Config:
     vkid_client_id: str
     vkid_client_secret: str
     vkid_redirect_uri: str
+    public_web_url: str
+    smtp_host: str
+    smtp_port: int
+    smtp_username: str
+    smtp_password: str
+    smtp_from_email: str
+    smtp_from_name: str
+    smtp_use_ssl: bool
+    smtp_use_tls: bool
     public_dir: Path
     database_url: str
     database_path: Path
@@ -156,6 +165,17 @@ def load_config() -> Config:
         vkid_client_id=os.getenv("VKID_CLIENT_ID", "").strip(),
         vkid_client_secret=os.getenv("VKID_CLIENT_SECRET", "").strip(),
         vkid_redirect_uri=os.getenv("VKID_REDIRECT_URI", "").strip(),
+        public_web_url=(
+            os.getenv("PUBLIC_WEB_URL", "").strip() or "https://app.nyammetr.ru/web"
+        ).rstrip("/"),
+        smtp_host=os.getenv("SMTP_HOST", "").strip(),
+        smtp_port=_int_env("SMTP_PORT", 465),
+        smtp_username=os.getenv("SMTP_USERNAME", "").strip(),
+        smtp_password=os.getenv("SMTP_PASSWORD", "").strip(),
+        smtp_from_email=os.getenv("SMTP_FROM_EMAIL", "").strip(),
+        smtp_from_name=os.getenv("SMTP_FROM_NAME", "Нямметр").strip() or "Нямметр",
+        smtp_use_ssl=_bool_env("SMTP_USE_SSL", True),
+        smtp_use_tls=_bool_env("SMTP_USE_TLS", False),
         public_dir=BASE_DIR / "public",
         database_url=os.getenv("DATABASE_URL", "").strip(),
         database_path=database_path,

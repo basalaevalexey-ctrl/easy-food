@@ -19,6 +19,7 @@ AUTO_ID_TABLES = {
     "streak_freezes",
     "external_identities",
     "email_credentials",
+    "password_reset_tokens",
 }
 
 

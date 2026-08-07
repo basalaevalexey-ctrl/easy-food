@@ -270,21 +270,34 @@
           <h1 id="web-auth-title">Войди удобным способом</h1>
           <p>Твой дневник, цели и прогресс сохранятся в одном месте.</p>
         </div>
-        <div class="web-auth-providers">
+        <div class="web-auth-providers" data-auth-providers>
           <div class="telegram-login-slot" data-telegram-login-slot></div>
           <a class="vk-login-button" data-vk-login href="/web/auth/vk/start" hidden>
             Войти через VK
           </a>
         </div>
-        <div class="web-auth-divider" aria-hidden="true"><span>или</span></div>
+        <div class="web-auth-divider" data-auth-divider aria-hidden="true"><span>или</span></div>
         <form class="email-auth-form" data-email-auth-form>
           <label><span>Email</span><input type="email" name="email" autocomplete="email" placeholder="name@example.com" required /></label>
           <label><span>Пароль</span><input type="password" name="password" autocomplete="current-password" placeholder="Минимум 8 символов" minlength="8" maxlength="128" required /></label>
+          <button class="email-forgot-button" type="button" data-password-reset-open>Забыли пароль?</button>
           <div class="email-auth-actions">
             <button type="submit" data-email-auth-action="login">Войти</button>
             <button type="submit" data-email-auth-action="register">Создать аккаунт</button>
           </div>
           <small data-email-auth-status></small>
+        </form>
+        <form class="email-auth-form password-reset-form" data-password-reset-request-form hidden>
+          <label><span>Email</span><input type="email" name="email" autocomplete="email" placeholder="name@example.com" required /></label>
+          <button class="email-primary-button" type="submit">Отправить ссылку</button>
+          <button class="email-back-button" type="button" data-password-reset-back>Вернуться ко входу</button>
+          <small data-password-reset-request-status></small>
+        </form>
+        <form class="email-auth-form password-reset-form" data-password-reset-confirm-form hidden>
+          <label><span>Новый пароль</span><input type="password" name="password" autocomplete="new-password" placeholder="Минимум 8 символов" minlength="8" maxlength="128" required /></label>
+          <label><span>Повтори пароль</span><input type="password" name="password_confirm" autocomplete="new-password" placeholder="Еще раз" minlength="8" maxlength="128" required /></label>
+          <button class="email-primary-button" type="submit">Сохранить новый пароль</button>
+          <small data-password-reset-confirm-status></small>
         </form>
         <small class="web-auth-note" data-web-auth-note>Используем данные только для безопасного входа.</small>
       </section>
@@ -461,8 +474,18 @@ const webAuth = document.querySelector("[data-web-auth]");
 const webAuthNote = document.querySelector("[data-web-auth-note]");
 const telegramLoginSlot = document.querySelector("[data-telegram-login-slot]");
 const vkLogin = document.querySelector("[data-vk-login]");
+const authProviders = document.querySelector("[data-auth-providers]");
+const authDivider = document.querySelector("[data-auth-divider]");
 const emailAuthForm = document.querySelector("[data-email-auth-form]");
 const emailAuthStatus = document.querySelector("[data-email-auth-status]");
+const passwordResetOpen = document.querySelector("[data-password-reset-open]");
+const passwordResetBack = document.querySelector("[data-password-reset-back]");
+const passwordResetRequestForm = document.querySelector("[data-password-reset-request-form]");
+const passwordResetRequestStatus = document.querySelector("[data-password-reset-request-status]");
+const passwordResetConfirmForm = document.querySelector("[data-password-reset-confirm-form]");
+const passwordResetConfirmStatus = document.querySelector("[data-password-reset-confirm-status]");
+const webAuthTitle = document.querySelector("#web-auth-title");
+const webAuthDescription = webAuthTitle?.parentElement?.querySelector("p");
 const webLogout = document.querySelector("[data-web-logout]");
 const reminderMenuSummary = document.querySelector("[data-reminder-menu-summary]");
 const profilePopupTriggers = document.querySelectorAll("[data-profile-popup-open]");
@@ -1273,6 +1296,9 @@ function showWebLogin() {
   }
   if (vkLogin) vkLogin.hidden = !vkidEnabled;
   mountTelegramLogin();
+  if (new URLSearchParams(window.location.search).get("reset_token")) {
+    setEmailAuthMode("confirm");
+  }
 }
 
 function hideWebLogin() {
@@ -1280,6 +1306,101 @@ function hideWebLogin() {
   webAuth.hidden = true;
   document.body.classList.remove("web-auth-open");
 }
+
+function setEmailAuthMode(mode) {
+  const isLogin = mode === "login";
+  const isRequest = mode === "request";
+  authProviders.hidden = !isLogin;
+  authDivider.hidden = !isLogin;
+  emailAuthForm.hidden = !isLogin;
+  passwordResetRequestForm.hidden = !isRequest;
+  passwordResetConfirmForm.hidden = mode !== "confirm";
+  if (isLogin) {
+    webAuthTitle.textContent = "Войди удобным способом";
+    webAuthDescription.textContent = "Твой дневник, цели и прогресс сохранятся в одном месте.";
+  } else if (isRequest) {
+    webAuthTitle.textContent = "Восстановить пароль";
+    webAuthDescription.textContent = "Укажи email — отправим одноразовую ссылку на 30 минут.";
+  } else {
+    webAuthTitle.textContent = "Новый пароль";
+    webAuthDescription.textContent = "Придумай новый пароль для входа в Нямметр.";
+  }
+}
+
+passwordResetOpen?.addEventListener("click", () => setEmailAuthMode("request"));
+passwordResetBack?.addEventListener("click", () => setEmailAuthMode("login"));
+
+passwordResetRequestForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = passwordResetRequestForm.querySelector("button[type='submit']");
+  const formData = new FormData(passwordResetRequestForm);
+  button.disabled = true;
+  passwordResetRequestStatus.dataset.success = "";
+  passwordResetRequestStatus.textContent = "Отправляю...";
+  try {
+    const response = await fetch("/api/web/email/password-reset/request", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: String(formData.get("email") || "") }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "request_failed");
+    passwordResetRequestStatus.dataset.success = "true";
+    passwordResetRequestStatus.textContent = "Если такой аккаунт есть, ссылка уже отправлена. Проверь почту и папку «Спам».";
+  } catch (error) {
+    const message = error.message === "invalid_email"
+      ? "Проверь адрес email."
+      : error.message === "too_many_attempts"
+        ? "Слишком много попыток. Попробуй позже."
+        : "Не получилось отправить ссылку. Попробуй еще раз.";
+    passwordResetRequestStatus.textContent = message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+passwordResetConfirmForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = passwordResetConfirmForm.querySelector("button[type='submit']");
+  const formData = new FormData(passwordResetConfirmForm);
+  const password = String(formData.get("password") || "");
+  const passwordConfirm = String(formData.get("password_confirm") || "");
+  passwordResetConfirmStatus.dataset.success = "";
+  if (password !== passwordConfirm) {
+    passwordResetConfirmStatus.textContent = "Пароли не совпадают.";
+    return;
+  }
+  button.disabled = true;
+  passwordResetConfirmStatus.textContent = "Сохраняю...";
+  try {
+    const response = await fetch("/api/web/email/password-reset/confirm", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token: new URLSearchParams(window.location.search).get("reset_token") || "",
+        password,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "request_failed");
+    window.history.replaceState({}, "", "/web");
+    setEmailAuthMode("login");
+    emailAuthStatus.dataset.success = "true";
+    emailAuthStatus.textContent = "Пароль изменен. Теперь можно войти.";
+  } catch (error) {
+    const messages = {
+      password_too_short: "Пароль должен содержать минимум 8 символов.",
+      password_too_long: "Пароль слишком длинный.",
+      invalid_reset_token: "Ссылка устарела или уже использована. Запроси новую.",
+      too_many_attempts: "Слишком много попыток. Попробуй позже.",
+    };
+    passwordResetConfirmStatus.textContent = messages[error.message] || "Не получилось изменить пароль.";
+  } finally {
+    button.disabled = false;
+  }
+});
 
 emailAuthForm?.addEventListener("submit", async (event) => {
   event.preventDefault();

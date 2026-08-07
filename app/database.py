@@ -197,6 +197,19 @@ class Database:
             )
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    token_hash TEXT NOT NULL UNIQUE,
+                    expires_at TEXT NOT NULL,
+                    used_at TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+                """
+            )
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS user_achievements (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
@@ -638,6 +651,72 @@ class Database:
             if row is None:
                 return None
             return self._user_from_row(row), str(row["credential_password_hash"])
+
+    def create_password_reset_token(
+        self,
+        user_id: int,
+        token_hash: str,
+        expires_at: datetime,
+    ) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE password_reset_tokens
+                SET used_at = ?
+                WHERE user_id = ? AND used_at IS NULL
+                """,
+                (now, user_id),
+            )
+            conn.execute(
+                """
+                INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+                VALUES (?, ?, ?)
+                """,
+                (user_id, token_hash, expires_at.astimezone(timezone.utc).isoformat()),
+            )
+
+    def reset_password_with_token(self, token_hash: str, password_hash: str) -> User | None:
+        now = datetime.now(timezone.utc)
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT tokens.id AS reset_token_id, tokens.expires_at, u.*
+                FROM password_reset_tokens tokens
+                JOIN users u ON u.id = tokens.user_id
+                WHERE tokens.token_hash = ? AND tokens.used_at IS NULL
+                """,
+                (token_hash,),
+            ).fetchone()
+            if row is None:
+                return None
+            try:
+                expires_at = datetime.fromisoformat(str(row["expires_at"]))
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=timezone.utc)
+            except ValueError:
+                return None
+            if expires_at <= now:
+                return None
+            cursor = conn.execute(
+                """
+                UPDATE password_reset_tokens
+                SET used_at = ?
+                WHERE id = ? AND used_at IS NULL
+                """,
+                (now.isoformat(), int(row["reset_token_id"])),
+            )
+            if cursor.rowcount != 1:
+                return None
+            conn.execute(
+                """
+                UPDATE email_credentials
+                SET password_hash = ?, updated_at = ?
+                WHERE user_id = ?
+                """,
+                (password_hash, now.isoformat(), int(row["id"])),
+            )
+            return self._user_from_row(row)
 
     def update_user_goal(self, telegram_id: int, data: dict[str, Any]) -> User:
         user = self.get_or_create_user(telegram_id)

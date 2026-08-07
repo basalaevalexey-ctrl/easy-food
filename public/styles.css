@@ -2507,6 +2507,47 @@ h2 {
   text-align: center;
 }
 
+.email-auth-form > small[data-success="true"] {
+  color: var(--green-dark);
+}
+
+.email-forgot-button,
+.email-back-button {
+  justify-self: center;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.email-forgot-button {
+  justify-self: end;
+  margin-top: -4px;
+}
+
+.email-primary-button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--green);
+  color: #fff;
+  font-weight: 800;
+}
+
+.email-primary-button:disabled,
+.email-back-button:disabled {
+  opacity: 0.6;
+}
+
+.web-auth-providers[hidden],
+.web-auth-divider[hidden],
+.email-auth-form[hidden] {
+  display: none;
+}
+
 .vk-login-button[hidden] {
   display: none;
 }

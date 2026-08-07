@@ -91,6 +91,8 @@ DATABASE_PATH=/app/data/calories.sqlite3
 
 Полный интерфейс Нямметра доступен по пути `/web` и использует ту же базу и API, что Telegram Mini App. Доступны вход через Telegram, VK ID и регистрация по email/паролю. Пароли хешируются через `scrypt`, а браузер получает защищённую `HttpOnly` cookie-сессию. Внешние профили хранятся в `external_identities`, email-учётные данные — в `email_credentials`, а дневник, цели, вода, миссии и достижения используют общие таблицы приложения.
 
+Для восстановления пароля настройте SMTP-переменные `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`, `SMTP_USE_SSL` и `SMTP_USE_TLS`. `PUBLIC_WEB_URL` должен указывать на `https://app.nyammetr.ru/web`. Ссылки восстановления одноразовые и действуют 30 минут; в базе сохраняется только хеш токена.
+
 Для production:
 
 1. Направьте `https://nyammetr.ru/web` на web-инстанс Нямметра.
