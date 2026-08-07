@@ -270,12 +270,23 @@
           <h1 id="web-auth-title">Войди удобным способом</h1>
           <p>Твой дневник, цели и прогресс сохранятся в одном месте.</p>
         </div>
-        <div class="telegram-login-slot" data-telegram-login-slot></div>
+        <div class="web-auth-providers">
+          <div class="telegram-login-slot" data-telegram-login-slot></div>
+          <a class="vk-login-button" data-vk-login href="/web/auth/vk/start" hidden>
+            <span aria-hidden="true">VK</span>
+            VK ID
+          </a>
+        </div>
         <div class="web-auth-divider" aria-hidden="true"><span>или</span></div>
-        <a class="vk-login-button" data-vk-login href="/web/auth/vk/start" hidden>
-          <span aria-hidden="true">VK</span>
-          Войти через VK ID
-        </a>
+        <form class="email-auth-form" data-email-auth-form>
+          <label><span>Email</span><input type="email" name="email" autocomplete="email" placeholder="name@example.com" required /></label>
+          <label><span>Пароль</span><input type="password" name="password" autocomplete="current-password" placeholder="Минимум 8 символов" minlength="8" maxlength="128" required /></label>
+          <div class="email-auth-actions">
+            <button type="submit" data-email-auth-action="login">Войти</button>
+            <button type="submit" data-email-auth-action="register">Создать аккаунт</button>
+          </div>
+          <small data-email-auth-status></small>
+        </form>
         <small class="web-auth-note" data-web-auth-note>Используем данные только для безопасного входа.</small>
       </section>
     </div>
@@ -451,6 +462,8 @@ const webAuth = document.querySelector("[data-web-auth]");
 const webAuthNote = document.querySelector("[data-web-auth-note]");
 const telegramLoginSlot = document.querySelector("[data-telegram-login-slot]");
 const vkLogin = document.querySelector("[data-vk-login]");
+const emailAuthForm = document.querySelector("[data-email-auth-form]");
+const emailAuthStatus = document.querySelector("[data-email-auth-status]");
 const webLogout = document.querySelector("[data-web-logout]");
 const reminderMenuSummary = document.querySelector("[data-reminder-menu-summary]");
 const profilePopupTriggers = document.querySelectorAll("[data-profile-popup-open]");
@@ -1239,7 +1252,7 @@ function mountTelegramLogin() {
   script.async = true;
   script.src = "https://telegram.org/js/telegram-widget.js?22";
   script.dataset.telegramLogin = telegramBotUsername;
-  script.dataset.size = "large";
+  script.dataset.size = "medium";
   script.dataset.radius = "12";
   script.dataset.userpic = "false";
   script.dataset.requestAccess = "write";
@@ -1268,6 +1281,42 @@ function hideWebLogin() {
   webAuth.hidden = true;
   document.body.classList.remove("web-auth-open");
 }
+
+emailAuthForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const submitter = event.submitter;
+  const action = submitter?.dataset.emailAuthAction || "login";
+  const formData = new FormData(emailAuthForm);
+  const buttons = emailAuthForm.querySelectorAll("button");
+  buttons.forEach((button) => { button.disabled = true; });
+  emailAuthStatus.textContent = action === "register" ? "Создаю аккаунт..." : "Вхожу...";
+  try {
+    const response = await fetch(`/api/web/email/${action}`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: String(formData.get("email") || ""),
+        password: String(formData.get("password") || ""),
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "request_failed");
+    window.location.replace("/web");
+  } catch (error) {
+    const messages = {
+      invalid_email: "Проверь адрес email.",
+      password_too_short: "Пароль должен содержать минимум 8 символов.",
+      password_too_long: "Пароль слишком длинный.",
+      email_exists: "Аккаунт с таким email уже существует.",
+      invalid_credentials: "Неверный email или пароль.",
+      too_many_attempts: "Слишком много попыток. Попробуй позже.",
+    };
+    emailAuthStatus.textContent = messages[error.message] || "Не получилось выполнить вход. Попробуй ещё раз.";
+  } finally {
+    buttons.forEach((button) => { button.disabled = false; });
+  }
+});
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {

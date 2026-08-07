@@ -121,6 +121,21 @@ class SQLiteRegressionTests(unittest.TestCase):
             self.assertEqual(first.telegram_id, second.telegram_id)
             self.assertGreater(first.telegram_id, 8_000_000_000_000_000_000)
 
+    def test_email_credentials_use_the_external_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database = Database(Path(temp_dir) / "email.sqlite3")
+            database.init()
+
+            user = database.create_email_user("person@example.com", "password-hash")
+            duplicate = database.create_email_user("person@example.com", "other-hash")
+            login = database.get_email_login("person@example.com")
+
+            self.assertIsNotNone(user)
+            self.assertIsNone(duplicate)
+            self.assertIsNotNone(login)
+            self.assertEqual(login[0].id, user.id)
+            self.assertEqual(login[1], "password-hash")
+
 
 if __name__ == "__main__":
     unittest.main()

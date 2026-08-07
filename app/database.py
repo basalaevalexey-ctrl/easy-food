@@ -184,6 +184,19 @@ class Database:
             )
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS email_credentials (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL UNIQUE,
+                    email TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+                """
+            )
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS user_achievements (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
@@ -588,6 +601,43 @@ class Database:
             )
             row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
             return self._user_from_row(row)
+
+    def create_email_user(self, email: str, password_hash: str) -> User | None:
+        with self.connect() as conn:
+            if conn.execute(
+                "SELECT 1 FROM email_credentials WHERE email = ?", (email,)
+            ).fetchone():
+                return None
+
+        user = self.get_or_create_external_user("email", email)
+        with self.connect() as conn:
+            if conn.execute(
+                "SELECT 1 FROM email_credentials WHERE email = ?", (email,)
+            ).fetchone():
+                return None
+            conn.execute(
+                """
+                INSERT INTO email_credentials (user_id, email, password_hash)
+                VALUES (?, ?, ?)
+                """,
+                (user.id, email, password_hash),
+            )
+        return user
+
+    def get_email_login(self, email: str) -> tuple[User, str] | None:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT u.*, credentials.password_hash AS credential_password_hash
+                FROM email_credentials credentials
+                JOIN users u ON u.id = credentials.user_id
+                WHERE credentials.email = ?
+                """,
+                (email,),
+            ).fetchone()
+            if row is None:
+                return None
+            return self._user_from_row(row), str(row["credential_password_hash"])
 
     def update_user_goal(self, telegram_id: int, data: dict[str, Any]) -> User:
         user = self.get_or_create_user(telegram_id)

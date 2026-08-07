@@ -14,6 +14,7 @@ from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import threading
+import time
 from urllib.parse import parse_qs, parse_qsl, urlencode, urlparse, urlunparse
 
 from aiogram import Bot, Dispatcher, F, Router
@@ -72,6 +73,7 @@ from app.keyboards import (
 )
 from app.models import FoodEntry, User
 from app.openai_client import FoodRecognitionClient, NotFoodError, OpenAIRecognitionError
+from app.password_auth import hash_password, normalize_email, validate_password, verify_password
 from app.web_auth import (
     WEB_SESSION_COOKIE,
     VK_OAUTH_COOKIE,
@@ -113,7 +115,7 @@ food_ai = FoodRecognitionClient(
     config.openai_model,
     config.openai_proxy_url,
 )
-WEBAPP_BUILD = "nyam-110"
+WEBAPP_BUILD = "nyam-111"
 MINIAPP_EDITABLE_HISTORY_DAYS = 2
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 WEBAPP_ENTRY_PATHS = {"/", WEBAPP_ENTRY_PATH, "/miniapp", "/miniapp/"}
@@ -127,6 +129,24 @@ WATER_REMINDER_SLOTS = {
     "15:30": 0.50,
     "19:30": 0.75,
 }
+EMAIL_AUTH_WINDOW_SECONDS = 15 * 60
+EMAIL_AUTH_MAX_ATTEMPTS = 10
+EMAIL_AUTH_ATTEMPTS: dict[str, list[float]] = {}
+EMAIL_AUTH_LOCK = threading.Lock()
+DUMMY_PASSWORD_HASH = hash_password("not-a-real-password")
+
+
+def claim_email_auth_attempt(client_ip: str, *, now: float | None = None) -> bool:
+    current = time.monotonic() if now is None else now
+    cutoff = current - EMAIL_AUTH_WINDOW_SECONDS
+    with EMAIL_AUTH_LOCK:
+        attempts = [stamp for stamp in EMAIL_AUTH_ATTEMPTS.get(client_ip, []) if stamp > cutoff]
+        if len(attempts) >= EMAIL_AUTH_MAX_ATTEMPTS:
+            EMAIL_AUTH_ATTEMPTS[client_ip] = attempts
+            return False
+        attempts.append(current)
+        EMAIL_AUTH_ATTEMPTS[client_ip] = attempts
+        return True
 
 
 async def send_push_message(
@@ -1083,8 +1103,14 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
                 self.send_header(name, item)
         self.end_headers()
 
-    def _send_json(self, status: int, payload: dict) -> None:
-        self._send_headers(status)
+    def _send_json(
+        self,
+        status: int,
+        payload: dict,
+        *,
+        extra_headers: dict[str, str | list[str]] | None = None,
+    ) -> None:
+        self._send_headers(status, extra_headers=extra_headers)
         self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
 
     def _redirect(
@@ -1108,6 +1134,20 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             return ""
         value = cookies.get(name)
         return value.value if value else ""
+
+    def _same_origin_request(self) -> bool:
+        origin = self.headers.get("Origin", "").strip()
+        if not origin:
+            return True
+        parsed_origin = urlparse(origin)
+        return (
+            parsed_origin.scheme in {"http", "https"}
+            and parsed_origin.netloc == self.headers.get("Host", "")
+        )
+
+    def _client_ip(self) -> str:
+        forwarded = self.headers.get("X-Forwarded-For", "").split(",", 1)[0].strip()
+        return forwarded or str(self.client_address[0])
 
     def _send_static(self, requested_path: str) -> None:
         if requested_path.startswith("/web/"):
@@ -1362,6 +1402,60 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/web/logout":
             self._send_headers(204, extra_headers={"Set-Cookie": clear_session_cookie()})
+            return
+        if parsed.path in {"/api/web/email/register", "/api/web/email/login"}:
+            if not self._same_origin_request():
+                self._send_json(403, {"error": "invalid_origin"})
+                return
+            if not claim_email_auth_attempt(self._client_ip()):
+                self._send_json(429, {"error": "too_many_attempts"})
+                return
+            try:
+                payload = self._read_json()
+                email = normalize_email(str(payload.get("email") or ""))
+                password = validate_password(str(payload.get("password") or ""))
+            except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+                error = str(exc)
+                self._send_json(
+                    400,
+                    {
+                        "error": error
+                        if error in {"invalid_email", "password_too_short", "password_too_long"}
+                        else "bad_request"
+                    },
+                )
+                return
+
+            if parsed.path.endswith("/register"):
+                user = db.create_email_user(email, hash_password(password))
+                if user is None:
+                    self._send_json(409, {"error": "email_exists"})
+                    return
+                event_type = "web_email_registered"
+            else:
+                login = db.get_email_login(email)
+                stored_hash = login[1] if login else DUMMY_PASSWORD_HASH
+                if not verify_password(password, stored_hash) or login is None:
+                    self._send_json(401, {"error": "invalid_credentials"})
+                    return
+                user = login[0]
+                event_type = "web_email_login"
+
+            db.record_user_event(user.telegram_id, event_type)
+            session_token = create_web_session(
+                {
+                    "id": user.telegram_id,
+                    "first_name": email.split("@", 1)[0],
+                    "username": email,
+                    "_auth_provider": "email",
+                },
+                config.web_session_secret or config.bot_token,
+            )
+            self._send_json(
+                200,
+                {"ok": True},
+                extra_headers={"Set-Cookie": build_session_cookie(session_token)},
+            )
             return
         if parsed.path not in {
             "/api/miniapp/food/text",

@@ -18,6 +18,7 @@ AUTO_ID_TABLES = {
     "referrals",
     "streak_freezes",
     "external_identities",
+    "email_credentials",
 }
 
 
