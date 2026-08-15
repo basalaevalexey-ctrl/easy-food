@@ -117,7 +117,7 @@ food_ai = FoodRecognitionClient(
     config.openai_model,
     config.openai_proxy_url,
 )
-WEBAPP_BUILD = "nyam-117"
+WEBAPP_BUILD = "nyam-118"
 MINIAPP_EDITABLE_HISTORY_DAYS = 2
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 WEBAPP_ENTRY_PATHS = {"/", WEBAPP_ENTRY_PATH, "/miniapp", "/miniapp/"}
@@ -511,7 +511,7 @@ load();
 
 
 def miniapp_shell_html(*, web_mode: bool = False) -> str:
-    html_path = config.public_dir / "nyammetr-live.html"
+    html_path = config.public_dir / ("index.html" if web_mode else "nyammetr-live.html")
     try:
         html = html_path.read_text(encoding="utf-8")
     except OSError:
@@ -783,6 +783,8 @@ def build_miniapp_period_report(telegram_user: dict, period_start: str | None, p
 
 def build_miniapp_payload(telegram_user: dict, selected_day: str | None = None) -> dict:
     telegram_id = int(telegram_user["id"])
+    display_name = telegram_user.get("first_name") or telegram_user.get("username") or "Участник"
+    db.set_user_display_name(telegram_id, str(display_name))
     user = db.get_or_create_user(telegram_id)
     selected_day = _valid_miniapp_day(selected_day)
     entries = db.get_entries_for_day(telegram_id, selected_day) if selected_day else db.get_today_entries(telegram_id)
@@ -797,11 +799,12 @@ def build_miniapp_payload(telegram_user: dict, selected_day: str | None = None) 
     frozen_dates = db.get_streak_freeze_days(telegram_id)
     referral_progress = db.get_referral_progress(telegram_id)
     water = db.get_water_summary(telegram_id, selected_day)
+    competition = db.get_competition_state(telegram_id)
 
     return {
         "user": {
             "telegram_id": telegram_id,
-            "display_name": telegram_user.get("first_name") or telegram_user.get("username") or "Алексей",
+            "display_name": display_name,
             "sex": user.sex,
             "age": user.age,
             "height": user.height,
@@ -858,6 +861,7 @@ def build_miniapp_payload(telegram_user: dict, selected_day: str | None = None) 
             "progress_text": mission_status["progress_text"],
             "mission_date": mission_status["mission_date"],
         },
+        "competition": competition,
         "achievements": [
             {
                 "key": row["achievement_key"],
@@ -1363,7 +1367,12 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
             self._send_static(parsed.path)
             return
 
-        if parsed.path not in {"/api/miniapp/me", "/api/miniapp/report"}:
+        if parsed.path not in {
+            "/api/miniapp/me",
+            "/api/miniapp/report",
+            "/api/miniapp/competition",
+            "/api/miniapp/competition/history",
+        }:
             self._send_json(404, {"error": "not_found"})
             return
 
@@ -1384,6 +1393,20 @@ class MiniAppApiHandler(BaseHTTPRequestHandler):
                 self._send_json(400, {"error": str(exc) or "invalid_period"})
                 return
             self._send_json(200, report)
+            return
+
+        if parsed.path in {"/api/miniapp/competition", "/api/miniapp/competition/history"}:
+            telegram_id = int(telegram_user["id"])
+            db.set_user_display_name(
+                telegram_id,
+                str(telegram_user.get("first_name") or telegram_user.get("username") or "Участник"),
+            )
+            db.record_user_event(telegram_id, "competition_opened")
+            competition = db.get_competition_state(telegram_id)
+            if parsed.path.endswith("/history"):
+                self._send_json(200, {"last_competition": competition.get("last_competition")})
+            else:
+                self._send_json(200, competition)
             return
 
         selected_day = _valid_miniapp_day((query.get("date") or [None])[0])
@@ -3443,6 +3466,7 @@ async def reminder_loop(bot: Bot) -> None:
         current_time = now.strftime("%H:%M")
         today_date = now.date()
         today = today_date.isoformat()
+        db.finalize_expired_competitions()
         reminder_users = db.get_users_for_reminder(current_time, today)
         reminders_sent = 0
         reminders_logged = 0

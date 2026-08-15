@@ -3,13 +3,18 @@ import sqlite3
 import shutil
 import random
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 from urllib.parse import urlsplit
 
 from app.achievements import Achievement, available_achievements, daily_food_signals
 from app.calorie_calculator import calculate_water_target
+from app.competitions import (
+    GROUP_CAPACITY,
+    LEAGUE_TIER_BRONZE,
+    calculate_competition_daily_score,
+)
 from app.database_backend import connect_postgres, initialize_postgres_compatibility
 from app.missions import (
     MISSION_ORDER,
@@ -114,6 +119,7 @@ class Database:
                     activation_step INTEGER NOT NULL DEFAULT 0,
                     last_activation_message_at TEXT,
                     activation_disabled INTEGER NOT NULL DEFAULT 0,
+                    display_name TEXT,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """
@@ -130,6 +136,7 @@ class Database:
             self._ensure_column(conn, "users", "activation_step", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(conn, "users", "last_activation_message_at", "TEXT")
             self._ensure_column(conn, "users", "activation_disabled", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(conn, "users", "display_name", "TEXT")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS app_meta (
@@ -336,6 +343,56 @@ class Database:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS competitions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    start_date TEXT NOT NULL,
+                    end_date TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    league_tier TEXT NOT NULL DEFAULT 'bronze',
+                    goal_type TEXT NOT NULL,
+                    group_number INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(start_date, goal_type, league_tier, group_number)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS competition_participants (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    competition_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    score INTEGER NOT NULL DEFAULT 0,
+                    final_rank INTEGER,
+                    joined_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(competition_id, user_id),
+                    FOREIGN KEY (competition_id) REFERENCES competitions(id) ON DELETE CASCADE,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS competition_daily_scores (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    competition_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    score_date TEXT NOT NULL,
+                    food_logged_score INTEGER NOT NULL DEFAULT 0,
+                    calorie_target_score INTEGER NOT NULL DEFAULT 0,
+                    water_score INTEGER NOT NULL DEFAULT 0,
+                    perfect_day_score INTEGER NOT NULL DEFAULT 0,
+                    streak_score INTEGER NOT NULL DEFAULT 0,
+                    total_score INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(competition_id, user_id, score_date),
+                    FOREIGN KEY (competition_id) REFERENCES competitions(id) ON DELETE CASCADE,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+                """
+            )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_user_events_type_date ON user_events(event_type, created_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_food_entries_user_date ON food_entries(user_id, created_at)")
             conn.execute(
@@ -353,6 +410,10 @@ class Database:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_lifecycle_pushes_user_segment ON lifecycle_pushes(user_id, segment, sent_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_referrals_inviter ON referrals(inviter_user_id, activated_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_streak_freezes_user_date ON streak_freezes(user_id, freeze_date)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_competitions_active ON competitions(status, start_date, end_date, goal_type)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_competition_participants_user ON competition_participants(user_id, competition_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_competition_participants_rank ON competition_participants(competition_id, score DESC)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_competition_daily_scores_user_date ON competition_daily_scores(user_id, score_date)")
             self._rebuild_user_streaks(conn)
 
     def has_valid_database_candidate(self) -> bool:
@@ -744,7 +805,320 @@ class Database:
                 (user.id, "goal_set"),
             )
             row = conn.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,)).fetchone()
-            return self._user_from_row(row)
+            updated_user = self._user_from_row(row)
+        self.recalculate_active_competition(telegram_id)
+        return updated_user
+
+    def set_user_display_name(self, telegram_id: int, display_name: str | None) -> None:
+        normalized = " ".join(str(display_name or "").split())[:80]
+        if not normalized:
+            return
+        user = self.get_or_create_user(telegram_id)
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE users SET display_name = ? WHERE id = ?",
+                (normalized, user.id),
+            )
+
+    @staticmethod
+    def _competition_goal_type(goal: str | None) -> str | None:
+        normalized = {"support": "maintain"}.get(str(goal or "").strip().lower(), str(goal or "").strip().lower())
+        return normalized if normalized in {"lose", "maintain", "gain"} else None
+
+    @staticmethod
+    def _competition_today() -> date:
+        return datetime.now(timezone(timedelta(hours=3))).date()
+
+    @staticmethod
+    def _competition_day_from_timestamp(value: str | datetime) -> date:
+        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone(timedelta(hours=3))).date()
+
+    def _finalize_expired_competitions(self, conn: Any, today: date) -> None:
+        rows = conn.execute(
+            "SELECT id FROM competitions WHERE status = 'active' AND end_date <= ?",
+            (today.isoformat(),),
+        ).fetchall()
+        for row in rows:
+            competition_id = int(row["id"])
+            participants = conn.execute(
+                """
+                SELECT id FROM competition_participants
+                WHERE competition_id = ?
+                ORDER BY score DESC, joined_at ASC, id ASC
+                """,
+                (competition_id,),
+            ).fetchall()
+            for position, participant in enumerate(participants, start=1):
+                conn.execute(
+                    "UPDATE competition_participants SET final_rank = ? WHERE id = ?",
+                    (position, participant["id"]),
+                )
+            conn.execute(
+                "UPDATE competitions SET status = 'completed' WHERE id = ?",
+                (competition_id,),
+            )
+
+    def finalize_expired_competitions(self) -> None:
+        with self.connect() as conn:
+            self._finalize_expired_competitions(conn, self._competition_today())
+
+    def _get_or_join_weekly_competition(self, conn: Any, user: User, today: date) -> Any | None:
+        goal_type = self._competition_goal_type(user.goal)
+        if not goal_type or not user.calorie_target:
+            return None
+
+        self._finalize_expired_competitions(conn, today)
+        existing = conn.execute(
+            """
+            SELECT competitions.*, competition_participants.joined_at
+            FROM competition_participants
+            JOIN competitions ON competitions.id = competition_participants.competition_id
+            WHERE competition_participants.user_id = ?
+              AND competitions.status = 'active'
+              AND competitions.start_date <= ?
+              AND competitions.end_date > ?
+            ORDER BY competitions.start_date DESC
+            LIMIT 1
+            """,
+            (user.id, today.isoformat(), today.isoformat()),
+        ).fetchone()
+        if existing is not None:
+            return existing
+
+        start = today - timedelta(days=today.weekday())
+        end = start + timedelta(days=7)
+        groups = conn.execute(
+            """
+            SELECT competitions.*, COUNT(competition_participants.id) AS participant_count
+            FROM competitions
+            LEFT JOIN competition_participants
+              ON competition_participants.competition_id = competitions.id
+            WHERE competitions.status = 'active'
+              AND competitions.start_date = ?
+              AND competitions.end_date = ?
+              AND competitions.goal_type = ?
+              AND competitions.league_tier = ?
+            GROUP BY competitions.id
+            HAVING COUNT(competition_participants.id) < ?
+            ORDER BY competitions.group_number ASC
+            """,
+            (start.isoformat(), end.isoformat(), goal_type, LEAGUE_TIER_BRONZE, GROUP_CAPACITY),
+        ).fetchall()
+        if groups:
+            competition_id = int(groups[0]["id"])
+        else:
+            next_group = conn.execute(
+                """
+                SELECT COALESCE(MAX(group_number), 0) + 1
+                FROM competitions
+                WHERE start_date = ? AND goal_type = ? AND league_tier = ?
+                """,
+                (start.isoformat(), goal_type, LEAGUE_TIER_BRONZE),
+            ).fetchone()[0]
+            cursor = conn.execute(
+                """
+                INSERT INTO competitions (start_date, end_date, league_tier, goal_type, group_number)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (start.isoformat(), end.isoformat(), LEAGUE_TIER_BRONZE, goal_type, int(next_group)),
+            )
+            competition_id = int(cursor.lastrowid)
+
+        conn.execute(
+            "INSERT OR IGNORE INTO competition_participants (competition_id, user_id) VALUES (?, ?)",
+            (competition_id, user.id),
+        )
+        return conn.execute(
+            """
+            SELECT competitions.*, competition_participants.joined_at
+            FROM competitions
+            JOIN competition_participants ON competition_participants.competition_id = competitions.id
+            WHERE competitions.id = ? AND competition_participants.user_id = ?
+            """,
+            (competition_id, user.id),
+        ).fetchone()
+
+    def _competition_food_streak_before(self, conn: Any, user_id: int, score_day: date, start_day: date) -> int:
+        streak = 0
+        cursor_day = score_day - timedelta(days=1)
+        while cursor_day >= start_day:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS entries FROM food_entries
+                WHERE user_id = ? AND date(created_at, '+3 hours') = ?
+                """,
+                (user_id, cursor_day.isoformat()),
+            ).fetchone()
+            if int(row["entries"] or 0) == 0:
+                break
+            streak += 1
+            cursor_day -= timedelta(days=1)
+        return streak
+
+    def _recalculate_competition_day(self, conn: Any, user: User, competition: Any, score_day: date) -> None:
+        start_day = date.fromisoformat(str(competition["start_date"]))
+        end_day = date.fromisoformat(str(competition["end_date"]))
+        joined_day = self._competition_day_from_timestamp(competition["joined_at"])
+        if score_day < start_day or score_day >= end_day or score_day < joined_day:
+            return
+
+        food = conn.execute(
+            """
+            SELECT COUNT(*) AS entries, COALESCE(SUM(calories), 0) AS calories,
+                   COALESCE(SUM(water_ml), 0) AS food_water
+            FROM food_entries
+            WHERE user_id = ? AND date(created_at, '+3 hours') = ?
+            """,
+            (user.id, score_day.isoformat()),
+        ).fetchone()
+        manual_water = conn.execute(
+            """
+            SELECT COALESCE(SUM(amount_ml), 0) AS manual_water
+            FROM water_entries
+            WHERE user_id = ? AND date(created_at, '+3 hours') = ?
+            """,
+            (user.id, score_day.isoformat()),
+        ).fetchone()
+        result = calculate_competition_daily_score(
+            food_entries=int(food["entries"] or 0),
+            calories=float(food["calories"] or 0),
+            calorie_target=int(user.calorie_target) if user.calorie_target else None,
+            water_ml=float(food["food_water"] or 0) + float(manual_water["manual_water"] or 0),
+            water_target=int(user.water_target) if user.water_target else None,
+            food_streak_days_before_today=self._competition_food_streak_before(
+                conn, user.id, score_day, max(start_day, joined_day)
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO competition_daily_scores
+                (competition_id, user_id, score_date, food_logged_score, calorie_target_score,
+                 water_score, perfect_day_score, streak_score, total_score, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(competition_id, user_id, score_date) DO UPDATE SET
+                food_logged_score = excluded.food_logged_score,
+                calorie_target_score = excluded.calorie_target_score,
+                water_score = excluded.water_score,
+                perfect_day_score = excluded.perfect_day_score,
+                streak_score = excluded.streak_score,
+                total_score = excluded.total_score,
+                updated_at = excluded.updated_at
+            """,
+            (int(competition["id"]), user.id, score_day.isoformat(), result.food_logged_score,
+             result.calorie_target_score, result.water_score, result.perfect_day_score,
+             result.streak_score, result.total_score),
+        )
+
+    def recalculate_competition_scores_for_day(self, telegram_id: int, score_day: str) -> None:
+        try:
+            parsed_day = date.fromisoformat(score_day)
+        except ValueError:
+            return
+        user = self.get_or_create_user(telegram_id)
+        today = self._competition_today()
+        with self.connect() as conn:
+            competition = self._get_or_join_weekly_competition(conn, user, today)
+            if competition is None:
+                return
+            end_day = min(date.fromisoformat(str(competition["end_date"])) - timedelta(days=1), today)
+            if parsed_day <= end_day:
+                for offset in range((end_day - parsed_day).days + 1):
+                    self._recalculate_competition_day(conn, user, competition, parsed_day + timedelta(days=offset))
+            conn.execute(
+                """
+                UPDATE competition_participants
+                SET score = COALESCE((
+                    SELECT SUM(total_score) FROM competition_daily_scores
+                    WHERE competition_id = ? AND user_id = ?
+                ), 0)
+                WHERE competition_id = ? AND user_id = ?
+                """,
+                (int(competition["id"]), user.id, int(competition["id"]), user.id),
+            )
+
+    def recalculate_active_competition(self, telegram_id: int) -> None:
+        self.recalculate_competition_scores_for_day(telegram_id, self._competition_today().isoformat())
+
+    def get_competition_state(self, telegram_id: int) -> dict[str, Any]:
+        user = self.get_or_create_user(telegram_id)
+        today = self._competition_today()
+        goal_type = self._competition_goal_type(user.goal)
+        history: dict[str, Any] | None = None
+        with self.connect() as conn:
+            self._finalize_expired_competitions(conn, today)
+            latest = conn.execute(
+                """
+                SELECT competitions.id AS competition_id, competitions.end_date,
+                       competition_participants.final_rank, competition_participants.score
+                FROM competition_participants
+                JOIN competitions ON competitions.id = competition_participants.competition_id
+                WHERE competition_participants.user_id = ? AND competitions.status = 'completed'
+                ORDER BY competitions.end_date DESC LIMIT 1
+                """,
+                (user.id,),
+            ).fetchone()
+            if latest is not None:
+                history = {"competition_id": int(latest["competition_id"]), "end_date": str(latest["end_date"]),
+                           "final_rank": int(latest["final_rank"]) if latest["final_rank"] else None,
+                           "score": int(latest["score"] or 0)}
+        if not goal_type or not user.calorie_target:
+            return {"eligible": False, "reason": "goal_required", "competition": None,
+                    "participants": [], "today_score_breakdown": None, "last_competition": history}
+
+        self.recalculate_competition_scores_for_day(telegram_id, today.isoformat())
+        with self.connect() as conn:
+            competition = self._get_or_join_weekly_competition(conn, user, today)
+            if competition is None:
+                return {"eligible": False, "reason": "goal_required", "competition": None,
+                        "participants": [], "today_score_breakdown": None, "last_competition": history}
+            participants = conn.execute(
+                """
+                SELECT competition_participants.user_id, competition_participants.score,
+                       competition_participants.joined_at, users.display_name
+                FROM competition_participants JOIN users ON users.id = competition_participants.user_id
+                WHERE competition_participants.competition_id = ?
+                ORDER BY competition_participants.score DESC, competition_participants.joined_at ASC,
+                         competition_participants.user_id ASC
+                """,
+                (int(competition["id"]),),
+            ).fetchall()
+            rendered_participants = []
+            current_rank = 0
+            current_score = 0
+            for position, participant in enumerate(participants, start=1):
+                is_current = int(participant["user_id"]) == user.id
+                if is_current:
+                    current_rank, current_score = position, int(participant["score"] or 0)
+                rendered_participants.append({"rank": position,
+                    "name": str(participant["display_name"] or f"Участник {position}"),
+                    "score": int(participant["score"] or 0), "is_current_user": is_current})
+            daily = conn.execute(
+                """
+                SELECT food_logged_score, calorie_target_score, water_score,
+                       perfect_day_score, streak_score, total_score
+                FROM competition_daily_scores
+                WHERE competition_id = ? AND user_id = ? AND score_date = ?
+                """,
+                (int(competition["id"]), user.id, today.isoformat()),
+            ).fetchone()
+            values = dict(daily) if daily is not None else {}
+            breakdown = {"food_logged": int(values.get("food_logged_score") or 0),
+                         "calorie_target": int(values.get("calorie_target_score") or 0),
+                         "water": int(values.get("water_score") or 0),
+                         "perfect_day": int(values.get("perfect_day_score") or 0),
+                         "streak": int(values.get("streak_score") or 0),
+                         "total": int(values.get("total_score") or 0), "base_max": 140}
+            return {"eligible": True, "reason": None,
+                    "competition": {"id": int(competition["id"]), "title": "Лига недели",
+                        "start_date": str(competition["start_date"]), "end_date": str(competition["end_date"]),
+                        "league_tier": str(competition["league_tier"]), "goal_type": str(competition["goal_type"]),
+                        "days_left": max(0, (date.fromisoformat(str(competition["end_date"])) - today).days)},
+                    "current_user_rank": current_rank, "current_user_score": current_score,
+                    "participants": rendered_participants, "today_score_breakdown": breakdown,
+                    "last_competition": history}
 
     def record_user_event(self, telegram_id: int, event_type: str) -> User:
         user = self.get_or_create_user(telegram_id)
@@ -1415,7 +1789,11 @@ class Database:
                     (*values, stored_created_at.isoformat(sep=" ", timespec="seconds")),
                 )
             row = conn.execute("SELECT * FROM food_entries WHERE id = ?", (cursor.lastrowid,)).fetchone()
-            return self._entry_from_row(row)
+            entry = self._entry_from_row(row)
+        self.recalculate_competition_scores_for_day(
+            telegram_id, self._competition_day_from_timestamp(entry.created_at).isoformat()
+        )
+        return entry
 
     def get_food_entry(self, entry_id: int, telegram_id: int) -> FoodEntry | None:
         user = self.get_or_create_user(telegram_id)
@@ -1443,7 +1821,11 @@ class Database:
                 """,
                 (factor, factor, factor, factor, factor, entry_id),
             )
-        return self.get_food_entry(entry_id, telegram_id)
+        updated = self.get_food_entry(entry_id, telegram_id)
+        self.recalculate_competition_scores_for_day(
+            telegram_id, self._competition_day_from_timestamp(entry.created_at).isoformat()
+        )
+        return updated
 
     def replace_food_entry_estimate(self, entry_id: int, telegram_id: int, estimate: FoodEstimate) -> FoodEntry | None:
         entry = self.get_food_entry(entry_id, telegram_id)
@@ -1468,7 +1850,11 @@ class Database:
                     entry_id,
                 ),
             )
-        return self.get_food_entry(entry_id, telegram_id)
+        updated = self.get_food_entry(entry_id, telegram_id)
+        self.recalculate_competition_scores_for_day(
+            telegram_id, self._competition_day_from_timestamp(entry.created_at).isoformat()
+        )
+        return updated
 
     def delete_food_entry(self, entry_id: int, telegram_id: int) -> bool:
         entry = self.get_food_entry(entry_id, telegram_id)
@@ -1476,6 +1862,9 @@ class Database:
             return False
         with self.connect() as conn:
             conn.execute("DELETE FROM food_entries WHERE id = ?", (entry_id,))
+        self.recalculate_competition_scores_for_day(
+            telegram_id, self._competition_day_from_timestamp(entry.created_at).isoformat()
+        )
         return True
 
     def get_today_entries(self, telegram_id: int) -> list[FoodEntry]:
@@ -1557,6 +1946,7 @@ class Database:
                 "INSERT INTO user_events (user_id, event_type) VALUES (?, 'miniapp_water_added')",
                 (user.id,),
             )
+        self.recalculate_active_competition(telegram_id)
         return self.get_water_summary(telegram_id)
 
     def remove_last_water_entry(self, telegram_id: int) -> dict[str, int]:
@@ -1572,6 +1962,7 @@ class Database:
             ).fetchone()
             if row:
                 conn.execute("DELETE FROM water_entries WHERE id = ?", (row["id"],))
+        self.recalculate_active_competition(telegram_id)
         return self.get_water_summary(telegram_id)
 
     def get_water_summary(self, telegram_id: int, day: str | None = None) -> dict[str, int]:
@@ -2397,6 +2788,7 @@ class Database:
             activation_step=row["activation_step"],
             last_activation_message_at=row["last_activation_message_at"],
             activation_disabled=bool(row["activation_disabled"]),
+            display_name=row["display_name"],
             created_at=datetime.fromisoformat(row["created_at"]),
         )
 

@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-117" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-118" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -136,12 +136,64 @@
       </section>
 
       <section class="screen" data-screen="missions">
-        <div class="party missions-hero">
+        <article class="competition-hero" data-competition-hero>
+          <div class="competition-trophy" aria-hidden="true">🏆</div>
+          <div>
+            <small data-competition-tier>Бронзовая лига</small>
+            <h2>Лига недели</h2>
+            <p data-competition-time>Собираем участников</p>
+          </div>
+          <div class="competition-personal-score">
+            <span>Твоё место</span>
+            <strong data-competition-rank>—</strong>
+            <small><b data-competition-score>0</b> очков</small>
+          </div>
+        </article>
+
+        <article class="competition-goal-cta" data-competition-goal-cta hidden>
+          <span aria-hidden="true">🎯</span>
+          <div>
+            <strong>Настрой цель, чтобы участвовать</strong>
+            <small>Нямметр подберёт твою норму и добавит в Лигу недели.</small>
+          </div>
+          <button type="button" data-competition-goal>Настроить</button>
+        </article>
+
+        <article class="competition-today-card" data-competition-today>
+          <div class="competition-section-heading">
+            <div><span aria-hidden="true">⚡</span><strong>Сегодня можно заработать</strong></div>
+            <b><span data-competition-today-score>0</span>/140</b>
+          </div>
+          <div class="competition-tasks">
+            <span data-competition-task="food"><b>Питание записано</b><small>⏳ +50</small></span>
+            <span data-competition-task="calories"><b>Калории в диапазоне</b><small>⏳ +50</small></span>
+            <span data-competition-task="water"><b>Норма воды</b><small>⏳ +20</small></span>
+            <span data-competition-task="perfect"><b>Полный день</b><small>⏳ +20</small></span>
+          </div>
+          <small class="competition-streak-bonus" data-competition-streak-bonus hidden></small>
+        </article>
+
+        <section class="competition-leaderboard" data-competition-leaderboard>
+          <div class="competition-section-heading">
+            <h2>Таблица лидеров</h2>
+            <small data-competition-participants-count>0 участников</small>
+          </div>
+          <div data-competition-participants></div>
+        </section>
+
+        <article class="competition-last-result" data-competition-last-result hidden></article>
+
+        <button class="primary-action lower" type="button" data-missions-add>
+          <span class="action-plus" aria-hidden="true">+</span>
+          <span class="action-label">Записать еду</span>
+        </button>
+
+        <div class="party missions-hero" hidden>
           <span>✦</span><span>✶</span><span>✦</span><span>✶</span>
           <img loading="lazy" class="mission-cat-art" src="./assets/cat-medal-large.png?v=2" alt="" />
         </div>
 
-        <article class="streak-card">
+        <article class="streak-card" hidden>
           <span class="streak-main">🔥 <strong>Ням-стрик:</strong> <b><span data-current-streak>0</span> дней</b></span>
           <small class="streak-freeze-indicator" data-streak-freeze-indicator hidden></small>
         </article>
@@ -158,7 +210,7 @@
           </div>
         </article>
 
-        <article class="mission-card" data-mission-card role="button" tabindex="0" aria-expanded="false">
+        <article class="mission-card" data-mission-card role="button" tabindex="0" aria-expanded="false" hidden>
           <span class="mission-icon"><img loading="lazy" src="./assets/mission-target.png" alt="" /></span>
           <div>
             <strong>Миссия дня:</strong>
@@ -169,7 +221,7 @@
           <b data-mission-progress-value>0/1</b>
         </article>
 
-        <article class="mission-card referral-card" data-referral-card data-referral-share role="button" tabindex="0" aria-label="Пригласить друзей">
+        <article class="mission-card referral-card" data-referral-card data-referral-share role="button" tabindex="0" aria-label="Пригласить друзей" hidden>
           <span class="mission-icon referral-icon"><img loading="lazy" src="./assets/achievement-referral-one-friend-mascot.png" alt="" /></span>
           <div>
             <strong>Пригласить друзей</strong>
@@ -179,16 +231,16 @@
           <b data-referral-progress-value>0/10</b>
         </article>
 
-        <div class="achievements-title">
+        <div class="achievements-title" hidden>
           <h2>Достижения</h2>
           <small data-achievements-summary>Собрано 0 из 17</small>
         </div>
-        <div class="achievement-pager" aria-label="Листать достижения">
+        <div class="achievement-pager" aria-label="Листать достижения" hidden>
           <button type="button" data-achievements-prev aria-label="Предыдущие достижения">‹</button>
           <span data-achievements-page>1/4</span>
           <button type="button" data-achievements-next aria-label="Следующие достижения">›</button>
         </div>
-        <div class="badges">
+        <div class="badges" hidden>
           <span data-achievement-key="first_nyam"><b><img loading="lazy" src="./assets/achievement-01-trim.png" alt="" /></b><small>Первый ням</small></span>
           <span data-achievement-key="in_rhythm"><b><img loading="lazy" src="./assets/achievement-02-trim.png" alt="" /></b><small>Вошел в ритм</small></span>
           <span data-achievement-key="full_day"><b><img loading="lazy" src="./assets/achievement-03-trim.png" alt="" /></b><small>Полный день</small></span>
@@ -208,7 +260,7 @@
           <span data-achievement-key="referral_ten"><b><img loading="lazy" src="./assets/achievement-referral-ten-friends-mascot.png" alt="" /></b><small>Большой стол</small></span>
         </div>
 
-        <button class="primary-action lower" type="button" data-missions-add>
+        <button class="primary-action lower" type="button" data-legacy-missions-add hidden>
           <span class="action-plus" aria-hidden="true">+</span>
           <span class="action-label">Записать еду</span>
         </button>
@@ -257,7 +309,7 @@
       <nav class="tabbar" aria-label="Разделы">
         <button class="active" type="button" data-tab="home"><img class="tab-icon" src="./assets/tab-home.png" alt="" />Главная</button>
         <button type="button" data-tab="diary"><img class="tab-icon" src="./assets/tab-diary.png" alt="" />Дневник</button>
-        <button type="button" data-tab="missions"><img class="tab-icon" src="./assets/tab-missions.png" alt="" />Миссии</button>
+        <button type="button" data-tab="missions"><img class="tab-icon" src="./assets/tab-missions.png" alt="" />Соревнования</button>
         <button type="button" data-tab="profile"><img class="tab-icon" src="./assets/tab-profile.png" alt="" />Профиль</button>
       </nav>
     </main>
@@ -1815,6 +1867,89 @@ function renderEntries(entries) {
   });
 }
 
+function renderCompetition(state = {}) {
+  const eligible = Boolean(state.eligible);
+  const competition = state.competition || {};
+  const breakdown = state.today_score_breakdown || {};
+  const hero = document.querySelector("[data-competition-hero]");
+  const goalCta = document.querySelector("[data-competition-goal-cta]");
+  const todayCard = document.querySelector("[data-competition-today]");
+  const leaderboard = document.querySelector("[data-competition-leaderboard]");
+  const lastResult = document.querySelector("[data-competition-last-result]");
+
+  if (hero) hero.hidden = !eligible;
+  if (goalCta) goalCta.hidden = eligible;
+  if (todayCard) todayCard.hidden = !eligible;
+  if (leaderboard) leaderboard.hidden = !eligible;
+
+  if (eligible) {
+    document.querySelectorAll("[data-competition-tier]").forEach((node) => {
+      node.textContent = competition.league_tier === "bronze" ? "Бронзовая лига" : "Лига недели";
+    });
+    document.querySelectorAll("[data-competition-time]").forEach((node) => {
+      const days = Math.max(0, roundValue(competition.days_left));
+      node.textContent = days === 0 ? "Финиш сегодня" : `До конца: ${days} дн.`;
+    });
+    document.querySelectorAll("[data-competition-rank]").forEach((node) => {
+      node.textContent = state.current_user_rank ? `#${state.current_user_rank}` : "—";
+    });
+    document.querySelectorAll("[data-competition-score]").forEach((node) => {
+      node.textContent = roundValue(state.current_user_score);
+    });
+    document.querySelectorAll("[data-competition-today-score]").forEach((node) => {
+      node.textContent = roundValue(breakdown.food_logged) + roundValue(breakdown.calorie_target)
+        + roundValue(breakdown.water) + roundValue(breakdown.perfect_day);
+    });
+
+    const taskScores = {
+      food: [breakdown.food_logged, 50],
+      calories: [breakdown.calorie_target, 50],
+      water: [breakdown.water, 20],
+      perfect: [breakdown.perfect_day, 20],
+    };
+    document.querySelectorAll("[data-competition-task]").forEach((task) => {
+      const [score, target] = taskScores[task.dataset.competitionTask] || [0, 0];
+      const done = roundValue(score) >= target;
+      task.classList.toggle("completed", done);
+      const label = task.querySelector("small");
+      if (label) label.textContent = done ? `✅ +${target}` : `⏳ +${target}`;
+    });
+    document.querySelectorAll("[data-competition-streak-bonus]").forEach((node) => {
+      const bonus = roundValue(breakdown.streak);
+      node.hidden = bonus <= 0;
+      node.textContent = `🔥 Бонус за серию: +${bonus}`;
+    });
+
+    const participants = Array.isArray(state.participants) ? state.participants : [];
+    document.querySelectorAll("[data-competition-participants-count]").forEach((node) => {
+      node.textContent = `${participants.length} участников`;
+    });
+    document.querySelectorAll("[data-competition-participants]").forEach((node) => {
+      if (!participants.length) {
+        node.innerHTML = '<div class="competition-empty">Таблица появится, когда в лиге будут участники.</div>';
+        return;
+      }
+      node.innerHTML = participants.map((participant) => {
+        const rank = roundValue(participant.rank);
+        const badge = ({ 1: "🥇", 2: "🥈", 3: "🥉" })[rank] || String(rank);
+        return `<article class="competition-row${participant.is_current_user ? " current-user" : ""}">
+          <span class="competition-rank">${badge}</span>
+          <b>${escapeHtml(participant.name || "Участник")}</b>
+          <strong>${roundValue(participant.score)} очков</strong>
+        </article>`;
+      }).join("");
+    });
+  }
+
+  const previous = state.last_competition;
+  if (lastResult) {
+    lastResult.hidden = !previous?.final_rank;
+    if (previous?.final_rank) {
+      lastResult.innerHTML = `<strong>Прошлая лига</strong><br>Ты занял ${roundValue(previous.final_rank)} место и набрал ${roundValue(previous.score)} очков.`;
+    }
+  }
+}
+
 function applyServerState(data) {
   window.__nyammetrDebug = data.debug || null;
   activeEntryDates = new Set(data.calendar?.active_dates || []);
@@ -1827,6 +1962,7 @@ function applyServerState(data) {
   const mission = data.mission || {};
   const referral = data.referral || {};
   const water = data.water || {};
+  renderCompetition(data.competition || {});
   renderPersonalFoods(data.food_suggestions || []);
   const unlockedAchievements = new Set((data.achievements || []).map((item) => item.key));
   const calories = roundValue(totals.calories);
@@ -2127,6 +2263,11 @@ document.querySelector("[data-missions-add]").addEventListener("click", () => {
   showScreen("home");
   const isOpen = addMenu.classList.toggle("open", true);
   addToggle.setAttribute("aria-expanded", String(isOpen));
+});
+
+document.querySelector("[data-competition-goal]")?.addEventListener("click", () => {
+  showScreen("profile");
+  document.querySelector('[data-profile-popup-open="data"]')?.click();
 });
 
 function openAddFoodFromMissions() {

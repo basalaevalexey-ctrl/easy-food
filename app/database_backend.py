@@ -20,6 +20,9 @@ AUTO_ID_TABLES = {
     "external_identities",
     "email_credentials",
     "password_reset_tokens",
+    "competitions",
+    "competition_participants",
+    "competition_daily_scores",
 }
 
 

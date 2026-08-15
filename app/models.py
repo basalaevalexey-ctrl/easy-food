@@ -26,6 +26,7 @@ class User:
     activation_step: int
     last_activation_message_at: str | None
     activation_disabled: bool
+    display_name: str | None
     created_at: datetime
 
 
