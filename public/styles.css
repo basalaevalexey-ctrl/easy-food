@@ -2074,6 +2074,34 @@ h2 {
   font-weight: 800;
 }
 
+.missions-view-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 2px 0 12px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #f7f3e9;
+}
+
+.missions-view-switch button {
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.missions-view-switch button.active {
+  background: #fff;
+  color: var(--green-dark);
+  box-shadow: 0 3px 10px rgba(76, 65, 39, 0.08);
+}
+
 .profile-hero,
 .profile-panel {
   width: 100%;
@@ -2182,6 +2210,33 @@ h2 {
   text-align: left;
   text-decoration: none;
   cursor: pointer;
+}
+
+.home-mission-card {
+  margin-top: 12px;
+  border: 1px solid #e7e3c8;
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+
+.home-mission-card > div {
+  min-width: 0;
+}
+
+.home-mission-card strong,
+.home-mission-card small {
+  display: block;
+}
+
+.home-mission-card small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.home-mission-card > b {
+  color: var(--green-dark);
+  font-size: 14px;
 }
 
 .profile-menu-button:active {
