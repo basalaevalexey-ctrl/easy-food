@@ -1718,10 +1718,10 @@ h2 {
   align-items: center;
   gap: 10px;
   padding: 16px;
-  border: 1px solid #e5d8b8;
+  border: 1px solid var(--line);
   border-radius: 20px;
-  background: linear-gradient(135deg, #fff9e4, #f5f8e7);
-  box-shadow: 0 10px 22px rgba(85, 76, 43, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow);
 }
 
 .competition-trophy {
@@ -1731,7 +1731,7 @@ h2 {
   place-items: center;
   overflow: hidden;
   border-radius: 18px;
-  background: #ffedb0;
+  background: var(--soft);
 }
 
 .competition-trophy img {
@@ -1755,7 +1755,7 @@ h2 {
 }
 
 .competition-hero > div:nth-child(2) > small {
-  color: #a16e13;
+  color: var(--green-dark);
   font-weight: 800;
 }
 
@@ -1772,7 +1772,7 @@ h2 {
 }
 
 .competition-personal-score strong {
-  color: #cf8610;
+  color: var(--green-dark);
   font-size: 34px;
   line-height: 1;
 }
@@ -1794,9 +1794,9 @@ h2 {
   gap: 10px;
   margin-top: 12px;
   padding: 14px;
-  border: 1px solid #d9e9c9;
+  border: 1px solid var(--line);
   border-radius: 18px;
-  background: #f4faee;
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .competition-hero[hidden],
@@ -1835,9 +1835,9 @@ h2 {
 .competition-today-card {
   margin-top: 12px;
   padding: 14px;
-  border: 1px solid #e5e4cc;
+  border: 1px solid var(--line);
   border-radius: 18px;
-  background: #fffef9;
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .competition-section-heading {
@@ -1881,7 +1881,7 @@ h2 {
   gap: 3px;
   padding: 8px 10px;
   border-radius: 12px;
-  background: #f7f3e9;
+  background: var(--soft);
   cursor: pointer;
   transition: background 0.18s ease, box-shadow 0.18s ease;
 }
@@ -1905,8 +1905,8 @@ h2 {
 
 .competition-tasks > span.open {
   grid-column: 1 / -1;
-  background: #fff9e7;
-  box-shadow: inset 0 0 0 1px #e7d7a5;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px #e4dccb;
 }
 
 .competition-tasks > span.open.completed { background: #e8f7dd; }
@@ -1931,7 +1931,10 @@ h2 {
   font-weight: 800;
 }
 
-.competition-leaderboard { margin-top: 20px; }
+.competition-leaderboard {
+  margin-top: 20px;
+  padding: 0 2px;
+}
 
 .competition-leaderboard > div:last-child {
   display: grid;
@@ -1990,8 +1993,8 @@ h2 {
   margin-top: 14px;
   padding: 13px 14px;
   border-radius: 16px;
-  background: #f2f5e9;
-  color: #496042;
+  background: var(--soft);
+  color: #536349;
   font-size: 13px;
 }
 

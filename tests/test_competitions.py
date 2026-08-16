@@ -203,9 +203,17 @@ class CompetitionDatabaseTests(unittest.TestCase):
                 ((date.today()).isoformat(), competition_id),
             )
         self.database.finalize_expired_competitions()
-        finished = self.database.get_competition_state(telegram_id)["last_competition"]
-        self.assertEqual(finished["competition_id"], competition_id)
-        self.assertEqual(finished["final_rank"], 1)
+        with self.database.connect() as conn:
+            finished = conn.execute(
+                "SELECT status FROM competitions WHERE id = ?",
+                (competition_id,),
+            ).fetchone()["status"]
+            rank = conn.execute(
+                "SELECT final_rank FROM competition_participants WHERE competition_id = ?",
+                (competition_id,),
+            ).fetchone()["final_rank"]
+        self.assertEqual(finished, "completed")
+        self.assertEqual(rank, 1)
 
 
 if __name__ == "__main__":

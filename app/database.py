@@ -1045,6 +1045,7 @@ class Database:
     def get_competition_state(self, telegram_id: int) -> dict[str, Any]:
         user = self.get_or_create_user(telegram_id)
         today = self._competition_today()
+        current_week_start = today - timedelta(days=today.weekday())
         goal_type = self._competition_goal_type(user.goal)
         history: dict[str, Any] | None = None
         with self.connect() as conn:
@@ -1055,10 +1056,12 @@ class Database:
                        competition_participants.final_rank, competition_participants.score
                 FROM competition_participants
                 JOIN competitions ON competitions.id = competition_participants.competition_id
-                WHERE competition_participants.user_id = ? AND competitions.status = 'completed'
+                WHERE competition_participants.user_id = ?
+                  AND competitions.status = 'completed'
+                  AND competitions.end_date <= ?
                 ORDER BY competitions.end_date DESC LIMIT 1
                 """,
-                (user.id,),
+                (user.id, current_week_start.isoformat()),
             ).fetchone()
             if latest is not None:
                 history = {"competition_id": int(latest["competition_id"]), "end_date": str(latest["end_date"]),
