@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-118" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-119" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -137,7 +137,7 @@
 
       <section class="screen" data-screen="missions">
         <article class="competition-hero" data-competition-hero>
-          <div class="competition-trophy" aria-hidden="true">🏆</div>
+          <div class="competition-trophy"><img loading="lazy" src="./assets/cat-medal-large.png" alt="Котик Нямметра" /></div>
           <div>
             <small data-competition-tier>Бронзовая лига</small>
             <h2>Лига недели</h2>
@@ -183,17 +183,26 @@
 
         <article class="competition-last-result" data-competition-last-result hidden></article>
 
-        <button class="primary-action lower" type="button" data-missions-add>
+        <button class="competition-missions-link" type="button" data-open-legacy-missions>
+          <img loading="lazy" src="./assets/tab-missions.png" alt="" />
+          <span><b>Миссии и достижения</b><small>Открой ежедневную миссию и свой прогресс</small></span>
+          <b aria-hidden="true">›</b>
+        </button>
+
+        <button class="primary-action lower" type="button" data-add-from-missions>
           <span class="action-plus" aria-hidden="true">+</span>
           <span class="action-label">Записать еду</span>
         </button>
+      </section>
 
-        <div class="party missions-hero" hidden>
+      <section class="screen" data-screen="legacy-missions">
+        <button class="competition-back-link" type="button" data-back-competition>‹ К соревнованиям</button>
+        <div class="party missions-hero">
           <span>✦</span><span>✶</span><span>✦</span><span>✶</span>
           <img loading="lazy" class="mission-cat-art" src="./assets/cat-medal-large.png?v=2" alt="" />
         </div>
 
-        <article class="streak-card" hidden>
+        <article class="streak-card">
           <span class="streak-main">🔥 <strong>Ням-стрик:</strong> <b><span data-current-streak>0</span> дней</b></span>
           <small class="streak-freeze-indicator" data-streak-freeze-indicator hidden></small>
         </article>
@@ -210,7 +219,7 @@
           </div>
         </article>
 
-        <article class="mission-card" data-mission-card role="button" tabindex="0" aria-expanded="false" hidden>
+        <article class="mission-card" data-mission-card role="button" tabindex="0" aria-expanded="false">
           <span class="mission-icon"><img loading="lazy" src="./assets/mission-target.png" alt="" /></span>
           <div>
             <strong>Миссия дня:</strong>
@@ -221,7 +230,7 @@
           <b data-mission-progress-value>0/1</b>
         </article>
 
-        <article class="mission-card referral-card" data-referral-card data-referral-share role="button" tabindex="0" aria-label="Пригласить друзей" hidden>
+        <article class="mission-card referral-card" data-referral-card data-referral-share role="button" tabindex="0" aria-label="Пригласить друзей">
           <span class="mission-icon referral-icon"><img loading="lazy" src="./assets/achievement-referral-one-friend-mascot.png" alt="" /></span>
           <div>
             <strong>Пригласить друзей</strong>
@@ -231,16 +240,16 @@
           <b data-referral-progress-value>0/10</b>
         </article>
 
-        <div class="achievements-title" hidden>
+        <div class="achievements-title">
           <h2>Достижения</h2>
           <small data-achievements-summary>Собрано 0 из 17</small>
         </div>
-        <div class="achievement-pager" aria-label="Листать достижения" hidden>
+        <div class="achievement-pager" aria-label="Листать достижения">
           <button type="button" data-achievements-prev aria-label="Предыдущие достижения">‹</button>
           <span data-achievements-page>1/4</span>
           <button type="button" data-achievements-next aria-label="Следующие достижения">›</button>
         </div>
-        <div class="badges" hidden>
+        <div class="badges">
           <span data-achievement-key="first_nyam"><b><img loading="lazy" src="./assets/achievement-01-trim.png" alt="" /></b><small>Первый ням</small></span>
           <span data-achievement-key="in_rhythm"><b><img loading="lazy" src="./assets/achievement-02-trim.png" alt="" /></b><small>Вошел в ритм</small></span>
           <span data-achievement-key="full_day"><b><img loading="lazy" src="./assets/achievement-03-trim.png" alt="" /></b><small>Полный день</small></span>
@@ -260,7 +269,7 @@
           <span data-achievement-key="referral_ten"><b><img loading="lazy" src="./assets/achievement-referral-ten-friends-mascot.png" alt="" /></b><small>Большой стол</small></span>
         </div>
 
-        <button class="primary-action lower" type="button" data-legacy-missions-add hidden>
+        <button class="primary-action lower" type="button" data-add-from-missions>
           <span class="action-plus" aria-hidden="true">+</span>
           <span class="action-label">Записать еду</span>
         </button>
@@ -1071,12 +1080,13 @@ async function setDiaryDateAndLoad(date) {
 }
 
 function showScreen(name) {
+  const activeTab = name === "legacy-missions" ? "missions" : name;
   screens.forEach((screen) => {
     screen.classList.toggle("active", screen.dataset.screen === name);
   });
 
   tabs.forEach((tab) => {
-    tab.classList.toggle("active", tab.dataset.tab === name);
+    tab.classList.toggle("active", tab.dataset.tab === activeTab);
   });
 }
 
@@ -2259,10 +2269,16 @@ reminderEnabled?.addEventListener("change", saveReminderSettings);
 reminderTime?.addEventListener("change", saveReminderSettings);
 waterReminderEnabled?.addEventListener("change", saveWaterReminderSettings);
 
-document.querySelector("[data-missions-add]").addEventListener("click", () => {
-  showScreen("home");
-  const isOpen = addMenu.classList.toggle("open", true);
-  addToggle.setAttribute("aria-expanded", String(isOpen));
+document.querySelectorAll("[data-add-from-missions]").forEach((button) => {
+  button.addEventListener("click", openAddFoodFromMissions);
+});
+
+document.querySelector("[data-open-legacy-missions]")?.addEventListener("click", () => {
+  showScreen("legacy-missions");
+});
+
+document.querySelector("[data-back-competition]")?.addEventListener("click", () => {
+  showScreen("missions");
 });
 
 document.querySelector("[data-competition-goal]")?.addEventListener("click", () => {

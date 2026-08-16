@@ -1725,9 +1725,16 @@ h2 {
   height: 58px;
   display: grid;
   place-items: center;
+  overflow: hidden;
   border-radius: 18px;
   background: #ffedb0;
-  font-size: 34px;
+}
+
+.competition-trophy img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  object-position: center;
 }
 
 .competition-hero h2,
@@ -1786,6 +1793,14 @@ h2 {
   border: 1px solid #d9e9c9;
   border-radius: 18px;
   background: #f4faee;
+}
+
+.competition-hero[hidden],
+.competition-goal-cta[hidden],
+.competition-today-card[hidden],
+.competition-leaderboard[hidden],
+.competition-last-result[hidden] {
+  display: none !important;
 }
 
 .competition-goal-cta > span { font-size: 30px; }
@@ -1950,6 +1965,61 @@ h2 {
 }
 
 .competition-last-result strong { color: var(--ink); }
+
+.competition-missions-link {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #e4dccb;
+  border-radius: 17px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+}
+
+.competition-missions-link img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
+.competition-missions-link span { min-width: 0; }
+
+.competition-missions-link span b,
+.competition-missions-link span small { display: block; }
+
+.competition-missions-link span b { font-size: 14px; }
+
+.competition-missions-link span small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.competition-missions-link > b {
+  color: var(--green-dark);
+  font-size: 23px;
+  line-height: 1;
+}
+
+.competition-back-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  margin: 2px 0 8px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: #f5f0e3;
+  color: #4c6741;
+  font-size: 12px;
+  font-weight: 800;
+}
 
 .profile-hero,
 .profile-panel {
