@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-121" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-122" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -1955,7 +1955,7 @@ function renderCompetition(state = {}) {
   if (lastResult) {
     lastResult.hidden = !previous?.final_rank;
     if (previous?.final_rank) {
-      lastResult.innerHTML = `<strong>Прошлая лига</strong><br>Ты занял ${roundValue(previous.final_rank)} место и набрал ${roundValue(previous.score)} очков.`;
+      lastResult.innerHTML = `<strong>Прошлый результат</strong><br>${roundValue(previous.score)} очков.`;
     }
   }
 }
