@@ -1709,6 +1709,12 @@ h2 {
   margin-top: 0;
 }
 
+.screen[data-screen="legacy-missions"] .missions-view-switch {
+  position: relative;
+  z-index: 3;
+  transform: translateY(14px);
+}
+
 .missions-hero .mission-cat-art {
   width: 315px;
   height: 260px;
