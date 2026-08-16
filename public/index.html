@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-119" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-120" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -165,10 +165,10 @@
             <b><span data-competition-today-score>0</span>/140</b>
           </div>
           <div class="competition-tasks">
-            <span data-competition-task="food"><b>Питание записано</b><small>⏳ +50</small></span>
-            <span data-competition-task="calories"><b>Калории в диапазоне</b><small>⏳ +50</small></span>
-            <span data-competition-task="water"><b>Норма воды</b><small>⏳ +20</small></span>
-            <span data-competition-task="perfect"><b>Полный день</b><small>⏳ +20</small></span>
+            <span data-competition-task="food" data-competition-task-help="Добавь хотя бы одну запись еды: текстом, фото или быстрым вводом." role="button" tabindex="0" aria-expanded="false"><b>Питание записано</b><small>⏳ +50</small><em hidden></em></span>
+            <span data-competition-task="calories" data-competition-task-help="За день нужно попасть в 90-110% твоей нормы калорий." role="button" tabindex="0" aria-expanded="false"><b>Калории в диапазоне</b><small>⏳ +50</small><em hidden></em></span>
+            <span data-competition-task="water" data-competition-task-help="Учитывается вода из еды и отмеченная вода за день. Нужна твоя дневная норма." role="button" tabindex="0" aria-expanded="false"><b>Норма воды</b><small>⏳ +20</small><em hidden></em></span>
+            <span data-competition-task="perfect" data-competition-task-help="Закрой питание, калории в диапазоне и норму воды в один день." role="button" tabindex="0" aria-expanded="false"><b>Полный день</b><small>⏳ +20</small><em hidden></em></span>
           </div>
           <small class="competition-streak-bonus" data-competition-streak-bonus hidden></small>
         </article>
@@ -2279,6 +2279,30 @@ document.querySelector("[data-open-legacy-missions]")?.addEventListener("click",
 
 document.querySelector("[data-back-competition]")?.addEventListener("click", () => {
   showScreen("missions");
+});
+
+function toggleCompetitionTask(task) {
+  const shouldOpen = !task.classList.contains("open");
+  document.querySelectorAll("[data-competition-task]").forEach((item) => {
+    const open = item === task && shouldOpen;
+    item.classList.toggle("open", open);
+    item.setAttribute("aria-expanded", String(open));
+    const help = item.querySelector("em");
+    if (help) {
+      help.hidden = !open;
+      if (open) help.textContent = item.dataset.competitionTaskHelp || "";
+    }
+  });
+}
+
+document.querySelectorAll("[data-competition-task]").forEach((task) => {
+  task.addEventListener("click", () => toggleCompetitionTask(task));
+  task.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      toggleCompetitionTask(task);
+    }
+  });
 });
 
 document.querySelector("[data-competition-goal]")?.addEventListener("click", () => {
