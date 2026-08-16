@@ -1705,6 +1705,10 @@ h2 {
   height: 215px;
 }
 
+.screen[data-screen="legacy-missions"] .missions-hero {
+  margin-top: 0;
+}
+
 .missions-hero .mission-cat-art {
   width: 315px;
   height: 260px;
