@@ -1720,8 +1720,23 @@ h2 {
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.92);
+  background: #fffdf9;
   box-shadow: var(--shadow);
+}
+
+.competition-hero[data-league-tier="bronze"] {
+  border-color: #e6cfae;
+  background: #fdf7ee;
+}
+
+.competition-hero[data-league-tier="silver"] {
+  border-color: #d9dfdf;
+  background: #f7f9f9;
+}
+
+.competition-hero[data-league-tier="gold"] {
+  border-color: #eadb9e;
+  background: #fffbed;
 }
 
 .competition-trophy {
@@ -1733,6 +1748,10 @@ h2 {
   border-radius: 18px;
   background: var(--soft);
 }
+
+.competition-hero[data-league-tier="bronze"] .competition-trophy { background: #f7e9d7; }
+.competition-hero[data-league-tier="silver"] .competition-trophy { background: #edf1f1; }
+.competition-hero[data-league-tier="gold"] .competition-trophy { background: #fbf1cf; }
 
 .competition-trophy img {
   width: 72px;
