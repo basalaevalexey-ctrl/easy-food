@@ -13,7 +13,10 @@ from app.calorie_calculator import calculate_water_target
 from app.competitions import (
     GROUP_CAPACITY,
     LEAGUE_TIER_BRONZE,
+    LEAGUE_PROMOTION_PLACES,
+    LEAGUE_TIERS,
     calculate_competition_daily_score,
+    promote_league_tier,
 )
 from app.database_backend import connect_postgres, initialize_postgres_compatibility
 from app.missions import (
@@ -836,6 +839,29 @@ class Database:
             parsed = parsed.replace(tzinfo=timezone.utc)
         return parsed.astimezone(timezone(timedelta(hours=3))).date()
 
+    def _league_tier_for_user(self, conn: Any, user_id: int, week_start: date) -> str:
+        latest = conn.execute(
+            """
+            SELECT competitions.league_tier, competition_participants.final_rank
+            FROM competition_participants
+            JOIN competitions ON competitions.id = competition_participants.competition_id
+            WHERE competition_participants.user_id = ?
+              AND competitions.status = 'completed'
+              AND competitions.end_date <= ?
+            ORDER BY competitions.end_date DESC, competitions.id DESC
+            LIMIT 1
+            """,
+            (user_id, week_start.isoformat()),
+        ).fetchone()
+        if latest is None:
+            return LEAGUE_TIER_BRONZE
+
+        tier = str(latest["league_tier"] or LEAGUE_TIER_BRONZE)
+        if tier not in LEAGUE_TIERS:
+            tier = LEAGUE_TIER_BRONZE
+        rank = int(latest["final_rank"] or 0)
+        return promote_league_tier(tier) if 0 < rank <= LEAGUE_PROMOTION_PLACES else tier
+
     def _finalize_expired_competitions(self, conn: Any, today: date) -> None:
         rows = conn.execute(
             "SELECT id FROM competitions WHERE status = 'active' AND end_date <= ?",
@@ -900,6 +926,7 @@ class Database:
 
         start = today - timedelta(days=today.weekday())
         end = start + timedelta(days=7)
+        league_tier = self._league_tier_for_user(conn, user.id, start)
         groups = conn.execute(
             """
             SELECT competitions.*, COUNT(competition_participants.id) AS participant_count
@@ -915,7 +942,7 @@ class Database:
             HAVING COUNT(competition_participants.id) < ?
             ORDER BY competitions.group_number ASC
             """,
-            (start.isoformat(), end.isoformat(), goal_type, LEAGUE_TIER_BRONZE, GROUP_CAPACITY),
+            (start.isoformat(), end.isoformat(), goal_type, league_tier, GROUP_CAPACITY),
         ).fetchall()
         if groups:
             competition_id = int(groups[0]["id"])
@@ -926,14 +953,14 @@ class Database:
                 FROM competitions
                 WHERE start_date = ? AND goal_type = ? AND league_tier = ?
                 """,
-                (start.isoformat(), goal_type, LEAGUE_TIER_BRONZE),
+                (start.isoformat(), goal_type, league_tier),
             ).fetchone()[0]
             cursor = conn.execute(
                 """
                 INSERT INTO competitions (start_date, end_date, league_tier, goal_type, group_number)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (start.isoformat(), end.isoformat(), LEAGUE_TIER_BRONZE, goal_type, int(next_group)),
+                (start.isoformat(), end.isoformat(), league_tier, goal_type, int(next_group)),
             )
             competition_id = int(cursor.lastrowid)
 

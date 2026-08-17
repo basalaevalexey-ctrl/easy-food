@@ -3,7 +3,13 @@ import unittest
 from datetime import date, timedelta
 from pathlib import Path
 
-from app.competitions import calculate_competition_daily_score
+from app.competitions import (
+    LEAGUE_TIER_BRONZE,
+    LEAGUE_TIER_GOLD,
+    LEAGUE_TIER_SILVER,
+    calculate_competition_daily_score,
+    promote_league_tier,
+)
 from app.database import Database
 from app.models import FoodEstimate
 
@@ -25,6 +31,11 @@ def estimate(calories: float, water_ml: float = 0) -> FoodEstimate:
 
 
 class CompetitionScoringTests(unittest.TestCase):
+    def test_league_promotion_stops_at_gold(self) -> None:
+        self.assertEqual(promote_league_tier(LEAGUE_TIER_BRONZE), LEAGUE_TIER_SILVER)
+        self.assertEqual(promote_league_tier(LEAGUE_TIER_SILVER), LEAGUE_TIER_GOLD)
+        self.assertEqual(promote_league_tier(LEAGUE_TIER_GOLD), LEAGUE_TIER_GOLD)
+
     def test_one_food_log_scores_only_once_per_day(self) -> None:
         score = calculate_competition_daily_score(
             food_entries=2,
@@ -227,6 +238,39 @@ class CompetitionDatabaseTests(unittest.TestCase):
             ).fetchall()
         self.assertEqual(final[0]["display_name"], "Две записи")
         self.assertEqual(final[0]["final_rank"], 1)
+
+    def test_top_three_join_the_next_week_in_a_higher_league(self) -> None:
+        telegram_id = 1009
+        self.set_goal(telegram_id)
+        state = self.database.get_competition_state(telegram_id)
+        competition_id = state["competition"]["id"]
+        next_week = date.fromisoformat(state["competition"]["start_date"]) + timedelta(days=7)
+        user = self.database.get_or_create_user(telegram_id)
+
+        with self.database.connect() as conn:
+            conn.execute(
+                """
+                UPDATE competitions
+                SET status = 'completed', end_date = ?
+                WHERE id = ?
+                """,
+                (next_week.isoformat(), competition_id),
+            )
+            conn.execute(
+                "UPDATE competition_participants SET final_rank = 3 WHERE competition_id = ?",
+                (competition_id,),
+            )
+            promoted = self.database._get_or_join_weekly_competition(conn, user, next_week)
+            self.assertEqual(promoted["league_tier"], LEAGUE_TIER_SILVER)
+
+            conn.execute(
+                "UPDATE competition_participants SET final_rank = 4 WHERE competition_id = ?",
+                (competition_id,),
+            )
+            self.assertEqual(
+                self.database._league_tier_for_user(conn, user.id, next_week),
+                LEAGUE_TIER_BRONZE,
+            )
 
     def test_completed_competition_keeps_final_rank(self) -> None:
         telegram_id = 1006

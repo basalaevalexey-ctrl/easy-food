@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-126" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-127" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -1908,8 +1908,13 @@ function renderCompetition(state = {}) {
   if (leaderboard) leaderboard.hidden = !eligible;
 
   if (eligible) {
+    const leagueTitles = {
+      bronze: "Бронзовая лига",
+      silver: "Серебряная лига",
+      gold: "Золотая лига",
+    };
     document.querySelectorAll("[data-competition-tier]").forEach((node) => {
-      node.textContent = competition.league_tier === "bronze" ? "Бронзовая лига" : "Лига недели";
+      node.textContent = leagueTitles[competition.league_tier] || "Лига недели";
     });
     document.querySelectorAll("[data-competition-time]").forEach((node) => {
       const days = Math.max(0, roundValue(competition.days_left));

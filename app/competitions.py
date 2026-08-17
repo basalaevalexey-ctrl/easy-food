@@ -4,6 +4,10 @@ from dataclasses import dataclass
 
 
 LEAGUE_TIER_BRONZE = "bronze"
+LEAGUE_TIER_SILVER = "silver"
+LEAGUE_TIER_GOLD = "gold"
+LEAGUE_TIERS = (LEAGUE_TIER_BRONZE, LEAGUE_TIER_SILVER, LEAGUE_TIER_GOLD)
+LEAGUE_PROMOTION_PLACES = 3
 GROUP_CAPACITY = 10
 FOOD_LOGGED_POINTS = 50
 CALORIE_TARGET_POINTS = 50
@@ -13,6 +17,15 @@ STREAK_POINTS = 30
 DAILY_BASE_MAX_POINTS = (
     FOOD_LOGGED_POINTS + CALORIE_TARGET_POINTS + WATER_TARGET_POINTS + PERFECT_DAY_POINTS
 )
+
+
+def promote_league_tier(tier: str | None) -> str:
+    """Return the next league tier, keeping the top tier unchanged."""
+    try:
+        index = LEAGUE_TIERS.index(str(tier or LEAGUE_TIER_BRONZE))
+    except ValueError:
+        return LEAGUE_TIER_BRONZE
+    return LEAGUE_TIERS[min(index + 1, len(LEAGUE_TIERS) - 1)]
 
 
 @dataclass(frozen=True)
