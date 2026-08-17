@@ -1829,11 +1829,38 @@ h2 {
 }
 
 .competition-hero[hidden],
+.competition-launch-card[hidden],
 .competition-goal-cta[hidden],
 .competition-today-card[hidden],
 .competition-leaderboard[hidden],
 .competition-last-result[hidden] {
   display: none !important;
+}
+
+.competition-launch-card {
+  min-height: 92px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #dfd8b8;
+  border-radius: 18px;
+  background: #fffbed;
+}
+
+.competition-launch-card > span { font-size: 29px; }
+
+.competition-launch-card strong,
+.competition-launch-card small { display: block; }
+
+.competition-launch-card strong { font-size: 15px; }
+
+.competition-launch-card small {
+  margin-top: 4px;
+  color: #6f6b59;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .competition-rules {

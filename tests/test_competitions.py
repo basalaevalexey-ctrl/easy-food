@@ -1,13 +1,15 @@
 import tempfile
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
 from app.competitions import (
+    COMPETITION_LAUNCH_DATE,
     LEAGUE_TIER_BRONZE,
     LEAGUE_TIER_GOLD,
     LEAGUE_TIER_SILVER,
     calculate_competition_daily_score,
+    competition_week_start,
     promote_league_tier,
 )
 from app.database import Database
@@ -31,6 +33,11 @@ def estimate(calories: float, water_ml: float = 0) -> FoodEstimate:
 
 
 class CompetitionScoringTests(unittest.TestCase):
+    def test_rounds_run_from_wednesday_through_tuesday(self) -> None:
+        self.assertEqual(competition_week_start(date(2026, 8, 19)), date(2026, 8, 19))
+        self.assertEqual(competition_week_start(date(2026, 8, 25)), date(2026, 8, 19))
+        self.assertEqual(competition_week_start(date(2026, 8, 26)), date(2026, 8, 26))
+
     def test_league_promotion_stops_at_gold(self) -> None:
         self.assertEqual(promote_league_tier(LEAGUE_TIER_BRONZE), LEAGUE_TIER_SILVER)
         self.assertEqual(promote_league_tier(LEAGUE_TIER_SILVER), LEAGUE_TIER_GOLD)
@@ -111,6 +118,8 @@ class CompetitionDatabaseTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Database(Path(self.temp_dir.name) / "competitions.sqlite3")
         self.database.init()
+        self.competition_day = COMPETITION_LAUNCH_DATE + timedelta(days=1)
+        self.database._competition_today = lambda: self.competition_day
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -139,14 +148,35 @@ class CompetitionDatabaseTests(unittest.TestCase):
         self.assertTrue(state["eligible"])
         return state["today_score_breakdown"]
 
+    def add_food(self, telegram_id: int, food: FoodEstimate, source: str = "text"):
+        created_at = datetime.combine(
+            self.competition_day,
+            time(9, 0),
+            tzinfo=timezone(timedelta(hours=3)),
+        )
+        return self.database.add_food_entry(telegram_id, food, source, created_at=created_at)
+
+    def test_competition_waits_for_launch_without_creating_rows(self) -> None:
+        self.database._competition_today = lambda: COMPETITION_LAUNCH_DATE - timedelta(days=1)
+        telegram_id = 1000
+        self.set_goal(telegram_id)
+
+        state = self.database.get_competition_state(telegram_id)
+
+        self.assertEqual(state["reason"], "not_started")
+        with self.database.connect() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM competitions").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM competition_participants").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM competition_daily_scores").fetchone()[0], 0)
+
     def test_food_and_water_changes_recalculate_the_same_day(self) -> None:
         telegram_id = 1001
         self.set_goal(telegram_id)
-        entry = self.database.add_food_entry(telegram_id, estimate(2000), "text")
+        entry = self.add_food(telegram_id, estimate(2000))
         score_after_first_entry = self.today_breakdown(telegram_id)["total"]
         self.assertGreater(score_after_first_entry, 0)
 
-        self.database.add_food_entry(telegram_id, estimate(100), "text")
+        self.add_food(telegram_id, estimate(100))
         self.assertGreaterEqual(self.today_breakdown(telegram_id)["total"], 0)
 
         self.database.add_water_entry(telegram_id, 200)
@@ -160,9 +190,9 @@ class CompetitionDatabaseTests(unittest.TestCase):
     def test_deleting_food_recalculates_rotating_tasks(self) -> None:
         telegram_id = 1002
         self.set_goal(telegram_id)
-        self.database.add_food_entry(telegram_id, estimate(500), "text")
-        self.database.add_food_entry(telegram_id, estimate(500), "text")
-        entry = self.database.add_food_entry(telegram_id, estimate(500), "text")
+        self.add_food(telegram_id, estimate(500))
+        self.add_food(telegram_id, estimate(500))
+        entry = self.add_food(telegram_id, estimate(500))
         before_delete = self.today_breakdown(telegram_id)["total"]
         self.assertGreater(before_delete, 0)
         self.database.delete_food_entry(entry.id, telegram_id)
@@ -198,9 +228,11 @@ class CompetitionDatabaseTests(unittest.TestCase):
         self.set_goal(second)
         self.database.set_user_display_name(first, "Аня")
         self.database.set_user_display_name(second, "Борис")
-        self.database.add_food_entry(first, estimate(2000), "text")
+        self.add_food(first, estimate(2000))
+        self.add_food(first, estimate(0))
+        self.add_food(first, estimate(0))
         self.database.add_water_entry(first, 200)
-        self.database.add_food_entry(second, estimate(300), "text")
+        self.add_food(second, estimate(300))
 
         state = self.database.get_competition_state(second)
         self.assertEqual(state["participants"][0]["name"], "Аня")
@@ -213,9 +245,9 @@ class CompetitionDatabaseTests(unittest.TestCase):
         self.database.set_user_display_name(one_entry, "Одна запись")
         self.database.set_user_display_name(two_entries, "Две записи")
 
-        self.database.add_food_entry(one_entry, estimate(1000), "text")
-        self.database.add_food_entry(two_entries, estimate(500), "text")
-        self.database.add_food_entry(two_entries, estimate(500), "text")
+        self.add_food(one_entry, estimate(1000))
+        self.add_food(two_entries, estimate(500))
+        self.add_food(two_entries, estimate(500))
 
         state = self.database.get_competition_state(two_entries)
         self.assertEqual(state["participants"][0]["name"], "Две записи")
@@ -225,9 +257,9 @@ class CompetitionDatabaseTests(unittest.TestCase):
         with self.database.connect() as conn:
             conn.execute(
                 "UPDATE competitions SET end_date = ? WHERE id = ?",
-                ((date.today() + timedelta(days=1)).isoformat(), competition_id),
+                ((self.competition_day + timedelta(days=1)).isoformat(), competition_id),
             )
-            self.database._finalize_expired_competitions(conn, date.today() + timedelta(days=1))
+            self.database._finalize_expired_competitions(conn, self.competition_day + timedelta(days=1))
         with self.database.connect() as conn:
             final = conn.execute(
                 """
@@ -283,7 +315,7 @@ class CompetitionDatabaseTests(unittest.TestCase):
         with self.database.connect() as conn:
             conn.execute(
                 "UPDATE competitions SET end_date = ? WHERE id = ?",
-                ((date.today()).isoformat(), competition_id),
+                (self.competition_day.isoformat(), competition_id),
             )
         self.database.finalize_expired_competitions()
         with self.database.connect() as conn:

@@ -12,13 +12,16 @@ from urllib.parse import urlsplit
 from app.achievements import Achievement, available_achievements, daily_food_signals
 from app.calorie_calculator import calculate_water_target
 from app.competitions import (
+    COMPETITION_LAUNCH_DATE,
     GROUP_CAPACITY,
     LEAGUE_TIER_BRONZE,
     LEAGUE_PROMOTION_PLACES,
     LEAGUE_TIERS,
     calculate_competition_daily_score,
     calculate_competition_task_scores,
+    competition_is_started,
     competition_tasks_for_day,
+    competition_week_start,
     promote_league_tier,
 )
 from app.database_backend import connect_postgres, initialize_postgres_compatibility
@@ -903,15 +906,21 @@ class Database:
             )
 
     def finalize_expired_competitions(self) -> None:
+        if not competition_is_started(self._competition_today()):
+            return
         with self.connect() as conn:
             self._finalize_expired_competitions(conn, self._competition_today())
 
     def _get_or_join_weekly_competition(self, conn: Any, user: User, today: date) -> Any | None:
+        if not competition_is_started(today):
+            return None
         goal_type = self._competition_goal_type(user.goal)
         if not goal_type or not user.calorie_target:
             return None
 
         self._finalize_expired_competitions(conn, today)
+        start = competition_week_start(today)
+        end = start + timedelta(days=7)
         existing = conn.execute(
             """
             SELECT competitions.*, competition_participants.joined_at
@@ -919,18 +928,16 @@ class Database:
             JOIN competitions ON competitions.id = competition_participants.competition_id
             WHERE competition_participants.user_id = ?
               AND competitions.status = 'active'
-              AND competitions.start_date <= ?
-              AND competitions.end_date > ?
+              AND competitions.start_date = ?
+              AND competitions.end_date = ?
             ORDER BY competitions.start_date DESC
             LIMIT 1
             """,
-            (user.id, today.isoformat(), today.isoformat()),
+            (user.id, start.isoformat(), end.isoformat()),
         ).fetchone()
         if existing is not None:
             return existing
 
-        start = today - timedelta(days=today.weekday())
-        end = start + timedelta(days=7)
         league_tier = self._league_tier_for_user(conn, user.id, start)
         groups = conn.execute(
             """
@@ -1078,6 +1085,8 @@ class Database:
             return
         user = self.get_or_create_user(telegram_id)
         today = self._competition_today()
+        if not competition_is_started(today):
+            return
         with self.connect() as conn:
             competition = self._get_or_join_weekly_competition(conn, user, today)
             if competition is None:
@@ -1104,7 +1113,17 @@ class Database:
     def get_competition_state(self, telegram_id: int) -> dict[str, Any]:
         user = self.get_or_create_user(telegram_id)
         today = self._competition_today()
-        current_week_start = today - timedelta(days=today.weekday())
+        if not competition_is_started(today):
+            return {
+                "eligible": False,
+                "reason": "not_started",
+                "launch_date": COMPETITION_LAUNCH_DATE.isoformat(),
+                "competition": None,
+                "participants": [],
+                "today_score_breakdown": None,
+                "last_competition": None,
+            }
+        current_week_start = competition_week_start(today)
         goal_type = self._competition_goal_type(user.goal)
         history: dict[str, Any] | None = None
         with self.connect() as conn:

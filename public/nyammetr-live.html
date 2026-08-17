@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-117" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-131" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -136,6 +136,60 @@
       </section>
 
       <section class="screen" data-screen="missions">
+        <div class="missions-view-switch" aria-label="Раздел соревнований">
+          <button class="active" type="button" data-missions-view="league">Лига недели</button>
+          <button type="button" data-missions-view="daily">Миссии</button>
+        </div>
+        <article class="competition-launch-card" data-competition-launch hidden>
+          <span aria-hidden="true">🏁</span>
+          <div>
+            <strong>Лига недели стартует в среду</strong>
+            <small data-competition-launch-text>Первый тур начнётся совсем скоро.</small>
+          </div>
+        </article>
+        <article class="competition-hero" data-competition-hero>
+          <div class="competition-trophy"><img loading="lazy" src="./assets/cat-medal-large.png" alt="Котик Нямметра" /></div>
+          <div>
+            <small data-competition-tier>Бронзовая лига</small>
+            <h2>Лига недели</h2>
+            <p data-competition-time>Собираем участников</p>
+          </div>
+          <div class="competition-personal-score">
+            <span>Твоё место</span>
+            <strong data-competition-rank>—</strong>
+            <small><b data-competition-score>0</b> очков</small>
+          </div>
+        </article>
+        <article class="competition-rules" data-competition-rules role="button" tabindex="0" aria-expanded="false">
+          <div><span aria-hidden="true">🏆</span><strong>Как работает Лига недели</strong></div>
+          <span class="competition-rules-toggle" aria-hidden="true">⌄</span>
+          <p data-competition-rules-description hidden>
+            Лига длится со среды по вторник. Участники объединяются по цели, а задания меняются каждый день. Топ‑3 переходят в следующую лигу. При равенстве очков выше тот, у кого больше записей еды.
+          </p>
+        </article>
+        <article class="competition-goal-cta" data-competition-goal-cta hidden>
+          <span aria-hidden="true">🎯</span>
+          <div><strong>Настрой цель, чтобы участвовать</strong><small>Нямметр подберёт твою норму и добавит в Лигу недели.</small></div>
+          <button type="button" data-competition-goal>Настроить</button>
+        </article>
+        <article class="competition-today-card" data-competition-today>
+          <div class="competition-section-heading"><div><span aria-hidden="true">⚡</span><strong>Сегодня можно заработать</strong></div><b><span data-competition-today-score>0</span>/140</b></div>
+          <div class="competition-tasks" data-competition-tasks></div>
+          <small class="competition-streak-bonus" data-competition-streak-bonus hidden></small>
+        </article>
+        <section class="competition-leaderboard" data-competition-leaderboard>
+          <div class="competition-section-heading"><h2>Таблица лидеров</h2><small data-competition-participants-count>0 участников</small></div>
+          <div data-competition-participants></div>
+        </section>
+        <article class="competition-last-result" data-competition-last-result hidden></article>
+        <button class="primary-action lower" type="button" data-competition-add><span class="action-plus" aria-hidden="true">+</span><span class="action-label">Записать еду</span></button>
+      </section>
+
+      <section class="screen" data-screen="legacy-missions">
+        <div class="missions-view-switch" aria-label="Раздел соревнований">
+          <button type="button" data-missions-view="league">Лига недели</button>
+          <button class="active" type="button" data-missions-view="daily">Миссии</button>
+        </div>
         <div class="party missions-hero">
           <span>✦</span><span>✶</span><span>✦</span><span>✶</span>
           <img loading="lazy" class="mission-cat-art" src="./assets/cat-medal-large.png?v=2" alt="" />
@@ -181,7 +235,7 @@
 
         <div class="achievements-title">
           <h2>Достижения</h2>
-          <small data-achievements-summary>Собрано 0 из 17</small>
+          <small data-achievements-summary>Собрано 0 из 18</small>
         </div>
         <div class="achievement-pager" aria-label="Листать достижения">
           <button type="button" data-achievements-prev aria-label="Предыдущие достижения">‹</button>
@@ -206,6 +260,7 @@
           <span data-achievement-key="referral_one"><b><img loading="lazy" src="./assets/achievement-referral-one-friend-mascot.png" alt="" /></b><small>Позвал к столу</small></span>
           <span data-achievement-key="referral_five"><b><img loading="lazy" src="./assets/achievement-referral-five-friends-mascot.png" alt="" /></b><small>Ням-компания</small></span>
           <span data-achievement-key="referral_ten"><b><img loading="lazy" src="./assets/achievement-referral-ten-friends-mascot.png" alt="" /></b><small>Большой стол</small></span>
+          <span data-achievement-key="league_podium"><b><img loading="lazy" src="./assets/achievement-league-podium.png" alt="" /></b><small>Кубок лиги</small></span>
         </div>
 
         <button class="primary-action lower" type="button" data-missions-add>
@@ -590,6 +645,7 @@ const achievementKeys = [
   "referral_one",
   "referral_five",
   "referral_ten",
+  "league_podium",
 ];
 
 const achievementDetails = {
@@ -660,6 +716,10 @@ const achievementDetails = {
   referral_ten: {
     title: "Большой стол",
     description: "Десять друзей присоединились к Нямметру по твоему приглашению.",
+  },
+  league_podium: {
+    title: "Кубок лиги",
+    description: "Ты занял место в тройке лидеров Лиги недели.",
   },
 };
 
@@ -1024,7 +1084,7 @@ function showScreen(name) {
   });
 
   tabs.forEach((tab) => {
-    tab.classList.toggle("active", tab.dataset.tab === name);
+    tab.classList.toggle("active", tab.dataset.tab === (name === "legacy-missions" ? "missions" : name));
   });
 }
 
@@ -1815,6 +1875,88 @@ function renderEntries(entries) {
   });
 }
 
+function renderCompetition(state = {}) {
+  const eligible = Boolean(state.eligible);
+  const waiting = state.reason === "not_started";
+  const competition = state.competition || {};
+  const breakdown = state.today_score_breakdown || {};
+  const hero = document.querySelector("[data-competition-hero]");
+  const launchCard = document.querySelector("[data-competition-launch]");
+  const goalCta = document.querySelector("[data-competition-goal-cta]");
+  const todayCard = document.querySelector("[data-competition-today]");
+  const leaderboard = document.querySelector("[data-competition-leaderboard]");
+  const lastResult = document.querySelector("[data-competition-last-result]");
+
+  if (hero) {
+    hero.hidden = !eligible;
+    hero.dataset.leagueTier = competition.league_tier || "bronze";
+  }
+  if (launchCard) {
+    launchCard.hidden = !waiting;
+    const launchText = launchCard.querySelector("[data-competition-launch-text]");
+    if (launchText && state.launch_date) {
+      const launchDate = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long" })
+        .format(fromInputDate(state.launch_date));
+      launchText.textContent = `Первый тур начнётся ${launchDate}. До старта очки не учитываются.`;
+    }
+  }
+  if (goalCta) goalCta.hidden = eligible || waiting;
+  if (todayCard) todayCard.hidden = !eligible;
+  if (leaderboard) leaderboard.hidden = !eligible;
+
+  if (eligible) {
+    const leagueTitles = { bronze: "Бронзовая лига", silver: "Серебряная лига", gold: "Золотая лига" };
+    document.querySelectorAll("[data-competition-tier]").forEach((node) => {
+      node.textContent = leagueTitles[competition.league_tier] || "Лига недели";
+    });
+    document.querySelectorAll("[data-competition-time]").forEach((node) => {
+      const days = Math.max(0, roundValue(competition.days_left));
+      const hint = roundValue(state.points_to_top_three);
+      node.textContent = hint > 0 ? `До топ-3: ${hint} очк.` : (days === 0 ? "Финиш сегодня" : `До конца: ${days} дн.`);
+    });
+    document.querySelectorAll("[data-competition-rank]").forEach((node) => {
+      node.textContent = state.current_user_rank ? `#${state.current_user_rank}` : "—";
+    });
+    document.querySelectorAll("[data-competition-score]").forEach((node) => {
+      node.textContent = roundValue(state.current_user_score);
+    });
+    const todayTasks = Array.isArray(state.today_tasks) ? state.today_tasks : [];
+    const todayScore = todayTasks.reduce((total, task) => total + roundValue(task.score), 0);
+    document.querySelectorAll("[data-competition-today-score]").forEach((node) => { node.textContent = todayScore; });
+    document.querySelectorAll("[data-competition-tasks]").forEach((container) => {
+      container.innerHTML = todayTasks.map((task) => {
+        const points = roundValue(task.points);
+        const done = roundValue(task.score) >= points;
+        return `<span class="${done ? "completed" : ""}" data-competition-task data-competition-task-help="${escapeHtml(task.description || "")}" role="button" tabindex="0" aria-expanded="false"><b>${escapeHtml(task.title || "Задание")}</b><small>${done ? "✅" : "⏳"} +${points}</small><em hidden></em></span>`;
+      }).join("");
+    });
+    document.querySelectorAll("[data-competition-streak-bonus]").forEach((node) => {
+      const bonus = roundValue(breakdown.streak);
+      node.hidden = bonus <= 0;
+      node.textContent = `🔥 Бонус за серию: +${bonus}`;
+    });
+    const participants = Array.isArray(state.participants) ? state.participants : [];
+    document.querySelectorAll("[data-competition-participants-count]").forEach((node) => { node.textContent = `${participants.length} участников`; });
+    document.querySelectorAll("[data-competition-participants]").forEach((node) => {
+      node.innerHTML = participants.map((participant) => {
+        const rank = roundValue(participant.rank);
+        const badge = ({ 1: "🥇", 2: "🥈", 3: "🥉" })[rank] || String(rank);
+        return `<article class="competition-row${participant.is_current_user ? " current-user" : ""}"><span class="competition-rank">${badge}</span><b>${escapeHtml(participant.name || "Участник")}</b><strong>${roundValue(participant.score)} очков</strong></article>`;
+      }).join("") || '<div class="competition-empty">Таблица появится, когда в лиге будут участники.</div>';
+    });
+  }
+
+  const previous = state.last_competition;
+  if (lastResult) {
+    lastResult.hidden = !previous?.final_rank;
+    if (previous?.final_rank) {
+      const tierTitles = { bronze: "Бронзовой", silver: "Серебряной", gold: "Золотой" };
+      const promotion = previous.promoted ? `<br><b>🏆 Топ-3: новая неделя в ${tierTitles[previous.next_league_tier] || "следующей"} лиге</b>` : "";
+      lastResult.innerHTML = `<strong>Прошлый результат</strong><br>${roundValue(previous.score)} очков.${promotion}`;
+    }
+  }
+}
+
 function applyServerState(data) {
   window.__nyammetrDebug = data.debug || null;
   activeEntryDates = new Set(data.calendar?.active_dates || []);
@@ -1827,6 +1969,7 @@ function applyServerState(data) {
   const mission = data.mission || {};
   const referral = data.referral || {};
   const water = data.water || {};
+  renderCompetition(data.competition || {});
   renderPersonalFoods(data.food_suggestions || []);
   const unlockedAchievements = new Set((data.achievements || []).map((item) => item.key));
   const calories = roundValue(totals.calories);
@@ -2325,6 +2468,53 @@ document.querySelector("[data-mission-card]")?.addEventListener("keydown", (even
   event.preventDefault();
   event.currentTarget.click();
 });
+
+document.querySelectorAll("[data-missions-view]").forEach((button) => {
+  button.addEventListener("click", () => {
+    showScreen(button.dataset.missionsView === "daily" ? "legacy-missions" : "missions");
+  });
+});
+
+function toggleCompetitionRules() {
+  const card = document.querySelector("[data-competition-rules]");
+  const description = document.querySelector("[data-competition-rules-description]");
+  if (!card || !description) return;
+  const isOpen = card.getAttribute("aria-expanded") === "true";
+  card.setAttribute("aria-expanded", String(!isOpen));
+  description.hidden = isOpen;
+}
+
+document.querySelector("[data-competition-rules]")?.addEventListener("click", toggleCompetitionRules);
+document.querySelector("[data-competition-rules]")?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  toggleCompetitionRules();
+});
+
+function toggleCompetitionTask(task) {
+  const help = task.querySelector("em");
+  if (!help) return;
+  const open = task.getAttribute("aria-expanded") !== "true";
+  task.setAttribute("aria-expanded", String(open));
+  task.classList.toggle("open", open);
+  help.hidden = !open;
+  if (open) help.textContent = task.dataset.competitionTaskHelp || "";
+}
+
+document.addEventListener("click", (event) => {
+  const task = event.target.closest("[data-competition-task]");
+  if (task) toggleCompetitionTask(task);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const task = event.target.closest?.("[data-competition-task]");
+  if (!task) return;
+  event.preventDefault();
+  toggleCompetitionTask(task);
+});
+
+document.querySelector("[data-competition-goal]")?.addEventListener("click", () => showScreen("profile"));
+document.querySelector("[data-competition-add]")?.addEventListener("click", openAddFoodFromMissions);
 
 async function shareReferral() {
   if (!referralInviteUrl) {

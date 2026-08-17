@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 
 LEAGUE_TIER_BRONZE = "bronze"
@@ -10,6 +10,10 @@ LEAGUE_TIER_GOLD = "gold"
 LEAGUE_TIERS = (LEAGUE_TIER_BRONZE, LEAGUE_TIER_SILVER, LEAGUE_TIER_GOLD)
 LEAGUE_PROMOTION_PLACES = 3
 GROUP_CAPACITY = 10
+# The first public round begins on Wednesday, 19 August 2026 (Moscow time).
+# Until then no competition participant or score row may be created.
+COMPETITION_LAUNCH_DATE = date(2026, 8, 19)
+COMPETITION_START_WEEKDAY = 2  # Wednesday, where Monday is 0.
 FOOD_LOGGED_POINTS = 50
 CALORIE_TARGET_POINTS = 50
 WATER_TARGET_POINTS = 20
@@ -27,6 +31,15 @@ def promote_league_tier(tier: str | None) -> str:
     except ValueError:
         return LEAGUE_TIER_BRONZE
     return LEAGUE_TIERS[min(index + 1, len(LEAGUE_TIERS) - 1)]
+
+
+def competition_is_started(day: date) -> bool:
+    return day >= COMPETITION_LAUNCH_DATE
+
+
+def competition_week_start(day: date) -> date:
+    """Return the Wednesday that starts the current Wednesday-Tuesday round."""
+    return day - timedelta(days=(day.weekday() - COMPETITION_START_WEEKDAY) % 7)
 
 
 COMPETITION_TASK_SETS = (
