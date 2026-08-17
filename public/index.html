@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-129" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-130" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -163,6 +163,17 @@
             <strong data-competition-rank>—</strong>
             <small><b data-competition-score>0</b> очков</small>
           </div>
+        </article>
+
+        <article class="competition-rules" data-competition-rules role="button" tabindex="0" aria-expanded="false">
+          <div>
+            <span aria-hidden="true">🏆</span>
+            <strong>Как работает Лига недели</strong>
+          </div>
+          <span class="competition-rules-toggle" aria-hidden="true">⌄</span>
+          <p data-competition-rules-description hidden>
+            Лига длится с понедельника по воскресенье. Участники объединяются по цели, а задания меняются каждый день. Топ‑3 переходят в следующую лигу. При равенстве очков выше тот, у кого больше записей еды.
+          </p>
         </article>
 
         <article class="competition-goal-cta" data-competition-goal-cta hidden>
@@ -2531,6 +2542,22 @@ document.querySelectorAll("[data-mission-card]").forEach((card) => {
     event.preventDefault();
     card.click();
   });
+});
+
+function toggleCompetitionRules() {
+  const card = document.querySelector("[data-competition-rules]");
+  const description = document.querySelector("[data-competition-rules-description]");
+  if (!card || !description) return;
+  const isOpen = card.getAttribute("aria-expanded") === "true";
+  card.setAttribute("aria-expanded", String(!isOpen));
+  description.hidden = isOpen;
+}
+
+document.querySelector("[data-competition-rules]")?.addEventListener("click", toggleCompetitionRules);
+document.querySelector("[data-competition-rules]")?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  toggleCompetitionRules();
 });
 
 async function shareReferral() {

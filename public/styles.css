@@ -1836,6 +1836,58 @@ h2 {
   display: none !important;
 }
 
+.competition-rules {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 13px;
+  border: 1px solid #e7decb;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.competition-rules > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.competition-rules > div > span { font-size: 16px; }
+
+.competition-rules strong { font-size: 13px; }
+
+.competition-rules-toggle {
+  color: var(--green-dark);
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  transition: transform 0.18s ease;
+}
+
+.competition-rules[aria-expanded="true"] .competition-rules-toggle {
+  transform: rotate(180deg);
+}
+
+.competition-rules p {
+  grid-column: 1 / -1;
+  margin: 1px 0 0;
+  color: #68705b;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.42;
+}
+
+.competition-rules p[hidden] { display: none; }
+
+.competition-rules:focus-visible {
+  outline: 2px solid #79bd52;
+  outline-offset: 2px;
+}
+
 .competition-goal-cta > span { font-size: 30px; }
 
 .competition-goal-cta strong,
