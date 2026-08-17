@@ -845,9 +845,19 @@ class Database:
             competition_id = int(row["id"])
             participants = conn.execute(
                 """
-                SELECT id FROM competition_participants
-                WHERE competition_id = ?
-                ORDER BY score DESC, joined_at ASC, id ASC
+                SELECT competition_participants.id
+                FROM competition_participants
+                JOIN competitions ON competitions.id = competition_participants.competition_id
+                WHERE competition_participants.competition_id = ?
+                ORDER BY competition_participants.score DESC,
+                         (
+                           SELECT COUNT(*) FROM food_entries
+                           WHERE food_entries.user_id = competition_participants.user_id
+                             AND date(food_entries.created_at, '+3 hours') >= competitions.start_date
+                             AND date(food_entries.created_at, '+3 hours') < competitions.end_date
+                         ) DESC,
+                         competition_participants.joined_at ASC,
+                         competition_participants.id ASC
                 """,
                 (competition_id,),
             ).fetchall()
@@ -1080,10 +1090,18 @@ class Database:
             participants = conn.execute(
                 """
                 SELECT competition_participants.user_id, competition_participants.score,
-                       competition_participants.joined_at, users.display_name
+                       competition_participants.joined_at, users.display_name,
+                       (
+                         SELECT COUNT(*) FROM food_entries
+                         WHERE food_entries.user_id = competition_participants.user_id
+                           AND date(food_entries.created_at, '+3 hours') >= competitions.start_date
+                           AND date(food_entries.created_at, '+3 hours') < competitions.end_date
+                       ) AS meal_entries
                 FROM competition_participants JOIN users ON users.id = competition_participants.user_id
+                JOIN competitions ON competitions.id = competition_participants.competition_id
                 WHERE competition_participants.competition_id = ?
-                ORDER BY competition_participants.score DESC, competition_participants.joined_at ASC,
+                ORDER BY competition_participants.score DESC, meal_entries DESC,
+                         competition_participants.joined_at ASC,
                          competition_participants.user_id ASC
                 """,
                 (int(competition["id"]),),

@@ -1,6 +1,6 @@
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from app.competitions import calculate_competition_daily_score
@@ -191,6 +191,42 @@ class CompetitionDatabaseTests(unittest.TestCase):
         state = self.database.get_competition_state(second)
         self.assertEqual(state["participants"][0]["name"], "Аня")
         self.assertGreater(state["participants"][0]["score"], state["participants"][1]["score"])
+
+    def test_leaderboard_breaks_score_ties_by_food_entry_count(self) -> None:
+        one_entry, two_entries = 1007, 1008
+        self.set_goal(one_entry, target=1000)
+        self.set_goal(two_entries, target=1000)
+        self.database.set_user_display_name(one_entry, "Одна запись")
+        self.database.set_user_display_name(two_entries, "Две записи")
+
+        self.database.add_food_entry(one_entry, estimate(1000), "text")
+        self.database.add_food_entry(two_entries, estimate(500), "text")
+        self.database.add_food_entry(two_entries, estimate(500), "text")
+
+        state = self.database.get_competition_state(two_entries)
+        self.assertEqual(state["participants"][0]["name"], "Две записи")
+        self.assertEqual(state["participants"][0]["score"], state["participants"][1]["score"])
+
+        competition_id = state["competition"]["id"]
+        with self.database.connect() as conn:
+            conn.execute(
+                "UPDATE competitions SET end_date = ? WHERE id = ?",
+                ((date.today() + timedelta(days=1)).isoformat(), competition_id),
+            )
+            self.database._finalize_expired_competitions(conn, date.today() + timedelta(days=1))
+        with self.database.connect() as conn:
+            final = conn.execute(
+                """
+                SELECT users.display_name, competition_participants.final_rank
+                FROM competition_participants
+                JOIN users ON users.id = competition_participants.user_id
+                WHERE competition_participants.competition_id = ?
+                ORDER BY competition_participants.final_rank ASC
+                """,
+                (competition_id,),
+            ).fetchall()
+        self.assertEqual(final[0]["display_name"], "Две записи")
+        self.assertEqual(final[0]["final_rank"], 1)
 
     def test_completed_competition_keeps_final_rank(self) -> None:
         telegram_id = 1006
