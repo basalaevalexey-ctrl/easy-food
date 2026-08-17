@@ -2,6 +2,7 @@ import hashlib
 import sqlite3
 import shutil
 import random
+import json
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -16,6 +17,8 @@ from app.competitions import (
     LEAGUE_PROMOTION_PLACES,
     LEAGUE_TIERS,
     calculate_competition_daily_score,
+    calculate_competition_task_scores,
+    competition_tasks_for_day,
     promote_league_tier,
 )
 from app.database_backend import connect_postgres, initialize_postgres_compatibility
@@ -387,6 +390,7 @@ class Database:
                     calorie_target_score INTEGER NOT NULL DEFAULT 0,
                     water_score INTEGER NOT NULL DEFAULT 0,
                     perfect_day_score INTEGER NOT NULL DEFAULT 0,
+                    task_scores_json TEXT NOT NULL DEFAULT '{}',
                     streak_score INTEGER NOT NULL DEFAULT 0,
                     total_score INTEGER NOT NULL DEFAULT 0,
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -396,6 +400,7 @@ class Database:
                 )
                 """
             )
+            self._ensure_column(conn, "competition_daily_scores", "task_scores_json", "TEXT NOT NULL DEFAULT '{}'")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_user_events_type_date ON user_events(event_type, created_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_food_entries_user_date ON food_entries(user_id, created_at)")
             conn.execute(
@@ -1005,7 +1010,10 @@ class Database:
         food = conn.execute(
             """
             SELECT COUNT(*) AS entries, COALESCE(SUM(calories), 0) AS calories,
-                   COALESCE(SUM(water_ml), 0) AS food_water
+                   COALESCE(SUM(protein), 0) AS protein,
+                   COALESCE(SUM(water_ml), 0) AS food_water,
+                   COALESCE(SUM(CASE WHEN source = 'photo' THEN 1 ELSE 0 END), 0) AS photo_entries,
+                   MIN(time(created_at, '+3 hours')) AS first_entry_time
             FROM food_entries
             WHERE user_id = ? AND date(created_at, '+3 hours') = ?
             """,
@@ -1019,9 +1027,21 @@ class Database:
             """,
             (user.id, score_day.isoformat()),
         ).fetchone()
-        result = calculate_competition_daily_score(
+        task_set = competition_tasks_for_day(int(competition["id"]), score_day)
+        task_scores = calculate_competition_task_scores(
+            task_set,
             food_entries=int(food["entries"] or 0),
             calories=float(food["calories"] or 0),
+            calorie_target=int(user.calorie_target) if user.calorie_target else None,
+            water_ml=float(food["food_water"] or 0) + float(manual_water["manual_water"] or 0),
+            water_target=int(user.water_target) if user.water_target else None,
+            protein=float(food["protein"] or 0),
+            protein_target=int(user.protein_target) if user.protein_target else None,
+            photo_entries=int(food["photo_entries"] or 0),
+            first_entry_before_noon=str(food["first_entry_time"] or "") < "12:00:00",
+        )
+        legacy_result = calculate_competition_daily_score(
+            food_entries=int(food["entries"] or 0), calories=float(food["calories"] or 0),
             calorie_target=int(user.calorie_target) if user.calorie_target else None,
             water_ml=float(food["food_water"] or 0) + float(manual_water["manual_water"] or 0),
             water_target=int(user.water_target) if user.water_target else None,
@@ -1033,20 +1053,22 @@ class Database:
             """
             INSERT INTO competition_daily_scores
                 (competition_id, user_id, score_date, food_logged_score, calorie_target_score,
-                 water_score, perfect_day_score, streak_score, total_score, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                 water_score, perfect_day_score, task_scores_json, streak_score, total_score, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(competition_id, user_id, score_date) DO UPDATE SET
                 food_logged_score = excluded.food_logged_score,
                 calorie_target_score = excluded.calorie_target_score,
                 water_score = excluded.water_score,
                 perfect_day_score = excluded.perfect_day_score,
+                task_scores_json = excluded.task_scores_json,
                 streak_score = excluded.streak_score,
                 total_score = excluded.total_score,
                 updated_at = excluded.updated_at
             """,
-            (int(competition["id"]), user.id, score_day.isoformat(), result.food_logged_score,
-             result.calorie_target_score, result.water_score, result.perfect_day_score,
-             result.streak_score, result.total_score),
+            (int(competition["id"]), user.id, score_day.isoformat(), task_scores.get("food", 0),
+             task_scores.get("calories", task_scores.get("calories_light", 0)), task_scores.get("water", 0),
+             task_scores.get("perfect", 0), json.dumps(task_scores), legacy_result.streak_score,
+             sum(task_scores.values()) + legacy_result.streak_score),
         )
 
     def recalculate_competition_scores_for_day(self, telegram_id: int, score_day: str) -> None:
@@ -1145,27 +1167,37 @@ class Database:
                     "score": int(participant["score"] or 0), "is_current_user": is_current})
             daily = conn.execute(
                 """
-                SELECT food_logged_score, calorie_target_score, water_score,
-                       perfect_day_score, streak_score, total_score
+                SELECT task_scores_json, streak_score, total_score
                 FROM competition_daily_scores
                 WHERE competition_id = ? AND user_id = ? AND score_date = ?
                 """,
                 (int(competition["id"]), user.id, today.isoformat()),
             ).fetchone()
             values = dict(daily) if daily is not None else {}
-            breakdown = {"food_logged": int(values.get("food_logged_score") or 0),
-                         "calorie_target": int(values.get("calorie_target_score") or 0),
-                         "water": int(values.get("water_score") or 0),
-                         "perfect_day": int(values.get("perfect_day_score") or 0),
+            try:
+                task_scores = json.loads(str(values.get("task_scores_json") or "{}"))
+            except json.JSONDecodeError:
+                task_scores = {}
+            today_tasks = competition_tasks_for_day(int(competition["id"]), today)
+            rendered_tasks = [
+                {**task, "score": int(task_scores.get(str(task["key"]), 0))}
+                for task in today_tasks
+            ]
+            breakdown = {"food_logged": int(task_scores.get("food", 0)),
+                         "calorie_target": int(task_scores.get("calories", task_scores.get("calories_light", 0))),
+                         "water": int(task_scores.get("water", 0)),
+                         "perfect_day": int(task_scores.get("perfect", 0)),
                          "streak": int(values.get("streak_score") or 0),
-                         "total": int(values.get("total_score") or 0), "base_max": 140}
+                         "total": int(values.get("total_score") or 0),
+                         "base_max": sum(int(task["points"]) for task in today_tasks)}
             return {"eligible": True, "reason": None,
                     "competition": {"id": int(competition["id"]), "title": "Лига недели",
                         "start_date": str(competition["start_date"]), "end_date": str(competition["end_date"]),
                         "league_tier": str(competition["league_tier"]), "goal_type": str(competition["goal_type"]),
                         "days_left": max(0, (date.fromisoformat(str(competition["end_date"])) - today).days)},
                     "current_user_rank": current_rank, "current_user_score": current_score,
-                    "participants": rendered_participants, "today_score_breakdown": breakdown,
+                    "participants": rendered_participants, "today_tasks": rendered_tasks,
+                    "today_score_breakdown": breakdown,
                     "last_competition": history}
 
     def record_user_event(self, telegram_id: int, event_type: str) -> User:

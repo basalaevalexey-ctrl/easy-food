@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-127" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-128" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -179,12 +179,7 @@
             <div><span aria-hidden="true">⚡</span><strong>Сегодня можно заработать</strong></div>
             <b><span data-competition-today-score>0</span>/140</b>
           </div>
-          <div class="competition-tasks">
-            <span data-competition-task="food" data-competition-task-help="Добавь хотя бы одну запись еды: текстом, фото или быстрым вводом." role="button" tabindex="0" aria-expanded="false"><b>Питание записано</b><small>⏳ +50</small><em hidden></em></span>
-            <span data-competition-task="calories" data-competition-task-help="За день нужно попасть в 90-110% твоей нормы калорий." role="button" tabindex="0" aria-expanded="false"><b>Калории в диапазоне</b><small>⏳ +50</small><em hidden></em></span>
-            <span data-competition-task="water" data-competition-task-help="Учитывается вода из еды и отмеченная вода за день. Нужна твоя дневная норма." role="button" tabindex="0" aria-expanded="false"><b>Норма воды</b><small>⏳ +20</small><em hidden></em></span>
-            <span data-competition-task="perfect" data-competition-task-help="Закрой питание, калории в диапазоне и норму воды в один день." role="button" tabindex="0" aria-expanded="false"><b>Полный день</b><small>⏳ +20</small><em hidden></em></span>
-          </div>
+          <div class="competition-tasks" data-competition-tasks></div>
           <small class="competition-streak-bonus" data-competition-streak-bonus hidden></small>
         </article>
 
@@ -1926,23 +1921,17 @@ function renderCompetition(state = {}) {
     document.querySelectorAll("[data-competition-score]").forEach((node) => {
       node.textContent = roundValue(state.current_user_score);
     });
+    const todayTasks = Array.isArray(state.today_tasks) ? state.today_tasks : [];
+    const todayScore = todayTasks.reduce((total, task) => total + roundValue(task.score), 0);
     document.querySelectorAll("[data-competition-today-score]").forEach((node) => {
-      node.textContent = roundValue(breakdown.food_logged) + roundValue(breakdown.calorie_target)
-        + roundValue(breakdown.water) + roundValue(breakdown.perfect_day);
+      node.textContent = todayScore;
     });
-
-    const taskScores = {
-      food: [breakdown.food_logged, 50],
-      calories: [breakdown.calorie_target, 50],
-      water: [breakdown.water, 20],
-      perfect: [breakdown.perfect_day, 20],
-    };
-    document.querySelectorAll("[data-competition-task]").forEach((task) => {
-      const [score, target] = taskScores[task.dataset.competitionTask] || [0, 0];
-      const done = roundValue(score) >= target;
-      task.classList.toggle("completed", done);
-      const label = task.querySelector("small");
-      if (label) label.textContent = done ? `✅ +${target}` : `⏳ +${target}`;
+    document.querySelectorAll("[data-competition-tasks]").forEach((container) => {
+      container.innerHTML = todayTasks.map((task) => {
+        const points = roundValue(task.points);
+        const done = roundValue(task.score) >= points;
+        return `<span class="${done ? "completed" : ""}" data-competition-task data-competition-task-help="${escapeHtml(task.description || "")}" role="button" tabindex="0" aria-expanded="false"><b>${escapeHtml(task.title || "Задание")}</b><small>${done ? "✅" : "⏳"} +${points}</small><em hidden></em></span>`;
+      }).join("");
     });
     document.querySelectorAll("[data-competition-streak-bonus]").forEach((node) => {
       const bonus = roundValue(breakdown.streak);
@@ -2313,14 +2302,17 @@ function toggleCompetitionTask(task) {
   });
 }
 
-document.querySelectorAll("[data-competition-task]").forEach((task) => {
-  task.addEventListener("click", () => toggleCompetitionTask(task));
-  task.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      toggleCompetitionTask(task);
-    }
-  });
+document.addEventListener("click", (event) => {
+  const task = event.target.closest("[data-competition-task]");
+  if (task) toggleCompetitionTask(task);
+});
+
+document.addEventListener("keydown", (event) => {
+  const task = event.target.closest?.("[data-competition-task]");
+  if (task && (event.key === "Enter" || event.key === " ")) {
+    event.preventDefault();
+    toggleCompetitionTask(task);
+  }
 });
 
 document.querySelector("[data-competition-goal]")?.addEventListener("click", () => {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 
 
 LEAGUE_TIER_BRONZE = "bronze"
@@ -26,6 +27,56 @@ def promote_league_tier(tier: str | None) -> str:
     except ValueError:
         return LEAGUE_TIER_BRONZE
     return LEAGUE_TIERS[min(index + 1, len(LEAGUE_TIERS) - 1)]
+
+
+COMPETITION_TASK_SETS = (
+    ("food", "calories", "water", "perfect"),
+    ("food", "three_meals", "protein", "water"),
+    ("food", "calories", "photo", "breakfast"),
+    ("three_meals", "protein", "calories_light", "water"),
+)
+
+COMPETITION_TASKS = {
+    "food": ("Питание записано", "Добавь хотя бы одну запись еды.", 50),
+    "calories": ("Калории в диапазоне", "Попади в 90-110% своей нормы калорий.", 50),
+    "water": ("Норма воды", "Добери дневную норму воды с учётом еды.", 20),
+    "perfect": ("Полный день", "Запиши еду, попади в норму калорий и добери воду.", 20),
+    "three_meals": ("Три приёма пищи", "Добавь три записи еды за день.", 35),
+    "protein": ("Белковый день", "Добери хотя бы 80% цели по белку.", 35),
+    "photo": ("Фото еды", "Добавь хотя бы одну еду по фото.", 20),
+    "breakfast": ("Запиши завтрак", "Добавь первую еду до 12:00.", 20),
+    "calories_light": ("Калории в диапазоне", "Попади в 90-110% своей нормы калорий.", 45),
+}
+
+
+def competition_tasks_for_day(competition_id: int, score_day: date) -> list[dict[str, str | int]]:
+    task_keys = COMPETITION_TASK_SETS[(competition_id + score_day.toordinal()) % len(COMPETITION_TASK_SETS)]
+    return [
+        {"key": key, "title": COMPETITION_TASKS[key][0], "description": COMPETITION_TASKS[key][1], "points": COMPETITION_TASKS[key][2]}
+        for key in task_keys
+    ]
+
+
+def calculate_competition_task_scores(
+    tasks: list[dict[str, str | int]], *, food_entries: int, calories: float,
+    calorie_target: int | None, water_ml: float, water_target: int | None,
+    protein: float, protein_target: int | None, photo_entries: int,
+    first_entry_before_noon: bool,
+) -> dict[str, int]:
+    calorie_in_range = bool(calorie_target and calorie_target * 0.9 <= calories <= calorie_target * 1.1)
+    water_complete = bool(water_target and water_ml >= water_target)
+    completed = {
+        "food": food_entries > 0,
+        "calories": calorie_in_range,
+        "calories_light": calorie_in_range,
+        "water": water_complete,
+        "perfect": food_entries > 0 and calorie_in_range and water_complete,
+        "three_meals": food_entries >= 3,
+        "protein": bool(protein_target and protein >= protein_target * 0.8),
+        "photo": photo_entries > 0,
+        "breakfast": food_entries > 0 and first_entry_before_noon,
+    }
+    return {str(task["key"]): int(task["points"]) if completed.get(str(task["key"]), False) else 0 for task in tasks}
 
 
 @dataclass(frozen=True)
