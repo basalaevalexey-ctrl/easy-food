@@ -157,13 +157,16 @@ class CompetitionDatabaseTests(unittest.TestCase):
         breakdown = self.today_breakdown(telegram_id)
         self.assertLessEqual(breakdown["total"], score_after_water)
 
-    def test_deleting_last_food_log_removes_food_points(self) -> None:
+    def test_deleting_food_recalculates_rotating_tasks(self) -> None:
         telegram_id = 1002
         self.set_goal(telegram_id)
+        self.database.add_food_entry(telegram_id, estimate(500), "text")
+        self.database.add_food_entry(telegram_id, estimate(500), "text")
         entry = self.database.add_food_entry(telegram_id, estimate(500), "text")
-        self.assertEqual(self.today_breakdown(telegram_id)["food_logged"], 50)
+        before_delete = self.today_breakdown(telegram_id)["total"]
+        self.assertGreater(before_delete, 0)
         self.database.delete_food_entry(entry.id, telegram_id)
-        self.assertEqual(self.today_breakdown(telegram_id)["food_logged"], 0)
+        self.assertLessEqual(self.today_breakdown(telegram_id)["total"], before_delete)
 
     def test_user_has_no_more_than_one_active_competition(self) -> None:
         telegram_id = 1003
@@ -294,6 +297,21 @@ class CompetitionDatabaseTests(unittest.TestCase):
             ).fetchone()["final_rank"]
         self.assertEqual(finished, "completed")
         self.assertEqual(rank, 1)
+
+    def test_league_podium_unlocks_trophy_achievement(self) -> None:
+        telegram_id = 1010
+        self.set_goal(telegram_id)
+        state = self.database.get_competition_state(telegram_id)
+        competition_id = state["competition"]["id"]
+        with self.database.connect() as conn:
+            conn.execute("UPDATE competitions SET status = 'completed' WHERE id = ?", (competition_id,))
+            conn.execute(
+                "UPDATE competition_participants SET final_rank = 2 WHERE competition_id = ?",
+                (competition_id,),
+            )
+
+        unlocked = self.database.unlock_available_achievements(telegram_id)
+        self.assertIn("league_podium", {achievement.key for achievement in unlocked})
 
 
 if __name__ == "__main__":

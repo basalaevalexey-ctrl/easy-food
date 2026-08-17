@@ -6,7 +6,7 @@
     <title>Нямметр</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
-    <link rel="stylesheet" href="./styles.css?v=nyam-128" />
+    <link rel="stylesheet" href="./styles.css?v=nyam-129" />
   </head>
   <body>
     <main class="phone-shell" aria-label="Нямметр mini app">
@@ -249,7 +249,7 @@
 
         <div class="achievements-title">
           <h2>Достижения</h2>
-          <small data-achievements-summary>Собрано 0 из 17</small>
+          <small data-achievements-summary>Собрано 0 из 18</small>
         </div>
         <div class="achievement-pager" aria-label="Листать достижения">
           <button type="button" data-achievements-prev aria-label="Предыдущие достижения">‹</button>
@@ -274,6 +274,7 @@
           <span data-achievement-key="referral_one"><b><img loading="lazy" src="./assets/achievement-referral-one-friend-mascot.png" alt="" /></b><small>Позвал к столу</small></span>
           <span data-achievement-key="referral_five"><b><img loading="lazy" src="./assets/achievement-referral-five-friends-mascot.png" alt="" /></b><small>Ням-компания</small></span>
           <span data-achievement-key="referral_ten"><b><img loading="lazy" src="./assets/achievement-referral-ten-friends-mascot.png" alt="" /></b><small>Большой стол</small></span>
+          <span data-achievement-key="league_podium"><b><img loading="lazy" src="./assets/achievement-league-podium.png" alt="" /></b><small>Кубок лиги</small></span>
         </div>
 
         <button class="primary-action lower" type="button" data-add-from-missions>
@@ -658,6 +659,7 @@ const achievementKeys = [
   "referral_one",
   "referral_five",
   "referral_ten",
+  "league_podium",
 ];
 
 const achievementDetails = {
@@ -728,6 +730,10 @@ const achievementDetails = {
   referral_ten: {
     title: "Большой стол",
     description: "Десять друзей присоединились к Нямметру по твоему приглашению.",
+  },
+  league_podium: {
+    title: "Кубок лиги",
+    description: "Ты занял место в тройке лидеров Лиги недели.",
   },
 };
 
@@ -1913,7 +1919,10 @@ function renderCompetition(state = {}) {
     });
     document.querySelectorAll("[data-competition-time]").forEach((node) => {
       const days = Math.max(0, roundValue(competition.days_left));
-      node.textContent = days === 0 ? "Финиш сегодня" : `До конца: ${days} дн.`;
+      const hint = roundValue(state.points_to_top_three);
+      node.textContent = hint > 0
+        ? `До топ-3: ${hint} очк.`
+        : (days === 0 ? "Финиш сегодня" : `До конца: ${days} дн.`);
     });
     document.querySelectorAll("[data-competition-rank]").forEach((node) => {
       node.textContent = state.current_user_rank ? `#${state.current_user_rank}` : "—";
@@ -1964,7 +1973,11 @@ function renderCompetition(state = {}) {
   if (lastResult) {
     lastResult.hidden = !previous?.final_rank;
     if (previous?.final_rank) {
-      lastResult.innerHTML = `<strong>Прошлый результат</strong><br>${roundValue(previous.score)} очков.`;
+      const tierTitles = { bronze: "Бронзовой", silver: "Серебряной", gold: "Золотой" };
+      const promotion = previous.promoted
+        ? `<br><b>🏆 Топ-3: новая неделя в ${tierTitles[previous.next_league_tier] || "следующей"} лиге</b>`
+        : "";
+      lastResult.innerHTML = `<strong>Прошлый результат</strong><br>${roundValue(previous.score)} очков.${promotion}`;
     }
   }
 }

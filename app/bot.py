@@ -117,7 +117,7 @@ food_ai = FoodRecognitionClient(
     config.openai_model,
     config.openai_proxy_url,
 )
-WEBAPP_BUILD = "nyam-128"
+WEBAPP_BUILD = "nyam-129"
 MINIAPP_EDITABLE_HISTORY_DAYS = 2
 WEBAPP_ENTRY_PATH = "/nyammetr-live.html"
 WEBAPP_ENTRY_PATHS = {"/", WEBAPP_ENTRY_PATH, "/miniapp", "/miniapp/"}
@@ -791,7 +791,6 @@ def build_miniapp_payload(telegram_user: dict, selected_day: str | None = None) 
     totals = today_totals(entries)
     progress = db.get_user_progress_stats(telegram_id)
     db.unlock_available_achievements(telegram_id)
-    achievements = db.get_user_achievements(telegram_id)
     mission_status = db.get_daily_mission_status(telegram_id)
     mission = mission_status["mission"]
     active_dates = db.get_food_entry_days(telegram_id)
@@ -800,6 +799,8 @@ def build_miniapp_payload(telegram_user: dict, selected_day: str | None = None) 
     referral_progress = db.get_referral_progress(telegram_id)
     water = db.get_water_summary(telegram_id, selected_day)
     competition = db.get_competition_state(telegram_id)
+    db.unlock_available_achievements(telegram_id)
+    achievements = db.get_user_achievements(telegram_id)
 
     return {
         "user": {
@@ -1746,7 +1747,12 @@ def streak_rescue_text(current_streak: int) -> str:
     )
 
 
-def format_weekly_report(summary: dict, period_start: date, period_end: date) -> str:
+def format_weekly_report(
+    summary: dict,
+    period_start: date,
+    period_end: date,
+    competition_result: dict | None = None,
+) -> str:
     lines = [
         "Твоя неделя с Нямметром 💚",
         f"С {period_start.strftime('%d.%m')} по {period_end.strftime('%d.%m')}",
@@ -1761,6 +1767,14 @@ def format_weekly_report(summary: dict, period_start: date, period_end: date) ->
     lines.append(f"🔥 Текущий Ням-стрик: {summary['current_streak']} дней")
     if summary["top_food"]:
         lines.append(f"🥣 Чаще всего записывал: {summary['top_food']}")
+    if competition_result and competition_result.get("final_rank"):
+        rank = int(competition_result["final_rank"])
+        if competition_result.get("promoted"):
+            tier_titles = {"silver": "Серебряную", "gold": "Золотую"}
+            next_tier = tier_titles.get(str(competition_result.get("next_league_tier")), "следующую")
+            lines.append(f"🏆 В Лиге недели: #{rank}. Ты переходишь в {next_tier} лигу!")
+        else:
+            lines.append(f"🏆 В Лиге недели: #{rank}, {int(competition_result.get('score') or 0)} очков.")
     lines.extend(["", "Каждая запись помогает лучше видеть свой ритм. Новая неделя уже началась ✨"])
     return "\n".join(lines)
 
@@ -3518,10 +3532,11 @@ async def reminder_loop(bot: Bot) -> None:
                         report_start.isoformat(),
                         report_end.isoformat(),
                     )
+                    competition_result = db.get_competition_state(user.telegram_id).get("last_competition")
                     await send_push_message(
                         bot,
                         user.telegram_id,
-                        format_weekly_report(summary, report_start, report_end),
+                        format_weekly_report(summary, report_start, report_end, competition_result),
                         reply_markup=weekly_report_keyboard(user.telegram_id),
                     )
                     db.log_reminder(user.telegram_id, "weekly_report", report_key, "sent")

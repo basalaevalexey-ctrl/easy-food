@@ -1123,9 +1123,22 @@ class Database:
                 (user.id, current_week_start.isoformat()),
             ).fetchone()
             if latest is not None:
-                history = {"competition_id": int(latest["competition_id"]), "end_date": str(latest["end_date"]),
-                           "final_rank": int(latest["final_rank"]) if latest["final_rank"] else None,
-                           "score": int(latest["score"] or 0)}
+                latest_tier = conn.execute(
+                    "SELECT league_tier FROM competitions WHERE id = ?",
+                    (int(latest["competition_id"]),),
+                ).fetchone()
+                previous_tier = str(latest_tier["league_tier"] if latest_tier else LEAGUE_TIER_BRONZE)
+                final_rank = int(latest["final_rank"]) if latest["final_rank"] else None
+                promoted = bool(final_rank and final_rank <= LEAGUE_PROMOTION_PLACES)
+                history = {
+                    "competition_id": int(latest["competition_id"]),
+                    "end_date": str(latest["end_date"]),
+                    "final_rank": final_rank,
+                    "score": int(latest["score"] or 0),
+                    "league_tier": previous_tier,
+                    "next_league_tier": promote_league_tier(previous_tier) if promoted else previous_tier,
+                    "promoted": promoted,
+                }
         if not goal_type or not user.calorie_target:
             return {"eligible": False, "reason": "goal_required", "competition": None,
                     "participants": [], "today_score_breakdown": None, "last_competition": history}
@@ -1165,6 +1178,11 @@ class Database:
                 rendered_participants.append({"rank": position,
                     "name": str(participant["display_name"] or f"Участник {position}"),
                     "score": int(participant["score"] or 0), "is_current_user": is_current})
+            top_three = participants[:LEAGUE_PROMOTION_PLACES]
+            points_to_top_three: int | None = None
+            if current_rank > LEAGUE_PROMOTION_PLACES and len(top_three) >= LEAGUE_PROMOTION_PLACES:
+                third_score = int(top_three[-1]["score"] or 0)
+                points_to_top_three = max(1, third_score - current_score + 1)
             daily = conn.execute(
                 """
                 SELECT task_scores_json, streak_score, total_score
@@ -1196,6 +1214,7 @@ class Database:
                         "league_tier": str(competition["league_tier"]), "goal_type": str(competition["goal_type"]),
                         "days_left": max(0, (date.fromisoformat(str(competition["end_date"])) - today).days)},
                     "current_user_rank": current_rank, "current_user_score": current_score,
+                    "points_to_top_three": points_to_top_three,
                     "participants": rendered_participants, "today_tasks": rendered_tasks,
                     "today_score_breakdown": breakdown,
                     "last_competition": history}
@@ -2380,9 +2399,17 @@ class Database:
                     (
                         SELECT COUNT(*) FROM food_entries
                         WHERE user_id = ? AND time(created_at, '+3 hours') < '12:00:00'
-                    ) AS breakfast_entries
+                    ) AS breakfast_entries,
+                    (
+                        SELECT COUNT(*)
+                        FROM competition_participants
+                        JOIN competitions ON competitions.id = competition_participants.competition_id
+                        WHERE competition_participants.user_id = ?
+                          AND competitions.status = 'completed'
+                          AND competition_participants.final_rank BETWEEN 1 AND ?
+                    ) AS league_podiums
                 """,
-                (user.id, user.id, user.id, user.id, user.id, user.id),
+                (user.id, user.id, user.id, user.id, user.id, user.id, user.id, LEAGUE_PROMOTION_PLACES),
             ).fetchone()
             today_food_rows = conn.execute(
                 """
@@ -2407,6 +2434,7 @@ class Database:
             "vegetable_entries_today": vegetable_entries_today,
             "sweet_entries_today": sweet_entries_today,
             "referral_count": self.get_referral_progress(telegram_id)["activated"],
+            "league_podiums": int(row["league_podiums"] or 0),
             "calorie_target": user.calorie_target,
         }
 

@@ -167,6 +167,12 @@ ACHIEVEMENTS = {
         emoji="🏆",
         description="Десять друзей присоединились к Нямметру по твоему приглашению.",
     ),
+    "league_podium": Achievement(
+        key="league_podium",
+        title="Кубок лиги",
+        emoji="🏆",
+        description="Ты вошел в тройку лидеров Лиги недели. Заслуженный кубок!",
+    ),
 }
 
 ACHIEVEMENT_ORDER = tuple(ACHIEVEMENTS)
@@ -185,6 +191,7 @@ def available_achievements(context: dict[str, Any]) -> list[Achievement]:
     vegetable_entries_today = int(context.get("vegetable_entries_today") or 0)
     sweet_entries_today = int(context.get("sweet_entries_today") or 0)
     referral_count = int(context.get("referral_count") or 0)
+    league_podiums = int(context.get("league_podiums") or 0)
 
     if total_entries >= 1:
         result.append(ACHIEVEMENTS["first_nyam"])
@@ -223,5 +230,7 @@ def available_achievements(context: dict[str, Any]) -> list[Achievement]:
         result.append(ACHIEVEMENTS["referral_five"])
     if referral_count >= 10:
         result.append(ACHIEVEMENTS["referral_ten"])
+    if league_podiums >= 1:
+        result.append(ACHIEVEMENTS["league_podium"])
 
     return result
