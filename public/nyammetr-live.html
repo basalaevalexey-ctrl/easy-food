@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Нямметр</title>
+    <link rel="icon" type="image/png" href="./assets/cat-food.png" />
+    <link rel="apple-touch-icon" href="./assets/cat-food.png" />
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preload" as="image" href="./assets/cat-food.png" />
     <link rel="stylesheet" href="./styles.css?v=nyam-131" />
@@ -138,7 +140,7 @@
       <section class="screen" data-screen="missions">
         <div class="missions-view-switch" aria-label="Раздел соревнований">
           <button class="active" type="button" data-missions-view="league">Лига недели</button>
-          <button type="button" data-missions-view="daily">Миссии</button>
+          <button type="button" data-missions-view="daily">Соревнования</button>
         </div>
         <article class="competition-launch-card" data-competition-launch hidden>
           <span aria-hidden="true">🏁</span>
@@ -188,7 +190,7 @@
       <section class="screen" data-screen="legacy-missions">
         <div class="missions-view-switch" aria-label="Раздел соревнований">
           <button type="button" data-missions-view="league">Лига недели</button>
-          <button class="active" type="button" data-missions-view="daily">Миссии</button>
+          <button class="active" type="button" data-missions-view="daily">Соревнования</button>
         </div>
         <div class="party missions-hero">
           <span>✦</span><span>✶</span><span>✦</span><span>✶</span>
@@ -215,9 +217,9 @@
         <article class="mission-card" data-mission-card role="button" tabindex="0" aria-expanded="false">
           <span class="mission-icon"><img loading="lazy" src="./assets/mission-target.png" alt="" /></span>
           <div>
-            <strong>Миссия дня:</strong>
-            <small data-mission-title>Загружаю миссию</small>
-            <p data-mission-description hidden>Нажми, чтобы посмотреть подробности миссии.</p>
+            <strong>Соревнование дня:</strong>
+            <small data-mission-title>Загружаю соревнование</small>
+            <p data-mission-description hidden>Нажми, чтобы посмотреть подробности соревнования.</p>
             <div class="progress-line"><span data-mission-progress-bar style="width: 0%"></span></div>
           </div>
           <b data-mission-progress-value>0/1</b>
@@ -312,7 +314,7 @@
       <nav class="tabbar" aria-label="Разделы">
         <button class="active" type="button" data-tab="home"><img class="tab-icon" src="./assets/tab-home.png" alt="" />Главная</button>
         <button type="button" data-tab="diary"><img class="tab-icon" src="./assets/tab-diary.png" alt="" />Дневник</button>
-        <button type="button" data-tab="missions"><img class="tab-icon" src="./assets/tab-missions.png" alt="" />Миссии</button>
+        <button type="button" data-tab="missions"><img class="tab-icon" src="./assets/tab-missions.png" alt="" />Соревнования</button>
         <button type="button" data-tab="profile"><img class="tab-icon" src="./assets/tab-profile.png" alt="" />Профиль</button>
       </nav>
     </main>
@@ -2092,10 +2094,10 @@ function applyServerState(data) {
 
   const missionState = missionProgress(data);
   document.querySelectorAll("[data-mission-title]").forEach((node) => {
-    node.textContent = missionTitles[mission.key] || mission.progress_text || "Миссия дня";
+    node.textContent = missionTitles[mission.key] || mission.progress_text || "Соревнование дня";
   });
   document.querySelectorAll("[data-mission-description]").forEach((node) => {
-    node.textContent = missionDescriptions[mission.key] || mission.progress_text || "Выполни действие миссии дня.";
+    node.textContent = missionDescriptions[mission.key] || mission.progress_text || "Выполни действие соревнования дня.";
   });
   document.querySelectorAll("[data-mission-progress-value]").forEach((node) => {
     node.textContent = mission.is_completed ? "✓" : missionState.label;
