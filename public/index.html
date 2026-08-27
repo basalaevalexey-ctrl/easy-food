@@ -1322,6 +1322,9 @@ function telegramInitData() {
 
 async function miniappRequest(path, options = {}) {
   const initData = telegramInitData();
+  const method = String(options.method || "GET").toUpperCase();
+  const attempts = method === "GET" ? 3 : 1;
+  const timeoutMs = path.includes("/food/") ? 65000 : 15000;
   const headers = {
     ...(options.headers || {}),
   };
@@ -1332,11 +1335,30 @@ async function miniappRequest(path, options = {}) {
     url.searchParams.set("initData", initData);
     requestPath = `${url.pathname}${url.search}`;
   }
-  const response = await fetch(requestPath, {
-    ...options,
-    headers,
-    credentials: "same-origin",
-  });
+  let response;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      response = await fetch(requestPath, {
+        ...options,
+        headers,
+        credentials: "same-origin",
+        signal: controller.signal,
+      });
+      if (![502, 503, 504].includes(response.status) || attempt === attempts) break;
+    } catch (error) {
+      if (attempt === attempts) {
+        const requestError = new Error(error?.name === "AbortError" ? "request_timeout" : "network_error");
+        requestError.cause = error;
+        throw requestError;
+      }
+    } finally {
+      window.clearTimeout(timeout);
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 400 * attempt));
+  }
+  if (!response) throw new Error("network_error");
   if (!response.ok) {
     let error = `request_failed_${response.status}`;
     try {

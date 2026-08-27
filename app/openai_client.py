@@ -22,13 +22,19 @@ class NotFoodError(Exception):
 
 class FoodRecognitionClient:
     def __init__(self, api_key: str, model: str, proxy_url: str = "") -> None:
-        self._http_client: httpx.AsyncClient | None = None
+        timeout = httpx.Timeout(50.0, connect=10.0, read=45.0, write=30.0, pool=5.0)
+        limits = httpx.Limits(max_connections=20, max_keepalive_connections=10)
+        self._http_client: httpx.AsyncClient | None = httpx.AsyncClient(
+            proxy=proxy_url or None,
+            timeout=timeout,
+            limits=limits,
+        )
         if proxy_url:
-            self._http_client = httpx.AsyncClient(proxy=proxy_url)
             logger.info("OpenAI proxy is enabled")
         self.client = AsyncOpenAI(
             api_key=api_key or "missing",
             http_client=self._http_client,
+            max_retries=2,
         )
         self.model = model
 

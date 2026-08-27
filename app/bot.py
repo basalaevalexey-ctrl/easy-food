@@ -1085,6 +1085,27 @@ async def update_miniapp_food_entry(telegram_user: dict, payload: dict) -> dict:
 class MiniAppApiHandler(BaseHTTPRequestHandler):
     server_version = "NyammetrMiniApi/1.0"
 
+    def handle_one_request(self) -> None:
+        try:
+            super().handle_one_request()
+        except (BrokenPipeError, ConnectionResetError, TimeoutError):
+            logger.warning(
+                "Mini app client disconnected during %s",
+                getattr(self, "path", "<unparsed request>"),
+                exc_info=True,
+            )
+            self.close_connection = True
+        except Exception:
+            logger.exception(
+                "Unhandled mini app HTTP error during %s",
+                getattr(self, "path", "<unparsed request>"),
+            )
+            self.close_connection = True
+            try:
+                self._send_json(500, {"error": "internal_server_error"})
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass
+
     def log_message(self, format: str, *args) -> None:
         logger.debug("Mini app API: " + format, *args)
 
@@ -3397,12 +3418,13 @@ async def main() -> None:
         run_database_smoke_test(db)
         db_info = db.database_info()
         logger.info("Database smoke test completed successfully")
+
+    web_server = await start_miniapp_server()
     if not config.bot_token:
         logger.warning(
             "Instance %s is running in database-only staging mode; Telegram and mini app auth are disabled",
             config.instance_name,
         )
-        web_server = await start_miniapp_server()
         try:
             await asyncio.Event().wait()
         finally:
@@ -3412,36 +3434,47 @@ async def main() -> None:
         return
 
     bot = Bot(token=config.bot_token)
-    bot_info = await bot.get_me()
-    BOT_USERNAME = bot_info.username or ""
-    dispatcher = Dispatcher(storage=MemoryStorage())
-    dispatcher.include_router(router)
-    logger.info(
-        "Bot instance %s started with database: %s (%s users, %s entries), timezone: %s",
-        config.instance_name,
-        db_info["path"],
-        db_info["users"],
-        db_info["entries"],
-        config.timezone,
-    )
-    web_server = await start_miniapp_server()
-    if config.telegram_polling_enabled:
-        await configure_bot_ui(bot)
-    else:
-        logger.warning(
-            "Telegram polling and bot UI updates are disabled for instance %s",
-            config.instance_name,
-        )
-    reminder_task = (
-        asyncio.create_task(reminder_loop(bot))
-        if config.background_jobs_enabled
-        else None
-    )
-    if reminder_task is None:
-        logger.warning("Background jobs are disabled for instance %s", config.instance_name)
+    reminder_task = None
     try:
+        try:
+            bot_info = await retry_async_operation("Telegram getMe", bot.get_me, attempts=5)
+            BOT_USERNAME = bot_info.username or ""
+        except Exception:
+            BOT_USERNAME = ""
+            logger.exception(
+                "Telegram getMe is unavailable after retries; web server stays online and polling will retry"
+            )
+
+        dispatcher = Dispatcher(storage=MemoryStorage())
+        dispatcher.include_router(router)
+        logger.info(
+            "Bot instance %s started with database: %s (%s users, %s entries), timezone: %s",
+            config.instance_name,
+            db_info["path"],
+            db_info["users"],
+            db_info["entries"],
+            config.timezone,
+        )
         if config.telegram_polling_enabled:
-            await dispatcher.start_polling(bot)
+            try:
+                await retry_async_operation("Telegram UI setup", lambda: configure_bot_ui(bot), attempts=3)
+            except Exception:
+                logger.exception("Telegram UI setup failed; polling continues")
+        else:
+            logger.warning(
+                "Telegram polling and bot UI updates are disabled for instance %s",
+                config.instance_name,
+            )
+        reminder_task = (
+            asyncio.create_task(reminder_loop(bot))
+            if config.background_jobs_enabled
+            else None
+        )
+        if reminder_task is None:
+            logger.warning("Background jobs are disabled for instance %s", config.instance_name)
+
+        if config.telegram_polling_enabled:
+            await start_polling_with_recovery(dispatcher, bot)
         else:
             await asyncio.Event().wait()
     finally:
@@ -3453,12 +3486,54 @@ async def main() -> None:
         await food_ai.close()
 
 
-async def start_miniapp_server() -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer(("0.0.0.0", config.port), MiniAppApiHandler)
+class ResilientThreadingHTTPServer(ThreadingHTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+    request_queue_size = 128
+
+
+async def start_miniapp_server() -> ResilientThreadingHTTPServer:
+    server = ResilientThreadingHTTPServer(("0.0.0.0", config.port), MiniAppApiHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     logger.info("Mini app API started on http://0.0.0.0:%s", config.port)
     return server
+
+
+async def retry_async_operation(name: str, operation, *, attempts: int = 3):
+    delay = 1.0
+    for attempt in range(1, attempts + 1):
+        try:
+            return await operation()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            if attempt >= attempts:
+                raise
+            logger.warning(
+                "%s failed (%s/%s), retrying in %.1fs",
+                name,
+                attempt,
+                attempts,
+                delay,
+                exc_info=True,
+            )
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 15.0)
+
+
+async def start_polling_with_recovery(dispatcher: Dispatcher, bot: Bot) -> None:
+    delay = 2.0
+    while True:
+        try:
+            await dispatcher.start_polling(bot, close_bot_session=False)
+            return
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Telegram polling stopped unexpectedly; restarting in %.1fs", delay)
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 30.0)
 
 
 async def configure_bot_ui(bot: Bot) -> None:

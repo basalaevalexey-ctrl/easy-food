@@ -305,7 +305,12 @@ def connect_postgres(database_url: str) -> PostgresConnection:
             "PostgreSQL requires psycopg. Install dependencies from requirements.txt."
         ) from exc
 
-    connection = psycopg.connect(database_url, row_factory=compat_row_factory)
+    connection = psycopg.connect(
+        database_url,
+        row_factory=compat_row_factory,
+        connect_timeout=8,
+        options="-c statement_timeout=30000 -c lock_timeout=5000",
+    )
     return PostgresConnection(connection)
 
 
@@ -317,5 +322,9 @@ def initialize_postgres_compatibility(database_url: str) -> None:
             "PostgreSQL requires psycopg. Install dependencies from requirements.txt."
         ) from exc
 
-    with psycopg.connect(database_url) as connection:
+    with psycopg.connect(
+        database_url,
+        connect_timeout=8,
+        options="-c statement_timeout=30000 -c lock_timeout=5000",
+    ) as connection:
         connection.execute(POSTGRES_COMPAT_FUNCTIONS)
