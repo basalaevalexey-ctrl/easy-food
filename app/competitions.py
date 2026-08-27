@@ -9,7 +9,9 @@ LEAGUE_TIER_SILVER = "silver"
 LEAGUE_TIER_GOLD = "gold"
 LEAGUE_TIERS = (LEAGUE_TIER_BRONZE, LEAGUE_TIER_SILVER, LEAGUE_TIER_GOLD)
 LEAGUE_PROMOTION_PLACES = 3
-GROUP_CAPACITY = 10
+# Small, full leaderboards make the first leagues feel alive. Groups are shared
+# across nutrition goals; league tier is the only matchmaking boundary.
+GROUP_CAPACITY = 8
 # The first public round begins on Wednesday, 19 August 2026 (Moscow time).
 # Until then no competition participant or score row may be created.
 COMPETITION_LAUNCH_DATE = date(2026, 8, 19)

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.competitions import (
     COMPETITION_LAUNCH_DATE,
+    GROUP_CAPACITY,
     LEAGUE_TIER_BRONZE,
     LEAGUE_TIER_GOLD,
     LEAGUE_TIER_SILVER,
@@ -118,13 +119,16 @@ class CompetitionDatabaseTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Database(Path(self.temp_dir.name) / "competitions.sqlite3")
         self.database.init()
-        self.competition_day = COMPETITION_LAUNCH_DATE + timedelta(days=1)
+        self.competition_day = max(
+            COMPETITION_LAUNCH_DATE,
+            datetime.now(timezone(timedelta(hours=3))).date(),
+        )
         self.database._competition_today = lambda: self.competition_day
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
-    def set_goal(self, telegram_id: int, target: int = 2000) -> None:
+    def set_goal(self, telegram_id: int, target: int = 2000, goal: str = "maintain") -> None:
         self.database.update_user_goal(
             telegram_id,
             {
@@ -132,7 +136,7 @@ class CompetitionDatabaseTests(unittest.TestCase):
                 "age": 30,
                 "height": 180,
                 "weight": 70,
-                "goal": "maintain",
+                "goal": goal,
                 "activity": "medium",
                 "calorie_target": target,
                 "protein_target": 100,
@@ -219,6 +223,65 @@ class CompetitionDatabaseTests(unittest.TestCase):
                 WHERE competition_participants.user_id = ? AND competitions.status = 'active'
                 """,
                 (user.id,),
+            ).fetchone()[0]
+        self.assertEqual(active, 1)
+
+    def test_league_groups_are_shared_across_nutrition_goals(self) -> None:
+        users = ((1101, "lose"), (1102, "maintain"), (1103, "gain"))
+        states = []
+        for telegram_id, goal in users:
+            self.set_goal(telegram_id, goal=goal)
+            states.append(self.database.get_competition_state(telegram_id))
+
+        competition_ids = {state["competition"]["id"] for state in states}
+        self.assertEqual(len(competition_ids), 1)
+        self.assertEqual(len(states[-1]["participants"]), len(users))
+        self.assertEqual(GROUP_CAPACITY, 8)
+
+    def test_existing_goal_specific_groups_are_merged_once(self) -> None:
+        first, second = 1111, 1112
+        self.set_goal(first, goal="lose")
+        self.set_goal(second, goal="gain")
+        start = self.database._competition_today() - timedelta(
+            days=(self.database._competition_today().weekday() - 2) % 7
+        )
+        end = start + timedelta(days=7)
+        first_user = self.database.get_or_create_user(first)
+        second_user = self.database.get_or_create_user(second)
+        with self.database.connect() as conn:
+            conn.execute("DELETE FROM competitions")
+            first_competition = conn.execute(
+                """
+                INSERT INTO competitions (start_date, end_date, league_tier, goal_type, group_number)
+                VALUES (?, ?, 'bronze', 'lose', 1)
+                """,
+                (start.isoformat(), end.isoformat()),
+            ).lastrowid
+            second_competition = conn.execute(
+                """
+                INSERT INTO competitions (start_date, end_date, league_tier, goal_type, group_number)
+                VALUES (?, ?, 'bronze', 'gain', 1)
+                """,
+                (start.isoformat(), end.isoformat()),
+            ).lastrowid
+            conn.execute(
+                "INSERT INTO competition_participants (competition_id, user_id) VALUES (?, ?)",
+                (first_competition, first_user.id),
+            )
+            conn.execute(
+                "INSERT INTO competition_participants (competition_id, user_id) VALUES (?, ?)",
+                (second_competition, second_user.id),
+            )
+
+        state = self.database.get_competition_state(first)
+        self.assertEqual(len(state["participants"]), 2)
+        with self.database.connect() as conn:
+            active = conn.execute(
+                """
+                SELECT COUNT(*) FROM competitions
+                WHERE status = 'active' AND start_date = ? AND end_date = ? AND league_tier = 'bronze'
+                """,
+                (start.isoformat(), end.isoformat()),
             ).fetchone()[0]
         self.assertEqual(active, 1)
 

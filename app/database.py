@@ -911,6 +911,92 @@ class Database:
         with self.connect() as conn:
             self._finalize_expired_competitions(conn, self._competition_today())
 
+    def _consolidate_active_competitions(
+        self, conn: Any, start: date, end: date, league_tier: str
+    ) -> None:
+        """Move legacy goal-specific groups into shared groups for this league."""
+        competitions = conn.execute(
+            """
+            SELECT id, goal_type
+            FROM competitions
+            WHERE status = 'active' AND start_date = ? AND end_date = ? AND league_tier = ?
+            ORDER BY group_number ASC, id ASC
+            """,
+            (start.isoformat(), end.isoformat(), league_tier),
+        ).fetchall()
+        if not competitions or all(str(row["goal_type"]) == "all" for row in competitions):
+            return
+
+        participants = conn.execute(
+            """
+            SELECT competition_participants.id, competition_participants.user_id,
+                   competition_participants.competition_id
+            FROM competition_participants
+            JOIN competitions ON competitions.id = competition_participants.competition_id
+            WHERE competitions.status = 'active'
+              AND competitions.start_date = ?
+              AND competitions.end_date = ?
+              AND competitions.league_tier = ?
+            ORDER BY competition_participants.joined_at ASC, competition_participants.id ASC
+            """,
+            (start.isoformat(), end.isoformat(), league_tier),
+        ).fetchall()
+        if not participants:
+            conn.execute(
+                """
+                UPDATE competitions SET status = 'merged'
+                WHERE status = 'active' AND start_date = ? AND end_date = ? AND league_tier = ?
+                """,
+                (start.isoformat(), end.isoformat(), league_tier),
+            )
+            return
+
+        next_group = conn.execute(
+            """
+            SELECT COALESCE(MAX(group_number), 0) + 1
+            FROM competitions
+            WHERE start_date = ? AND league_tier = ?
+            """,
+            (start.isoformat(), league_tier),
+        ).fetchone()[0]
+        target_ids: list[int] = []
+        for offset in range(0, len(participants), GROUP_CAPACITY):
+            cursor = conn.execute(
+                """
+                INSERT INTO competitions (start_date, end_date, league_tier, goal_type, group_number)
+                VALUES (?, ?, ?, 'all', ?)
+                """,
+                (start.isoformat(), end.isoformat(), league_tier, int(next_group)),
+            )
+            target_ids.append(int(cursor.lastrowid))
+            next_group += 1
+
+        for index, participant in enumerate(participants):
+            target_id = target_ids[index // GROUP_CAPACITY]
+            source_id = int(participant["competition_id"])
+            user_id = int(participant["user_id"])
+            conn.execute(
+                """
+                UPDATE competition_daily_scores SET competition_id = ?
+                WHERE competition_id = ? AND user_id = ?
+                """,
+                (target_id, source_id, user_id),
+            )
+            conn.execute(
+                "UPDATE competition_participants SET competition_id = ? WHERE id = ?",
+                (target_id, int(participant["id"])),
+            )
+
+        conn.execute(
+            """
+            UPDATE competitions SET status = 'merged'
+            WHERE status = 'active' AND start_date = ? AND end_date = ? AND league_tier = ?
+            """,
+            (start.isoformat(), end.isoformat(), league_tier),
+        )
+        for target_id in target_ids:
+            conn.execute("UPDATE competitions SET status = 'active' WHERE id = ?", (target_id,))
+
     def _get_or_join_weekly_competition(self, conn: Any, user: User, today: date) -> Any | None:
         if not competition_is_started(today):
             return None
@@ -921,6 +1007,8 @@ class Database:
         self._finalize_expired_competitions(conn, today)
         start = competition_week_start(today)
         end = start + timedelta(days=7)
+        league_tier = self._league_tier_for_user(conn, user.id, start)
+        self._consolidate_active_competitions(conn, start, end, league_tier)
         existing = conn.execute(
             """
             SELECT competitions.*, competition_participants.joined_at
@@ -938,7 +1026,6 @@ class Database:
         if existing is not None:
             return existing
 
-        league_tier = self._league_tier_for_user(conn, user.id, start)
         groups = conn.execute(
             """
             SELECT competitions.*, COUNT(competition_participants.id) AS participant_count
@@ -948,13 +1035,12 @@ class Database:
             WHERE competitions.status = 'active'
               AND competitions.start_date = ?
               AND competitions.end_date = ?
-              AND competitions.goal_type = ?
               AND competitions.league_tier = ?
             GROUP BY competitions.id
             HAVING COUNT(competition_participants.id) < ?
-            ORDER BY competitions.group_number ASC
+            ORDER BY participant_count DESC, competitions.group_number ASC
             """,
-            (start.isoformat(), end.isoformat(), goal_type, league_tier, GROUP_CAPACITY),
+            (start.isoformat(), end.isoformat(), league_tier, GROUP_CAPACITY),
         ).fetchall()
         if groups:
             competition_id = int(groups[0]["id"])
@@ -963,16 +1049,16 @@ class Database:
                 """
                 SELECT COALESCE(MAX(group_number), 0) + 1
                 FROM competitions
-                WHERE start_date = ? AND goal_type = ? AND league_tier = ?
+                WHERE start_date = ? AND league_tier = ?
                 """,
-                (start.isoformat(), goal_type, league_tier),
+                (start.isoformat(), league_tier),
             ).fetchone()[0]
             cursor = conn.execute(
                 """
                 INSERT INTO competitions (start_date, end_date, league_tier, goal_type, group_number)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (start.isoformat(), end.isoformat(), league_tier, goal_type, int(next_group)),
+                (start.isoformat(), end.isoformat(), league_tier, "all", int(next_group)),
             )
             competition_id = int(cursor.lastrowid)
 
