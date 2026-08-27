@@ -159,7 +159,8 @@ def load_config() -> Config:
         bot_token=os.getenv("BOT_TOKEN", ""),
         openai_api_key=os.getenv("OPENAI_API_KEY", ""),
         admin_ids=_parse_admin_ids(os.getenv("ADMIN_IDS", "")),
-        port=_int_env("PORT", 3000),
+        # Relaxdev routes public traffic to the application port 8080.
+        port=_int_env("PORT", 8080),
         webapp_url=_webapp_url(),
         web_session_secret=os.getenv("WEB_SESSION_SECRET", "").strip(),
         vkid_client_id=os.getenv("VKID_CLIENT_ID", "").strip(),

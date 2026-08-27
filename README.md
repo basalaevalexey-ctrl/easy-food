@@ -45,7 +45,7 @@ OPENAI_MODEL=gpt-4o-mini
 DATABASE_PATH=/app/data/calories.sqlite3
 AUTO_PUSH_TIME=19:00
 APP_TIMEZONE=Europe/Moscow
-PORT=3000
+PORT=8080
 WEBAPP_URL=
 WEB_SESSION_SECRET=replace-with-a-long-random-value
 VKID_CLIENT_ID=
@@ -79,7 +79,7 @@ DATABASE_PATH=/app/data/calories.sqlite3
 
 `APP_TIMEZONE` - таймзона, по которой считаются напоминания, дни дневника, миссии и стрики. Для Москвы оставьте `Europe/Moscow`.
 
-`PORT` - порт встроенного web-сервера миниаппа. Для BotHost оставьте `3000`.
+`PORT` - порт встроенного web-сервера миниаппа. Для Relaxdev используйте `8080`.
 
 `WEBAPP_URL` - публичная ссылка миниаппа, которую выдает BotHost. Когда она задана, бот добавляет кнопку "Открыть Нямметр" и кнопку меню Telegram.
 
